@@ -295,6 +295,10 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
         home: String,
         open: String,
     ) {
+        // Parent mode: nothing closes, whatever the time (system screens
+        // such as device administration may belong to apps with no time
+        // left). The monitor checks again when parent mode ends.
+        if (ProtectionGuard.allowed()) return
         banner.hide()
         val app = pkg ?: lastForeground
         val text = if (closed != null && app != null) {

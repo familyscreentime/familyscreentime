@@ -101,8 +101,12 @@ class PlatformBridge(
                     ParentModeNotice.hide(context)
                 }
                 MonitorService.instance?.updateDeviceLock()
-                // Leaving parent mode: the volume comes back under the cap.
-                if (!on) MonitorService.instance?.volume?.enforce()
+                if (!on) {
+                    // Leaving parent mode: the volume comes back under the
+                    // cap, and the app in front is checked again.
+                    MonitorService.instance?.volume?.enforce()
+                    MonitorService.instance?.reload()
+                }
                 result.success(null)
             }
             "disableDeviceAdmin" -> {

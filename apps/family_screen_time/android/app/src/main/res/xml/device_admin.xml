@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No policies: being a device administrator only prevents uninstalling
+     the app without first turning this protection off. -->
+<device-admin>
+    <uses-policies />
+</device-admin>

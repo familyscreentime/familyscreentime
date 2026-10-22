@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Règles de confidentialité — Family Screen Time</title>
+<meta name="description" content="Règles de confidentialité — Family Screen Time">
+<link rel="alternate" hreflang="fr" href="https://familyscreentime.org/confidentialite.html"><link rel="alternate" hreflang="nl" href="https://familyscreentime.org/privacybeleid.html"><link rel="alternate" hreflang="en" href="https://familyscreentime.org/privacy.html">
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><div class="wrap">
+<img src="icon.png" alt=""><a class="home" href="index.html">Family Screen Time</a>
+<nav class="lang" aria-label="Language"><a href="confidentialite.html" hreflang="fr" aria-current="true">FR</a><a href="privacybeleid.html" hreflang="nl">NL</a><a href="privacy.html" hreflang="en">EN</a></nav>
+</div></header>
+<main class="wrap">
+
+<h1>Règles de confidentialité</h1>
+<p class="muted">Application Android Family Screen Time (org.familyscreentime). Dernière mise à jour : 22 octobre 2026.</p>
+<div class="card"><p><strong>En bref :</strong> Family Screen Time ne collecte aucune donnée. Tout ce que l'application enregistre reste sur l'appareil où elle est installée. Rien n'est envoyé à l'éditeur ni à des tiers : pas de compte, pas de publicité, pas de statistiques d'audience, pas de service tiers.</p></div>
+
+<h2>Qui sommes-nous ?</h2>
+<p>Family Screen Time est un logiciel libre (licence MIT) publié sur familyscreentime.org. Pour toute question : <a href="mailto:contact@familyscreentime.org">contact@familyscreentime.org</a>.</p>
+
+<h2>Ce que l'application traite, sur l'appareil seulement</h2>
+<table>
+<tr><th>Donnée</th><th>Pourquoi</th></tr>
+<tr><td>L'appli à l'écran et la durée de son utilisation</td><td>Compter le temps d'écran et appliquer les limites fixées par le parent.</td></tr>
+<tr><td>L'historique d'utilisation des applis tenu par Android (environ 10 jours, à la première ouverture)</td><td>Afficher les statistiques d'utilisation dès le premier jour. Il ne sert pas aux limites.</td></tr>
+<tr><td>Les règles, groupes d'applis, noms donnés aux applis, périodes, bonus et blocages</td><td>Faire fonctionner l'application selon les réglages du parent.</td></tr>
+<tr><td>Le prénom de l'enfant</td><td>L'afficher dans l'application.</td></tr>
+<tr><td>Le code parent, enregistré sous forme d'empreinte (PBKDF2), jamais en clair</td><td>Protéger les réglages.</td></tr>
+<tr><td>Les limites que l'enfant se fixe et leur historique</td><td>Les appliquer, et montrer au parent comment elles sont tenues. L'enfant en est informé.</td></tr>
+</table>
+<p>Ces données sont stockées dans l'espace privé de l'application. Elles sont effacées quand l'application est désinstallée.</p>
+
+<h2>Le service d'accessibilité</h2>
+<p>L'application utilise le service d'accessibilité d'Android pour savoir quelle appli est à l'écran, pour fermer une appli bloquée et pour afficher les avertissements, le décompte et l'écran de verrouillage par-dessus les autres applis. Quand le parent active la protection contre la désinstallation, elle ferme aussi les pages des réglages qui permettraient de désactiver l'application. Pour les reconnaître, elle lit le contenu de l'écran uniquement sur les pages de sécurité et d'autorisations d'Android, sans rien enregistrer. L'utilisateur est informé et donne son accord avant l'activation de ce service.</p>
+
+<h2>Autorisations</h2>
+<ul>
+<li><b>Accessibilité</b> : voir ci-dessus.</li>
+<li><b>Accès aux données d'utilisation</b> : historique d'utilisation, repérage de l'appli à l'écran si l'accessibilité est coupée.</li>
+<li><b>Affichage par-dessus les autres applis</b> : écran de blocage, décompte.</li>
+<li><b>Notifications</b> : décompte, avertissements, mode parent.</li>
+<li><b>Administrateur de l'appareil</b> (facultatif) : empêcher la désinstallation sans le parent. Aucune autre règle d'administration n'est utilisée.</li>
+<li><b>Démarrage, service au premier plan, exclusion de l'optimisation de batterie</b> : garder le suivi actif.</li>
+</ul>
+
+<h2>Partage</h2>
+<p>Aucune donnée n'est partagée, vendue ni transmise. L'application ne contient aucun outil de suivi.</p>
+
+<h2>Enfants</h2>
+<p>L'application est conçue pour être installée par un parent sur l'appareil de son enfant. Elle ne collecte aucune donnée personnelle sur l'enfant pour l'éditeur. L'enfant voit ses règles, son temps restant, et sait que le parent voit l'historique de ses propres limites.</p>
+
+<h2>Évolutions</h2>
+<p>Une version future pourra proposer une synchronisation entre les appareils de la famille, par le réseau local ou par un serveur que la famille héberge elle-même. Ces règles seront mises à jour avant toute version qui fera sortir des données de l'appareil.</p>
+
+<h2>Vos droits</h2>
+<p>Comme aucune donnée ne quitte l'appareil, l'éditeur ne détient aucune donnée vous concernant. Vous pouvez effacer toutes les données en désinstallant l'application ou en vidant ses données dans les réglages d'Android. Pour toute question : <a href="mailto:contact@familyscreentime.org">contact@familyscreentime.org</a>.</p>
+
+</main>
+<footer class="wrap"><a href="confidentialite.html">Règles de confidentialité</a> · <a href="https://github.com/familyscreentime/familyscreentime">Logiciel libre (licence MIT)</a> · contact@familyscreentime.org</footer>
+</body>
+</html>

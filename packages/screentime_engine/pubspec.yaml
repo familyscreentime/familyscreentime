@@ -1,0 +1,14 @@
+name: screentime_engine
+description: >-
+  Family Screen Time rule engine: for an app on a child's device, decides
+  whether use is allowed and how much time is left. Pure Dart, no
+  dependencies, shared by every client.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.25.0

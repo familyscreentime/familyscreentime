@@ -1,0 +1,11 @@
+.dart_tool/
+build/
+pubspec.lock
+.idea/
+.vscode/
+*.iml
+
+# Signing: never published.
+key.properties
+*.jks
+*.keystore

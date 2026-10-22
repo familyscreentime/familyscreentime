@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_label">Family Screen Time</string>
+    <string name="accessibility_description">Detects which app is on screen so the limits set by the parent can be applied. Screen content is only read on Android\'s security and permission pages, while uninstall protection is on, so the app cannot be switched off without the parent.</string>
+    <string name="admin_description">Prevents uninstalling Family Screen Time without the parent.</string>
+    <string name="monitor_channel">Screen time</string>
+    <string name="warning_channel">Time warnings</string>
+    <string name="shown_warning_channel">Time warnings shown on screen</string>
+    <string name="monitor_starting">Screen time is being monitored</string>
+    <string name="protected_title">Protected setting</string>
+    <string name="protected_message">This Family Screen Time setting needs the parent code. Open the app and switch to parent mode to change it.</string>
+    <string name="protected_open">Open Family Screen Time</string>
+    <string name="admin_disable_warning">Only the parent should turn this protection off, from parent mode in Family Screen Time.</string>
+    <string name="parent_mode_channel">Parent mode</string>
+</resources>

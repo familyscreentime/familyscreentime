@@ -1,0 +1,21 @@
+name: Rule engine
+
+on:
+  push:
+    paths: ['packages/screentime_engine/**', '.github/workflows/engine.yml']
+  pull_request:
+    paths: ['packages/screentime_engine/**', '.github/workflows/engine.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/screentime_engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - run: dart pub get
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: dart analyze
+      - run: dart test

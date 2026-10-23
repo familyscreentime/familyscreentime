@@ -1,0 +1,18 @@
+name: screentime_sync
+description: >-
+  Family Screen Time synchronisation: signed event log, merge of the
+  family's settings, keys, encrypted sessions and pairing between devices.
+  Pure Dart (dart:io for the WebSocket transport), shared by every client.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  cryptography: ^2.9.0
+  sqlite3: ^3.7.1
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.25.0

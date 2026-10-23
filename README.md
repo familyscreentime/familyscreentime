@@ -18,6 +18,7 @@ https://github.com/familyscreentime/familyscreentime
 | Folder | Role | Status |
 | --- | --- | --- |
 | `packages/screentime_engine` | Rule engine in pure Dart, shared by every client | Phase 1 complete |
+| `packages/screentime_sync` | Synchronisation in pure Dart: signed event log, merge, keys, encrypted sessions, pairing | Steps 1–2 of the sync done: the app keeps the family log on each device; no exchange between devices yet |
 | `apps/family_screen_time` | Flutter app: Android client today, Windows client later | Phase 1 complete, in real-use testing |
 | `site` | familyscreentime.org: home page and privacy policy (FR, NL, EN), static files; `build_site.py` regenerates them | Ready to upload |
 | `store` | Google Play: store listing, Play Console answers and declarations (English and French console), icon and feature graphic | Ready for internal testing |

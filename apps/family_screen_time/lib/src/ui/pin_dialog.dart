@@ -46,6 +46,7 @@ class _PinDialogState extends State<_PinDialog> {
     await c.updateSettings(result.settings);
     if (!mounted) return;
     if (result.ok) {
+      c.parentCodeEntered(_pin.text);
       Navigator.of(context).pop(true);
       return;
     }

@@ -1,0 +1,21 @@
+name: Sync
+
+on:
+  push:
+    paths: ['packages/screentime_sync/**', '.github/workflows/sync.yml']
+  pull_request:
+    paths: ['packages/screentime_sync/**', '.github/workflows/sync.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/screentime_sync
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dart-lang/setup-dart@v1
+      - run: dart pub get
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: dart analyze
+      - run: dart test

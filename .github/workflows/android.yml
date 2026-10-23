@@ -5,11 +5,13 @@ on:
     paths:
       - 'apps/family_screen_time/**'
       - 'packages/screentime_engine/**'
+      - 'packages/screentime_sync/**'
       - '.github/workflows/android.yml'
   pull_request:
     paths:
       - 'apps/family_screen_time/**'
       - 'packages/screentime_engine/**'
+      - 'packages/screentime_sync/**'
       - '.github/workflows/android.yml'
 
 jobs:
@@ -32,7 +34,7 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build apk --release --split-per-abi
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: apks
           path: apps/family_screen_time/build/app/outputs/flutter-apk/*-release.apk

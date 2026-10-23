@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
 import '../controller.dart';
-import '../pin.dart';
 import '../store.dart';
 import '../strings.dart';
 import 'accessible_apps_screen.dart';
@@ -67,7 +66,7 @@ class _ParentHomeState extends State<ParentHome> {
   Future<void> _changePin(BuildContext context) async {
     final pin = await askNewPin(context, controller);
     if (pin == null) return;
-    await controller.updateSettings(await withNewPin(controller.settings, pin));
+    await controller.changeParentCode(pin);
     if (context.mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(controller.s.t('pinChanged'))));

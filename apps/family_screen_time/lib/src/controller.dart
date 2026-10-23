@@ -2,10 +2,11 @@
 library;
 
 import 'dart:async';
-import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:screentime_engine/screentime_engine.dart';
+import 'package:screentime_sync/screentime_sync.dart' show SigningKey;
 
 import 'family.dart';
 import 'pin.dart';
@@ -13,6 +14,7 @@ import 'platform.dart';
 import 'self_limits.dart';
 import 'store.dart';
 import 'strings.dart';
+import 'sync/family_sync.dart';
 
 /// How far back Android's history is asked for; it keeps about ten days.
 const historyImportSpan = Duration(days: 30);
@@ -32,6 +34,12 @@ class AppController extends ChangeNotifier {
   FamilyData family;
   bool _parentMode = false;
   Timer? _parentTimer;
+
+  /// The family log, once the family exists on this device.
+  Future<FamilySync?>? _sync;
+
+  /// The parent key while in parent mode, unlocked by the code entered.
+  Future<SigningKey?>? _parentKey;
 
   AppController(
     this.store,
@@ -65,10 +73,74 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> updateFamily(FamilyData next) async {
+    final before = family;
     family = next;
     await store.saveFamily(next);
     notifyListeners();
+    await _recordInLog(before, next);
     await _reloadMonitor();
+  }
+
+  // --- Family log -------------------------------------------------------------
+
+  /// The family log, opened once.
+  Future<FamilySync?> get sync => _sync ??=
+      FamilySync.open(store, background: false).catchError((Object e) {
+        debugPrint('Family log not opened: $e');
+        return null;
+      });
+
+  /// Records the change in the family log, signed by the parent key in
+  /// parent mode. A failure never stops the change made here.
+  Future<void> _recordInLog(FamilyData before, FamilyData after) async {
+    try {
+      // First the key: entering the code may be creating the family.
+      final key = _parentMode ? await _parentKey : null;
+      final log = await sync;
+      if (log == null) return;
+      await log.readOthers();
+      await log.recordChange(before, after, parentKey: key);
+    } on Object catch (e) {
+      debugPrint('Change not recorded in the family log: $e');
+    }
+  }
+
+  /// The parent code was just entered: unlocks the parent key, or creates
+  /// the family on this device the first time (the code seals its key).
+  void parentCodeEntered(String code) {
+    _parentKey = () async {
+      try {
+        final log = await sync;
+        if (log != null) return await log.unlock(code);
+        if (!settings.setupDone && settings.childId == null) return null;
+        final (created, key) = await FamilySync.create(
+          store: store,
+          settings: settings,
+          family: family,
+          parentCode: code,
+          deviceName: child?.name ?? 'Android',
+        );
+        _sync = Future.value(created);
+        await _reloadMonitor();
+        return key;
+      } on Object catch (e) {
+        debugPrint('Parent key not unlocked: $e');
+        return null;
+      }
+    }();
+  }
+
+  /// Saves a new parent code, here and, sealed with the parent key, for
+  /// every device of the family.
+  Future<void> changeParentCode(String code) async {
+    await updateSettings(await withNewPin(settings, code));
+    try {
+      final log = await sync;
+      final key = await _parentKey;
+      if (log != null && key != null) await log.changeCode(key, code);
+    } on Object catch (e) {
+      debugPrint('New code not sealed in the family log: $e');
+    }
   }
 
   Future<void> _reloadMonitor() async {
@@ -102,6 +174,10 @@ class AppController extends ChangeNotifier {
     );
     // setupDone is set once the permissions step is over.
     await updateSettings(withPin.copyWith(childId: childId));
+    // The family log, with the code just chosen.
+    parentCodeEntered(pin);
+    await _parentKey;
+    _parentKey = null;
     await platform.startMonitor();
   }
 
@@ -789,6 +865,7 @@ class AppController extends ChangeNotifier {
   void leaveParentMode() {
     if (!_parentMode) return;
     _parentMode = false;
+    _parentKey = null;
     _parentTimer?.cancel();
     _tellPlatform(false);
     navigatorKey.currentState?.popUntil((route) => route.isFirst);

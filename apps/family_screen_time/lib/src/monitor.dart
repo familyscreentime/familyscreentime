@@ -5,10 +5,12 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
 import 'availability.dart';
+import 'sync/family_sync.dart';
 import 'family.dart';
 import 'platform.dart';
 import 'store.dart';
@@ -84,6 +86,37 @@ class Monitor {
     // Time entered by the parent counts too.
     _usage = [...await store.loadUsage(since: since), ..._family.injected];
     await _syncVolume();
+    await _openLog();
+  }
+
+  /// The family log, once the family exists on this device.
+  FamilySync? _log;
+
+  /// Opens the family log once it exists, and takes in what the interface
+  /// recorded there. Never stops the monitor.
+  Future<void> _openLog() async {
+    try {
+      final log = _log ??= await FamilySync.open(store, background: true);
+      if (log == null) return;
+      await log.readOthers();
+      await _logUsageHistory(log);
+      log.pruneUsage();
+    } on Object catch (e) {
+      debugPrint('Family log: $e');
+    }
+  }
+
+  /// Puts the use recorded before the family existed into the log, once,
+  /// so the family's other devices know today's time and the recent days.
+  Future<void> _logUsageHistory(FamilySync log) async {
+    final done = log.files.usageHistory;
+    if (await done.exists()) return;
+    final since = addDays(dayOf(DateTime.now()), -usageHistoryDays);
+    final recorded = await store.loadUsage(since: since);
+    for (var i = 0; i < recorded.length; i += 200) {
+      await log.recordUsage(recorded.skip(i).take(200));
+    }
+    await done.writeAsString(DateTime.now().toIso8601String());
   }
 
   String? _volumeSent;
@@ -183,6 +216,11 @@ class Monitor {
       );
       _usage.add(segment);
       await store.appendUsage(segment);
+      try {
+        await _log?.recordUsage([segment]);
+      } on Object catch (e) {
+        debugPrint('Use not recorded in the family log: $e');
+      }
       from = to;
     }
   }

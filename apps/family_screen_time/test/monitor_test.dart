@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:family_screen_time/src/monitor.dart';
 import 'package:family_screen_time/src/store.dart';
+import 'package:family_screen_time/src/sync/family_sync.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:screentime_engine/screentime_engine.dart';
@@ -118,6 +119,32 @@ void main() {
     final usage = await store.loadUsage(since: dayOf(DateTime.now()));
     expect(usage.single.appId, 'youtube');
     expect(await store.loadOpen(), isNull);
+  });
+
+  test('with a family log, use goes into it, history once', () async {
+    if (dayOf(DateTime.now()) != dayOf(cursor)) {
+      return markTestSkipped('too close to midnight');
+    }
+    await use(10);
+    final (ui, _) = await FamilySync.create(
+      store: store,
+      settings: await store.loadSettings(),
+      family: await store.loadFamily(),
+      parentCode: '123456',
+      deviceName: 'Tablette',
+    );
+    await send('reload', null);
+    await send('reload', null);
+    final logged = await ui.readOthers();
+    // The 10 minutes recorded before the family existed, once.
+    expect(logged.map((e) => e.data['appId']), ['minecraft']);
+    // Then use as it is recorded.
+    await send('foreground', {'package': 'youtube'});
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    await send('screen', {'on': false});
+    final live = await ui.readOthers();
+    expect(live.single.data['appId'], 'youtube');
+    expect(live.single.origin, 'tablet#usage');
   });
 
   test('a reload picks up new rules', () async {

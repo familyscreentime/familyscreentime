@@ -6,6 +6,7 @@ import 'package:family_screen_time/src/sync/family_sync.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:screentime_engine/screentime_engine.dart';
+import 'package:screentime_sync/screentime_sync.dart' show MemoryLanDirectory;
 
 /// Drives the monitor through a fake Android side.
 void main() {
@@ -84,7 +85,10 @@ void main() {
         groupNames: const {'games': 'Jeux'},
       ),
     );
-    monitor = Monitor(store);
+    monitor = Monitor(
+      store,
+      lanDirectory: () => MemoryLanDirectory.network(1).single,
+    );
     await monitor.start();
   });
 

@@ -99,6 +99,16 @@ que soit l'option choisie.
   en vidant ses données.
 - Vérifier l'aperçu (« Aucune donnée collectée », « Aucune donnée
   partagée »), puis **Envoyer**.
+- À partir de la 0.20 (synchronisation sur le réseau local) : les
+  appareils de la famille échangent réglages et usage directement entre
+  eux, sur le réseau de la maison, chiffrés de bout en bout, sans aucun
+  serveur de l'éditeur. Google compte comme « collecté » ce que l'appli
+  envoie hors de l'appareil au développeur ou à des tiers : la réponse
+  reste donc **Non** tant qu'aucun serveur à nous n'intervient. À revoir
+  avec le serveur auto-hébergé ; si un examinateur n'est pas d'accord,
+  déclarer « Activité dans l'application » et « Appareil ou autres ID »
+  comme collectés, chiffrés en transit, non partagés, nécessaires au
+  fonctionnement.
 
 ### Déclaration relative à l'API d'accessibilité
 

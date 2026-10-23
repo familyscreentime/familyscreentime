@@ -130,6 +130,62 @@ class AppController extends ChangeNotifier {
     }();
   }
 
+  /// The parent key, in parent mode; `null` outside it or if the code
+  /// entered does not open it.
+  Future<SigningKey?> get parentKey async =>
+      _parentMode ? await _parentKey : null;
+
+  /// The family file changed (from another device): read it again.
+  Future<void> reloadFamily() async {
+    family = withKnownSystem(await store.loadFamily());
+    notifyListeners();
+  }
+
+  /// Whether [code] opens the parent key of the family: the code may have
+  /// been changed on another device. If it does, it becomes this device's
+  /// code too.
+  Future<bool> codeOpensFamily(String code) async {
+    try {
+      final log = await sync;
+      if (log == null || await log.unlock(code) == null) return false;
+      await updateSettings(await withNewPin(settings, code));
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// This device was just welcomed into a family ([log]); [code] is the
+  /// family's parent code. Takes the family's data and this device's child.
+  Future<void> completeJoin(FamilySync log, String code) async {
+    final system = await platform.systemPackages();
+    final joined = log.compose(FamilyData(config: initialConfig(system)));
+    _sync = Future.value(log);
+    await store.saveFamily(joined);
+    family = joined;
+    final childId = log.registration?['childId'] as String?;
+    await updateSettings(
+      (await withNewPin(settings, code)).copyWith(childId: childId),
+    );
+    await platform.startMonitor();
+  }
+
+  /// Removes a device from the family (in parent mode).
+  Future<void> removeDevice(String id) async {
+    final log = await sync;
+    final key = await parentKey;
+    if (log == null || key == null) return;
+    await log.removeDevice(id, key);
+    notifyListeners();
+    await _reloadMonitor();
+  }
+
+  /// A device was welcomed from this one: the monitor passes it on.
+  Future<void> deviceWelcomed() async {
+    notifyListeners();
+    await _reloadMonitor();
+  }
+
   /// Saves a new parent code, here and, sealed with the parent key, for
   /// every device of the family.
   Future<void> changeParentCode(String code) async {

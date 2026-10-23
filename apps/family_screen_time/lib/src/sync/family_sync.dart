@@ -76,6 +76,15 @@ class SyncFiles {
   /// interface and the monitor.
   String get database => '${dir.path}/family.db';
 
+  /// The family's devices as the monitor last saw them on the network
+  /// (written by the monitor, read by the interface).
+  File get peers => File('${dir.path}/peers.json');
+
+  /// Present once the use recorded by the family's other devices, held in
+  /// the log, has been added to this device's use (see
+  /// `FamilySync.importOthersUsage`).
+  File get othersUsage => File('${dir.path}/others-usage.done');
+
   /// Present once the monitor has put the usage recorded before the
   /// family existed into the log.
   File get usageHistory => File('${dir.path}/usage-history.done');
@@ -169,6 +178,112 @@ class FamilySync {
     await SyncFiles._write(files.identity, identity.toJson());
     await SyncFiles._write(files.root, created.root.toJson());
     return (sync, created.parentKey);
+  }
+
+  /// Joins the family this device was welcomed into: keeps its keys and
+  /// the family's root, and takes in the log received (checking it).
+  static Future<FamilySync> join({
+    required LocalStore store,
+    required DeviceIdentity identity,
+    required Welcome welcome,
+  }) async {
+    final files = SyncFiles(store);
+    if (await files.dir.exists()) await files.dir.delete(recursive: true);
+    final node = SyncNode(
+      me: DeviceIdentity(uiOrigin(identity.deviceId), identity.signing),
+      root: welcome.root,
+      store: await _openStore(files),
+      policy: policy,
+    );
+    await node.ingest(welcome.events);
+    await SyncFiles._write(files.identity, identity.toJson());
+    await SyncFiles._write(files.root, welcome.root.toJson());
+    // What it recorded before is not the family's: nothing to send.
+    await files.usageHistory.writeAsString(DateTime.now().toIso8601String());
+    return FamilySync._(node, files, identity.deviceId);
+  }
+
+  /// This device's registration (name, role, child…).
+  Map<String, Object?>? get registration =>
+      node.replica[SyncKeys.device(deviceId)];
+
+  /// The family's devices, by id, removed ones left out.
+  Map<String, Map<String, Object?>> get devices => {
+    for (final e in node.replica.withPrefix(SyncKeys.devicePrefix).entries)
+      if (e.value['revoked'] != true)
+        e.key.substring(SyncKeys.devicePrefix.length): e.value,
+  };
+
+  /// Removes [id] from the family: its events are refused from now on.
+  Future<void> removeDevice(String id, SigningKey parentKey) => node.emit([
+    EventDraft.patch(SyncKeys.device(id), {'revoked': true}),
+  ], parentKey: parentKey);
+
+  /// When each device was last in contact, as the monitor saw it.
+  Future<Map<String, PeerState>> peers() async {
+    try {
+      final j = await SyncFiles._read(files.peers);
+      return {
+        for (final e in j.entries)
+          e.key: PeerState(
+            e.key,
+            DateTime.fromMillisecondsSinceEpoch(
+              ((e.value as Map)['last'] as num).toInt(),
+            ),
+            connected: (e.value as Map)['connected'] == true,
+          ),
+      };
+    } on Object {
+      return const {};
+    }
+  }
+
+  /// Saves the devices' contact as the monitor sees it.
+  Future<void> savePeers(Iterable<PeerState> peers) => SyncFiles._write(
+    files.peers,
+    {for (final p in peers) p.deviceId: p.toJson()},
+  );
+
+  /// Takes in what came from another device: its use of apps goes with
+  /// the use recorded here, and a change of the family's settings is
+  /// written to the family file. Returns the family when it changed.
+  Future<FamilyData?> applyRemote(Accepted a, LocalStore store) async {
+    for (final e in a.events) {
+      if (e.type != EventType.usage) continue;
+      if (deviceOfOrigin(e.origin) == deviceId) continue;
+      await store.appendUsage(usageSegmentFromJson(e.data));
+    }
+    if (!a.replicaChanged) return null;
+    final family = compose(await store.loadFamily());
+    await store.saveFamily(family);
+    return family;
+  }
+
+  /// Adds to this device's use what the other devices recorded and the log
+  /// holds, once (on a device that just joined, the use of the days
+  /// before). Use already there is not added twice. Returns how many
+  /// stretches of use were added.
+  Future<int> importOthersUsage(LocalStore store) async {
+    final done = files.othersUsage;
+    if (await done.exists()) return 0;
+    String key(UsageSegment u) =>
+        '${u.deviceId}|${u.appId}|${u.start.millisecondsSinceEpoch}|'
+        '${u.end.millisecondsSinceEpoch}';
+    final since = DateTime.now().subtract(usageKept);
+    final held = {for (final u in await store.loadUsage(since: since)) key(u)};
+    var added = 0;
+    for (final page in node.store.pagesFor(const {})) {
+      for (final e in page) {
+        if (e.type != EventType.usage) continue;
+        if (deviceOfOrigin(e.origin) == deviceId) continue;
+        final u = usageSegmentFromJson(e.data);
+        if (u.end.isBefore(since) || !held.add(key(u))) continue;
+        await store.appendUsage(u);
+        added++;
+      }
+    }
+    await done.writeAsString(DateTime.now().toIso8601String());
+    return added;
   }
 
   /// The parent key, unlocked by [parentCode]; `null` if it does not open.

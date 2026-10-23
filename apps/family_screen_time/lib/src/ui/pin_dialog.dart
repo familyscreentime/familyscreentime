@@ -42,7 +42,13 @@ class _PinDialogState extends State<_PinDialog> {
   Future<void> _submit() async {
     final c = widget.controller;
     setState(() => _checking = true);
-    final result = await checkPin(c.settings, _pin.text);
+    var result = await checkPin(c.settings, _pin.text);
+    // Changed on another device: the family's code opens its key.
+    if (!result.ok &&
+        result.lockedFor == null &&
+        await c.codeOpensFamily(_pin.text)) {
+      result = PinCheck(true, null, c.settings.copyWith(pinFailures: 0));
+    }
     await c.updateSettings(result.settings);
     if (!mounted) return;
     if (result.ok) {

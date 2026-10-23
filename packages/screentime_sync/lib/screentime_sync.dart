@@ -7,6 +7,7 @@ export 'src/canonical.dart';
 export 'src/event.dart';
 export 'src/hlc.dart';
 export 'src/keys.dart';
+export 'src/lan.dart';
 export 'src/log.dart';
 export 'src/node.dart';
 export 'src/pairing.dart';

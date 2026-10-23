@@ -25,7 +25,10 @@ class _FamilyScreenTimeAppState extends State<FamilyScreenTimeApp> {
     super.initState();
     AppController.load().then((c) {
       // "Leave parent mode" from the notification.
-      PlatformApi.listen(onLeaveParentMode: c.leaveParentMode);
+      PlatformApi.listen(
+        onLeaveParentMode: c.leaveParentMode,
+        onFamilyChanged: c.reloadFamily,
+      );
       setState(() => _controller = c);
     });
   }

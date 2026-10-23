@@ -52,6 +52,20 @@ SQLite with the app (Android, Windows) and the tests.
 local network; other transports (the PHP server) plug into the same
 `FrameChannel`.
 
+## Local network
+
+- `LanSync` listens on a free port, says on the network that the device is
+  there (DNS-SD type `_fstime._tcp`, with a short tag of the family and the
+  device id), finds the others and keeps one session open with each member
+  device. When two devices connect to each other at once, both keep the
+  session started by the smaller id. Devices seen but not connected are
+  tried again every minute.
+- `PairingHost` (a member in parent mode) advertises `_fstpair._tcp` with
+  its name; `findPairingHosts` and `joinThrough` are the joining side.
+- `LanDirectory` abstracts DNS-SD: the app uses Bonsoir (Android NSD,
+  Windows); `MemoryLanDirectory` lets tests run several devices on the
+  loopback interface.
+
 ## Tests
 
 ```

@@ -125,7 +125,7 @@ class SyncNode {
   /// The signing key a member device registered, or `null` if it is not a
   /// member.
   String? memberKey(String deviceId) {
-    final d = replica[SyncKeys.device(deviceId)];
+    final d = replica[SyncKeys.device(deviceOfOrigin(deviceId))];
     if (d == null || d['revoked'] == true) return null;
     return d['signKey'] as String?;
   }

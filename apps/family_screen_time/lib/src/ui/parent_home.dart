@@ -17,6 +17,7 @@ import 'self_limit_report_screen.dart';
 import 'limit_screen.dart';
 import '../family.dart';
 import 'periods_screen.dart';
+import 'devices_screen.dart';
 import 'usage_screen.dart';
 import 'volume_screen.dart';
 
@@ -333,6 +334,13 @@ class _ParentHomeState extends State<ParentHome> {
                   c.updateFamily(c.family.copyWith(settingsParentOnly: v)),
             ),
             const Divider(),
+            ListTile(
+              leading: const Icon(Icons.devices_outlined),
+              title: Text(s.t('devicesTitle')),
+              subtitle: Text(s.t('devicesSubtitle')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(context, DevicesScreen(controller: c)),
+            ),
             ListTile(
               leading: const Icon(Icons.volume_down_outlined),
               title: Text(s.t('volumeTitle')),

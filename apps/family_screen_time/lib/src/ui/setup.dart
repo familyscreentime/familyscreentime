@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../controller.dart';
 import '../pin.dart';
 import '../strings.dart';
+import 'join_screen.dart';
 import 'permissions.dart';
 
 class SetupFlow extends StatefulWidget {
@@ -75,6 +76,15 @@ class _SetupFlowState extends State<SetupFlow> {
       childName: _name.text.trim(),
     );
     if (mounted) setState(() => _step = 3);
+  }
+
+  Future<void> _join() async {
+    final joined = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => JoinScreen(controller: widget.controller),
+      ),
+    );
+    if (joined == true && mounted) setState(() => _step = 3);
   }
 
   @override
@@ -153,6 +163,15 @@ class _SetupFlowState extends State<SetupFlow> {
                 onPressed: _saving ? null : _next,
                 child: Text(s.t('continue')),
               ),
+            // A device of a family already set up elsewhere.
+            if (_step == 0) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.devices),
+                label: Text(s.t('joinFamilyButton')),
+                onPressed: _join,
+              ),
+            ],
             if (_step == 3)
               FilledButton(
                 // Leaves setup: the home screen replaces this flow.

@@ -10,6 +10,11 @@ import 'package:flutter/services.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
 import 'availability.dart';
+
+import 'package:screentime_sync/screentime_sync.dart'
+    show Accepted, LanDirectory, LanSync, SyncSession;
+
+import 'sync/bonsoir_directory.dart';
 import 'sync/family_sync.dart';
 import 'family.dart';
 import 'platform.dart';
@@ -31,7 +36,11 @@ class Monitor {
 
   final LocalStore store;
 
-  Monitor(this.store);
+  /// Finds the family's devices on the network (DNS-SD by default).
+  final LanDirectory Function() lanDirectory;
+
+  Monitor(this.store, {LanDirectory Function()? lanDirectory})
+    : lanDirectory = lanDirectory ?? BonsoirDirectory.new;
 
   AppSettings? _settings;
   FamilyData _family = const FamilyData();
@@ -100,9 +109,62 @@ class Monitor {
       if (log == null) return;
       await log.readOthers();
       await _logUsageHistory(log);
+      // Joined a family: the use of the other devices before counts too.
+      if (await log.importOthersUsage(store) > 0) {
+        final since = addDays(dayOf(DateTime.now()), -usageHistoryDays);
+        _usage = [...await store.loadUsage(since: since), ..._family.injected];
+      }
       log.pruneUsage();
+      await _startLan(log);
     } on Object catch (e) {
       debugPrint('Family log: $e');
+    }
+  }
+
+  LanSync? _lan;
+  Future<void> _remoteQueue = Future.value();
+
+  /// The family's other devices on the local network: kept in sync while
+  /// they are reachable.
+  Future<void> _startLan(FamilySync log) async {
+    if (_lan != null) return;
+    final lan = _lan = LanSync(
+      log.node,
+      lanDirectory(),
+      onPeersChanged: () => _savePeers(log),
+    );
+    log.node.accepted.listen((a) {
+      if (a.source is! SyncSession) return;
+      // One at a time: each may rewrite the family file and reload.
+      _remoteQueue = _remoteQueue.then((_) => _onRemote(log, a));
+    });
+    try {
+      await lan.start();
+    } on Object catch (e) {
+      debugPrint('Local network sync not started: $e');
+    }
+  }
+
+  Future<void> _savePeers(FamilySync log) async {
+    final lan = _lan;
+    if (lan == null) return;
+    try {
+      await log.savePeers(lan.peers);
+    } on Object catch (e) {
+      debugPrint('Devices not saved: $e');
+    }
+  }
+
+  /// Something came from another device: use of apps, or the family's
+  /// settings changed there.
+  Future<void> _onRemote(FamilySync log, Accepted a) async {
+    try {
+      final family = await log.applyRemote(a, store);
+      await _load();
+      await _evaluate();
+      if (family != null) await _channel.invokeMethod('familyChanged');
+    } on Object catch (e) {
+      debugPrint('Change from another device not applied: $e');
     }
   }
 
@@ -112,7 +174,10 @@ class Monitor {
     final done = log.files.usageHistory;
     if (await done.exists()) return;
     final since = addDays(dayOf(DateTime.now()), -usageHistoryDays);
-    final recorded = await store.loadUsage(since: since);
+    final recorded = [
+      for (final u in await store.loadUsage(since: since))
+        if (u.deviceId == log.deviceId) u,
+    ];
     for (var i = 0; i < recorded.length; i += 200) {
       await log.recordUsage(recorded.skip(i).take(200));
     }
@@ -698,6 +763,8 @@ class Monitor {
   }
 
   void dispose() {
+    _lan?.stop();
+    _log?.close();
     _next?.cancel();
     _heartbeat?.cancel();
   }

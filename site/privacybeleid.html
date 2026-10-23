@@ -18,8 +18,8 @@
 <main class="wrap">
 
 <h1>Privacybeleid</h1>
-<p class="muted">Android-app Family Screen Time (org.familyscreentime). Laatst bijgewerkt: 22 oktober 2026.</p>
-<div class="card"><p><strong>Kort:</strong> Family Screen Time verzamelt geen gegevens. Alles wat de app bijhoudt, blijft op het toestel waarop ze geïnstalleerd is. Er wordt niets naar de uitgever of naar derden gestuurd: geen account, geen reclame, geen bezoekersstatistieken, geen diensten van derden.</p></div>
+<p class="muted">Android-app Family Screen Time (org.familyscreentime). Laatst bijgewerkt: 23 oktober 2026.</p>
+<div class="card"><p><strong>Kort:</strong> Family Screen Time verzamelt geen gegevens. Alles wat de app bijhoudt, blijft op het toestel waarop ze geïnstalleerd is. Er wordt niets naar de uitgever of naar derden gestuurd: geen account, geen reclame, geen bezoekersstatistieken, geen diensten van derden. Als de ouder meerdere toestellen van het gezin verbindt, wisselen die deze gegevens onderling uit, rechtstreeks over het wifinetwerk thuis, end-to-end versleuteld.</p></div>
 
 <h2>Wie zijn we?</h2>
 <p>Family Screen Time is vrije software (MIT-licentie), gepubliceerd op familyscreentime.org. Vragen: <a href="mailto:contact@familyscreentime.org">contact@familyscreentime.org</a>.</p>
@@ -31,10 +31,13 @@
 <tr><td>De gebruiksgeschiedenis van apps die Android bijhoudt (ongeveer 10 dagen, bij de eerste opening)</td><td>Vanaf de eerste dag gebruiksstatistieken tonen. Ze wordt niet voor de limieten gebruikt.</td></tr>
 <tr><td>De regels, app-groepen, namen van apps, periodes, extra tijd en blokkeringen</td><td>De app laten werken volgens de instellingen van de ouder.</td></tr>
 <tr><td>De voornaam van het kind</td><td>Die in de app tonen.</td></tr>
-<tr><td>De oudercode, bewaard als vingerafdruk (PBKDF2), nooit leesbaar</td><td>De instellingen beveiligen.</td></tr>
+<tr><td>De oudercode, bewaard als vingerafdruk (PBKDF2), nooit leesbaar; de sleutel van het gezin, versleuteld met die code (Argon2id)</td><td>De instellingen beveiligen, en de beslissingen van de ouder ondertekenen voor de andere toestellen van het gezin.</td></tr>
 <tr><td>De limieten die het kind zichzelf geeft en hun geschiedenis</td><td>Ze toepassen en de ouder tonen hoe ze worden volgehouden. Het kind weet dat.</td></tr>
 </table>
 <p>Deze gegevens staan in de privéruimte van de app. Ze worden gewist als de app verwijderd wordt.</p>
+
+<h2>Synchronisatie tussen de toestellen van het gezin</h2>
+<p>De ouder kan de toestellen van het gezin met elkaar verbinden (de tablet en de telefoon van een kind, bijvoorbeeld). Ze delen dan de instellingen, de gebruikte tijd en de lijst van toestellen, zodat de limieten overal dezelfde zijn. Dat gebeurt rechtstreeks tussen de toestellen, op het lokale netwerk thuis: end-to-end versleuteld, en elk toestel controleert dat de beslissingen van de ouder ondertekend zijn met de sleutel van het gezin. Er komt geen server van de uitgever aan te pas. Een toestel dat uit het gezin wordt verwijderd, wordt niet meer gesynchroniseerd.</p>
 
 <h2>De toegankelijkheidsdienst</h2>
 <p>De app gebruikt de toegankelijkheidsdienst van Android om te weten welke app op het scherm staat, om een geblokkeerde app te sluiten en om waarschuwingen, het aftellen en het vergrendelscherm boven andere apps te tonen. Als de ouder de beveiliging tegen verwijderen inschakelt, sluit ze ook de instellingenpagina's waarmee de app uitgeschakeld kan worden. Om die te herkennen, leest ze de scherminhoud alleen op de beveiligings- en toestemmingspagina's van Android, zonder iets te bewaren. De gebruiker wordt ingelicht en geeft toestemming voor deze dienst wordt ingeschakeld.</p>
@@ -45,12 +48,13 @@
 <li><b>Toegang tot gebruiksgegevens</b>: gebruiksgeschiedenis, de app op het scherm herkennen als toegankelijkheid uit staat.</li>
 <li><b>Weergeven boven andere apps</b>: blokkeerscherm, aftellen.</li>
 <li><b>Meldingen</b>: aftellen, waarschuwingen, oudermodus.</li>
+<li><b>Netwerk</b> (internet, netwerkstatus, wifi-multicast): de toestellen van het gezin vinden op het netwerk thuis en ermee uitwisselen.</li>
 <li><b>Apparaatbeheerder</b> (optioneel): verwijderen zonder de ouder voorkomen. Er wordt geen ander beheerbeleid gebruikt.</li>
 <li><b>Opstarten, voorgronddienst, uitzondering op batterijoptimalisatie</b>: de opvolging actief houden.</li>
 </ul>
 
 <h2>Delen</h2>
-<p>Er worden geen gegevens gedeeld, verkocht of doorgegeven. De app bevat geen volgsoftware.</p>
+<p>Er worden geen gegevens gedeeld met de uitgever of met derden, verkocht of doorgegeven, behalve tussen de toestellen van het gezin die de ouder heeft verbonden. De app bevat geen volgsoftware.</p>
 
 <h2>Kinderen</h2>
 <p>De app is gemaakt om door een ouder op het toestel van het kind geïnstalleerd te worden. Ze verzamelt geen persoonsgegevens over het kind voor de uitgever. Het kind ziet zijn regels en resterende tijd, en weet dat de ouder de geschiedenis van zijn eigen limieten ziet.</p>

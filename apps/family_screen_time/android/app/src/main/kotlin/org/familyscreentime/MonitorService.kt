@@ -263,6 +263,11 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
                 )
                 result.success(null)
             }
+            "familyChanged" -> {
+                // Settings changed on another device: the interface reloads.
+                PlatformBridge.uiChannel?.invokeMethod("familyChanged", null)
+                result.success(null)
+            }
             "unblock" -> {
                 BlockActivity.dismiss()
                 blockNotice.hide()

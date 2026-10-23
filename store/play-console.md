@@ -75,6 +75,15 @@ installed by a parent on a child's device, whichever you choose.
 - Do you provide a way for users to request that their data is deleted?
   Not applicable; data is erased by uninstalling the app or clearing its
   data.
+- From 0.20 (sync on the local network): the family's devices exchange
+  settings and usage directly with each other over the home network,
+  end-to-end encrypted, with no server of the publisher. Google counts as
+  "collected" what the app sends off the device to the developer or third
+  parties, so **No** remains the answer as long as no server of ours is
+  involved. To be reviewed when the self-hosted server arrives; if a
+  reviewer disagrees, declare "App activity" and "Device or other IDs" as
+  collected, encrypted in transit, not shared, required for the app's
+  functionality.
 
 ### Accessibility API declaration
 

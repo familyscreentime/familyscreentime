@@ -1,5 +1,5 @@
 import html, os
-DATE = {'fr': '22 octobre 2026', 'nl': '22 oktober 2026', 'en': '22 October 2026'}
+DATE = {'fr': '23 octobre 2026', 'nl': '23 oktober 2026', 'en': '23 October 2026'}
 CONTACT = 'contact@familyscreentime.org'
 REPO = 'https://github.com/familyscreentime/familyscreentime'
 PAGES = {
@@ -121,7 +121,7 @@ PRIV = {
 'fr': ('Règles de confidentialité — Family Screen Time', '''
 <h1>Règles de confidentialité</h1>
 <p class="muted">Application Android Family Screen Time (org.familyscreentime). Dernière mise à jour : {date}.</p>
-<div class="card"><p><strong>En bref :</strong> Family Screen Time ne collecte aucune donnée. Tout ce que l'application enregistre reste sur l'appareil où elle est installée. Rien n'est envoyé à l'éditeur ni à des tiers : pas de compte, pas de publicité, pas de statistiques d'audience, pas de service tiers.</p></div>
+<div class="card"><p><strong>En bref :</strong> Family Screen Time ne collecte aucune donnée. Tout ce que l'application enregistre reste sur l'appareil où elle est installée. Rien n'est envoyé à l'éditeur ni à des tiers : pas de compte, pas de publicité, pas de statistiques d'audience, pas de service tiers. Si le parent relie plusieurs appareils de la famille, ils échangent ces données entre eux, directement sur le réseau Wi-Fi de la maison, chiffrées de bout en bout.</p></div>
 
 <h2>Qui sommes-nous ?</h2>
 <p>Family Screen Time est un logiciel libre (licence MIT) publié sur familyscreentime.org. Pour toute question : {contact}.</p>
@@ -133,10 +133,13 @@ PRIV = {
 <tr><td>L'historique d'utilisation des applis tenu par Android (environ 10 jours, à la première ouverture)</td><td>Afficher les statistiques d'utilisation dès le premier jour. Il ne sert pas aux limites.</td></tr>
 <tr><td>Les règles, groupes d'applis, noms donnés aux applis, périodes, bonus et blocages</td><td>Faire fonctionner l'application selon les réglages du parent.</td></tr>
 <tr><td>Le prénom de l'enfant</td><td>L'afficher dans l'application.</td></tr>
-<tr><td>Le code parent, enregistré sous forme d'empreinte (PBKDF2), jamais en clair</td><td>Protéger les réglages.</td></tr>
+<tr><td>Le code parent, enregistré sous forme d'empreinte (PBKDF2), jamais en clair ; la clé de la famille, chiffrée par ce code (Argon2id)</td><td>Protéger les réglages, et signer les décisions du parent pour les autres appareils de la famille.</td></tr>
 <tr><td>Les limites que l'enfant se fixe et leur historique</td><td>Les appliquer, et montrer au parent comment elles sont tenues. L'enfant en est informé.</td></tr>
 </table>
 <p>Ces données sont stockées dans l'espace privé de l'application. Elles sont effacées quand l'application est désinstallée.</p>
+
+<h2>Synchronisation entre les appareils de la famille</h2>
+<p>Le parent peut relier les appareils de la famille (la tablette et le téléphone d'un enfant, par exemple). Ils partagent alors les réglages, le temps utilisé et la liste des appareils, pour que les limites soient les mêmes partout. Ces échanges se font directement entre les appareils, sur le réseau local de la maison : ils sont chiffrés de bout en bout, et chaque appareil vérifie que les décisions du parent sont signées par la clé de la famille. Ils ne passent par aucun serveur de l'éditeur. Un appareil retiré de la famille n'est plus synchronisé.</p>
 
 <h2>Le service d'accessibilité</h2>
 <p>L'application utilise le service d'accessibilité d'Android pour savoir quelle appli est à l'écran, pour fermer une appli bloquée et pour afficher les avertissements, le décompte et l'écran de verrouillage par-dessus les autres applis. Quand le parent active la protection contre la désinstallation, elle ferme aussi les pages des réglages qui permettraient de désactiver l'application. Pour les reconnaître, elle lit le contenu de l'écran uniquement sur les pages de sécurité et d'autorisations d'Android, sans rien enregistrer. L'utilisateur est informé et donne son accord avant l'activation de ce service.</p>
@@ -147,12 +150,13 @@ PRIV = {
 <li><b>Accès aux données d'utilisation</b> : historique d'utilisation, repérage de l'appli à l'écran si l'accessibilité est coupée.</li>
 <li><b>Affichage par-dessus les autres applis</b> : écran de blocage, décompte.</li>
 <li><b>Notifications</b> : décompte, avertissements, mode parent.</li>
+<li><b>Réseau</b> (Internet, état du réseau, multidiffusion Wi-Fi) : trouver les appareils de la famille sur le réseau de la maison et échanger avec eux.</li>
 <li><b>Administrateur de l'appareil</b> (facultatif) : empêcher la désinstallation sans le parent. Aucune autre règle d'administration n'est utilisée.</li>
 <li><b>Démarrage, service au premier plan, exclusion de l'optimisation de batterie</b> : garder le suivi actif.</li>
 </ul>
 
 <h2>Partage</h2>
-<p>Aucune donnée n'est partagée, vendue ni transmise. L'application ne contient aucun outil de suivi.</p>
+<p>Aucune donnée n'est partagée avec l'éditeur ni avec des tiers, vendue ni transmise, en dehors des appareils de la famille que le parent a reliés. L'application ne contient aucun outil de suivi.</p>
 
 <h2>Enfants</h2>
 <p>L'application est conçue pour être installée par un parent sur l'appareil de son enfant. Elle ne collecte aucune donnée personnelle sur l'enfant pour l'éditeur. L'enfant voit ses règles, son temps restant, et sait que le parent voit l'historique de ses propres limites.</p>
@@ -166,7 +170,7 @@ PRIV = {
 'nl': ('Privacybeleid — Family Screen Time', '''
 <h1>Privacybeleid</h1>
 <p class="muted">Android-app Family Screen Time (org.familyscreentime). Laatst bijgewerkt: {date}.</p>
-<div class="card"><p><strong>Kort:</strong> Family Screen Time verzamelt geen gegevens. Alles wat de app bijhoudt, blijft op het toestel waarop ze geïnstalleerd is. Er wordt niets naar de uitgever of naar derden gestuurd: geen account, geen reclame, geen bezoekersstatistieken, geen diensten van derden.</p></div>
+<div class="card"><p><strong>Kort:</strong> Family Screen Time verzamelt geen gegevens. Alles wat de app bijhoudt, blijft op het toestel waarop ze geïnstalleerd is. Er wordt niets naar de uitgever of naar derden gestuurd: geen account, geen reclame, geen bezoekersstatistieken, geen diensten van derden. Als de ouder meerdere toestellen van het gezin verbindt, wisselen die deze gegevens onderling uit, rechtstreeks over het wifinetwerk thuis, end-to-end versleuteld.</p></div>
 
 <h2>Wie zijn we?</h2>
 <p>Family Screen Time is vrije software (MIT-licentie), gepubliceerd op familyscreentime.org. Vragen: {contact}.</p>
@@ -178,10 +182,13 @@ PRIV = {
 <tr><td>De gebruiksgeschiedenis van apps die Android bijhoudt (ongeveer 10 dagen, bij de eerste opening)</td><td>Vanaf de eerste dag gebruiksstatistieken tonen. Ze wordt niet voor de limieten gebruikt.</td></tr>
 <tr><td>De regels, app-groepen, namen van apps, periodes, extra tijd en blokkeringen</td><td>De app laten werken volgens de instellingen van de ouder.</td></tr>
 <tr><td>De voornaam van het kind</td><td>Die in de app tonen.</td></tr>
-<tr><td>De oudercode, bewaard als vingerafdruk (PBKDF2), nooit leesbaar</td><td>De instellingen beveiligen.</td></tr>
+<tr><td>De oudercode, bewaard als vingerafdruk (PBKDF2), nooit leesbaar; de sleutel van het gezin, versleuteld met die code (Argon2id)</td><td>De instellingen beveiligen, en de beslissingen van de ouder ondertekenen voor de andere toestellen van het gezin.</td></tr>
 <tr><td>De limieten die het kind zichzelf geeft en hun geschiedenis</td><td>Ze toepassen en de ouder tonen hoe ze worden volgehouden. Het kind weet dat.</td></tr>
 </table>
 <p>Deze gegevens staan in de privéruimte van de app. Ze worden gewist als de app verwijderd wordt.</p>
+
+<h2>Synchronisatie tussen de toestellen van het gezin</h2>
+<p>De ouder kan de toestellen van het gezin met elkaar verbinden (de tablet en de telefoon van een kind, bijvoorbeeld). Ze delen dan de instellingen, de gebruikte tijd en de lijst van toestellen, zodat de limieten overal dezelfde zijn. Dat gebeurt rechtstreeks tussen de toestellen, op het lokale netwerk thuis: end-to-end versleuteld, en elk toestel controleert dat de beslissingen van de ouder ondertekend zijn met de sleutel van het gezin. Er komt geen server van de uitgever aan te pas. Een toestel dat uit het gezin wordt verwijderd, wordt niet meer gesynchroniseerd.</p>
 
 <h2>De toegankelijkheidsdienst</h2>
 <p>De app gebruikt de toegankelijkheidsdienst van Android om te weten welke app op het scherm staat, om een geblokkeerde app te sluiten en om waarschuwingen, het aftellen en het vergrendelscherm boven andere apps te tonen. Als de ouder de beveiliging tegen verwijderen inschakelt, sluit ze ook de instellingenpagina's waarmee de app uitgeschakeld kan worden. Om die te herkennen, leest ze de scherminhoud alleen op de beveiligings- en toestemmingspagina's van Android, zonder iets te bewaren. De gebruiker wordt ingelicht en geeft toestemming voor deze dienst wordt ingeschakeld.</p>
@@ -192,12 +199,13 @@ PRIV = {
 <li><b>Toegang tot gebruiksgegevens</b>: gebruiksgeschiedenis, de app op het scherm herkennen als toegankelijkheid uit staat.</li>
 <li><b>Weergeven boven andere apps</b>: blokkeerscherm, aftellen.</li>
 <li><b>Meldingen</b>: aftellen, waarschuwingen, oudermodus.</li>
+<li><b>Netwerk</b> (internet, netwerkstatus, wifi-multicast): de toestellen van het gezin vinden op het netwerk thuis en ermee uitwisselen.</li>
 <li><b>Apparaatbeheerder</b> (optioneel): verwijderen zonder de ouder voorkomen. Er wordt geen ander beheerbeleid gebruikt.</li>
 <li><b>Opstarten, voorgronddienst, uitzondering op batterijoptimalisatie</b>: de opvolging actief houden.</li>
 </ul>
 
 <h2>Delen</h2>
-<p>Er worden geen gegevens gedeeld, verkocht of doorgegeven. De app bevat geen volgsoftware.</p>
+<p>Er worden geen gegevens gedeeld met de uitgever of met derden, verkocht of doorgegeven, behalve tussen de toestellen van het gezin die de ouder heeft verbonden. De app bevat geen volgsoftware.</p>
 
 <h2>Kinderen</h2>
 <p>De app is gemaakt om door een ouder op het toestel van het kind geïnstalleerd te worden. Ze verzamelt geen persoonsgegevens over het kind voor de uitgever. Het kind ziet zijn regels en resterende tijd, en weet dat de ouder de geschiedenis van zijn eigen limieten ziet.</p>
@@ -211,7 +219,7 @@ PRIV = {
 'en': ('Privacy policy — Family Screen Time', '''
 <h1>Privacy policy</h1>
 <p class="muted">Family Screen Time Android app (org.familyscreentime). Last updated: {date}.</p>
-<div class="card"><p><strong>In short:</strong> Family Screen Time collects no data. Everything the app records stays on the device it is installed on. Nothing is sent to the publisher or to third parties: no account, no ads, no analytics, no third-party services.</p></div>
+<div class="card"><p><strong>In short:</strong> Family Screen Time collects no data. Everything the app records stays on the device it is installed on. Nothing is sent to the publisher or to third parties: no account, no ads, no analytics, no third-party services. If the parent links several of the family's devices, they exchange this data with each other, directly over the home Wi-Fi network, end-to-end encrypted.</p></div>
 
 <h2>Who we are</h2>
 <p>Family Screen Time is free software (MIT licence) published at familyscreentime.org. Questions: {contact}.</p>
@@ -223,10 +231,13 @@ PRIV = {
 <tr><td>The app usage history Android keeps (about 10 days, on first launch)</td><td>To show usage statistics from the first day. It is not used for limits.</td></tr>
 <tr><td>Rules, app groups, names given to apps, periods, extra time and blocks</td><td>To run the app as the parent set it up.</td></tr>
 <tr><td>The child's first name</td><td>To show it in the app.</td></tr>
-<tr><td>The parent code, stored as a hash (PBKDF2), never in clear</td><td>To protect the settings.</td></tr>
+<tr><td>The parent code, stored as a hash (PBKDF2), never in clear; the family's key, encrypted with that code (Argon2id)</td><td>To protect the settings, and to sign the parent's decisions for the family's other devices.</td></tr>
 <tr><td>The limits the child sets for themselves and their history</td><td>To apply them, and show the parent how they are kept. The child is told.</td></tr>
 </table>
 <p>This data is stored in the app's private storage and erased when the app is uninstalled.</p>
+
+<h2>Syncing between the family's devices</h2>
+<p>The parent can link the family's devices (a child's tablet and phone, for example). They then share the settings, the time used and the list of devices, so the limits are the same everywhere. This happens directly between the devices, on the home's local network: end-to-end encrypted, and each device checks that the parent's decisions are signed with the family's key. No server of the publisher is involved. A device removed from the family is no longer synced.</p>
 
 <h2>The accessibility service</h2>
 <p>The app uses Android's accessibility service to know which app is on screen, to close a blocked app, and to show warnings, the countdown and the lock screen over other apps. When the parent turns on uninstall protection, it also closes the settings pages that would switch the app off. To recognise them, it reads screen content only on Android's security and permission pages, and stores nothing. The user is informed and agrees before this service is turned on.</p>
@@ -237,12 +248,13 @@ PRIV = {
 <li><b>Usage access</b>: usage history; knowing the app on screen when accessibility is off.</li>
 <li><b>Display over other apps</b>: block screen, countdown.</li>
 <li><b>Notifications</b>: countdown, warnings, parent mode.</li>
+<li><b>Network</b> (internet, network state, Wi-Fi multicast): find the family's devices on the home network and exchange with them.</li>
 <li><b>Device administrator</b> (optional): preventing uninstallation without the parent. No other administration policy is used.</li>
 <li><b>Start at boot, foreground service, exemption from battery optimisation</b>: keeping monitoring running.</li>
 </ul>
 
 <h2>Sharing</h2>
-<p>No data is shared, sold or transferred. The app contains no tracking tools.</p>
+<p>No data is shared with the publisher or third parties, sold or transferred, except between the family's devices the parent has linked. The app contains no tracking tools.</p>
 
 <h2>Children</h2>
 <p>The app is designed to be installed by a parent on their child's device. It collects no personal data about the child for the publisher. The child sees their rules and time left, and knows that the parent sees the history of their own limits.</p>

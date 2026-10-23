@@ -138,9 +138,17 @@ class PlatformApi {
   });
 
   /// Calls from Android to the interface.
-  static void listen({required void Function() onLeaveParentMode}) {
+  static void listen({
+    required void Function() onLeaveParentMode,
+    void Function()? onFamilyChanged,
+  }) {
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'leaveParentMode') onLeaveParentMode();
+      switch (call.method) {
+        case 'leaveParentMode':
+          onLeaveParentMode();
+        case 'familyChanged':
+          onFamilyChanged?.call();
+      }
       return null;
     });
   }

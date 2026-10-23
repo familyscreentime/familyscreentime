@@ -18,8 +18,8 @@
 <main class="wrap">
 
 <h1>Privacy policy</h1>
-<p class="muted">Family Screen Time Android app (org.familyscreentime). Last updated: 22 October 2026.</p>
-<div class="card"><p><strong>In short:</strong> Family Screen Time collects no data. Everything the app records stays on the device it is installed on. Nothing is sent to the publisher or to third parties: no account, no ads, no analytics, no third-party services.</p></div>
+<p class="muted">Family Screen Time Android app (org.familyscreentime). Last updated: 23 October 2026.</p>
+<div class="card"><p><strong>In short:</strong> Family Screen Time collects no data. Everything the app records stays on the device it is installed on. Nothing is sent to the publisher or to third parties: no account, no ads, no analytics, no third-party services. If the parent links several of the family's devices, they exchange this data with each other, directly over the home Wi-Fi network, end-to-end encrypted.</p></div>
 
 <h2>Who we are</h2>
 <p>Family Screen Time is free software (MIT licence) published at familyscreentime.org. Questions: <a href="mailto:contact@familyscreentime.org">contact@familyscreentime.org</a>.</p>
@@ -31,10 +31,13 @@
 <tr><td>The app usage history Android keeps (about 10 days, on first launch)</td><td>To show usage statistics from the first day. It is not used for limits.</td></tr>
 <tr><td>Rules, app groups, names given to apps, periods, extra time and blocks</td><td>To run the app as the parent set it up.</td></tr>
 <tr><td>The child's first name</td><td>To show it in the app.</td></tr>
-<tr><td>The parent code, stored as a hash (PBKDF2), never in clear</td><td>To protect the settings.</td></tr>
+<tr><td>The parent code, stored as a hash (PBKDF2), never in clear; the family's key, encrypted with that code (Argon2id)</td><td>To protect the settings, and to sign the parent's decisions for the family's other devices.</td></tr>
 <tr><td>The limits the child sets for themselves and their history</td><td>To apply them, and show the parent how they are kept. The child is told.</td></tr>
 </table>
 <p>This data is stored in the app's private storage and erased when the app is uninstalled.</p>
+
+<h2>Syncing between the family's devices</h2>
+<p>The parent can link the family's devices (a child's tablet and phone, for example). They then share the settings, the time used and the list of devices, so the limits are the same everywhere. This happens directly between the devices, on the home's local network: end-to-end encrypted, and each device checks that the parent's decisions are signed with the family's key. No server of the publisher is involved. A device removed from the family is no longer synced.</p>
 
 <h2>The accessibility service</h2>
 <p>The app uses Android's accessibility service to know which app is on screen, to close a blocked app, and to show warnings, the countdown and the lock screen over other apps. When the parent turns on uninstall protection, it also closes the settings pages that would switch the app off. To recognise them, it reads screen content only on Android's security and permission pages, and stores nothing. The user is informed and agrees before this service is turned on.</p>
@@ -45,12 +48,13 @@
 <li><b>Usage access</b>: usage history; knowing the app on screen when accessibility is off.</li>
 <li><b>Display over other apps</b>: block screen, countdown.</li>
 <li><b>Notifications</b>: countdown, warnings, parent mode.</li>
+<li><b>Network</b> (internet, network state, Wi-Fi multicast): find the family's devices on the home network and exchange with them.</li>
 <li><b>Device administrator</b> (optional): preventing uninstallation without the parent. No other administration policy is used.</li>
 <li><b>Start at boot, foreground service, exemption from battery optimisation</b>: keeping monitoring running.</li>
 </ul>
 
 <h2>Sharing</h2>
-<p>No data is shared, sold or transferred. The app contains no tracking tools.</p>
+<p>No data is shared with the publisher or third parties, sold or transferred, except between the family's devices the parent has linked. The app contains no tracking tools.</p>
 
 <h2>Children</h2>
 <p>The app is designed to be installed by a parent on their child's device. It collects no personal data about the child for the publisher. The child sees their rules and time left, and knows that the parent sees the history of their own limits.</p>

@@ -265,7 +265,7 @@ class _RuleEditorState extends State<RuleEditor> {
     final daily = _dailyQuotas();
     final rule = Rule(
       id: old?.id ?? newId(),
-      childId: c.settings.childId!,
+      childId: c.childId!,
       profileId: _profile,
       appTarget: _target,
       deviceTarget: old?.deviceTarget ?? const DeviceTarget.all(),

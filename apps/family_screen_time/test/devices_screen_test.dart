@@ -4,6 +4,7 @@ import 'package:family_screen_time/src/controller.dart';
 import 'package:family_screen_time/src/store.dart';
 import 'package:family_screen_time/src/sync/family_sync.dart';
 import 'package:family_screen_time/src/ui/devices_screen.dart';
+import 'package:family_screen_time/src/ui/parent_device_home.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -63,6 +64,7 @@ void main() {
       ]);
     });
     final c = AppController(store, settings, family);
+    await tester.runAsync(c.openSync);
     await tester.pumpWidget(
       MaterialApp(
         home: DevicesScreen(
@@ -80,9 +82,36 @@ void main() {
     expect(find.text('Tablette'), findsOneWidget);
     expect(find.text('Appareil de Emma · Cet appareil'), findsOneWidget);
     expect(find.text('Appareil de Emma · Connecté'), findsOneWidget);
-    expect(find.text('Ajouter un appareil'), findsOneWidget);
-    // Only the other device can be removed from here.
-    expect(find.byIcon(Icons.link_off), findsOneWidget);
+    expect(find.text('Relier un appareil'), findsOneWidget);
+    expect(find.text('Détacher cet appareil'), findsOneWidget);
+    // Each can be renamed; only the other device can be removed from here.
+    await tester.tap(
+      find.descendant(
+        of: find.ancestor(
+          of: find.text('Tablette'),
+          matching: find.byType(ListTile),
+        ),
+        matching: find.byType(PopupMenuButton<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Renommer'), findsOneWidget);
+    expect(find.text('Retirer'), findsNothing);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.ancestor(
+          of: find.text('Téléphone'),
+          matching: find.byType(ListTile),
+        ),
+        matching: find.byType(PopupMenuButton<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Retirer'), findsOneWidget);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
     await tester.runAsync(() => log.close());
   });
 
@@ -96,8 +125,47 @@ void main() {
       deviceName: 'Tablette',
     );
     await log.changeCode(key, '654321');
+    await c.openSync();
     expect(await c.codeOpensFamily('000000'), isFalse);
     expect(await c.codeOpensFamily('654321'), isTrue);
     expect(c.settings.pinHash, isNotNull);
+  });
+
+  testWidgets('a parent\'s device: children behind the parent code', (
+    tester,
+  ) async {
+    final c = AppController(
+      store,
+      const AppSettings(
+        deviceId: 'papa',
+        language: 'fr',
+        setupDone: true,
+        parentDevice: true,
+      ),
+      const FamilyData(
+        children: [
+          Child(id: 'emma', name: 'Emma'),
+          Child(id: 'lucas', name: 'Lucas'),
+        ],
+      ),
+    );
+    await tester.pumpWidget(MaterialApp(home: ParentDeviceHome(controller: c)));
+    await tester.pump();
+    expect(find.text('Mode parent'), findsOneWidget);
+    expect(find.text('Emma'), findsNothing);
+    // No child of its own: the first one is shown until another is chosen.
+    expect(c.childId, 'emma');
+    c.enterParentMode();
+    await tester.pump();
+    expect(find.text('Emma'), findsOneWidget);
+    expect(find.text('Lucas'), findsOneWidget);
+    expect(find.text('Appareils reliés'), findsOneWidget);
+    c.selectChild('lucas');
+    expect(c.childId, 'lucas');
+    expect(c.child?.name, 'Lucas');
+    c.leaveParentMode();
+    await tester.pump();
+    expect(find.text('Lucas'), findsNothing);
+    c.dispose();
   });
 }

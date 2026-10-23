@@ -38,7 +38,7 @@ class _GroupEditorState extends State<GroupEditor> {
     _selected = {...?c.family.config.appGroups[id]};
     // The group's apps first; the order stays put while ticking.
     final members = {..._selected};
-    c.platform.launcherApps().then((apps) {
+    c.familyApps().then((apps) {
       String name(InstalledApp a) =>
           c.appName(a.package, androidLabel: a.label).toLowerCase();
       final sorted = [...apps]
@@ -73,6 +73,7 @@ class _GroupEditorState extends State<GroupEditor> {
           id: _selected,
         }),
         groupNames: {...c.family.groupNames, id: name},
+        groupOwners: {...c.family.groupOwners, id: ?c.childId},
       ),
     );
     if (mounted) Navigator.of(context).pop();

@@ -178,7 +178,7 @@ class QuickActions extends StatelessWidget {
               engine,
               state,
               r,
-              childId: c.settings.childId!,
+              childId: c.childId!,
               now: now,
             ).remaining ??
             const Duration(days: 365),
@@ -264,7 +264,7 @@ class QuickActions extends StatelessWidget {
     final s = c.s;
     final targets = <AppTarget>[
       const AppTarget.all(),
-      for (final id in c.family.groupNames.keys) AppTarget.group(id),
+      for (final id in c.childGroups.keys) AppTarget.group(id),
     ];
     // A group first (games on the console, videos on the TV): its time
     // counts in total screen time too.
@@ -332,7 +332,7 @@ class QuickActions extends StatelessWidget {
     final s = c.s;
     final targets = <AppTarget>[
       const AppTarget.all(),
-      for (final id in c.family.groupNames.keys) AppTarget.group(id),
+      for (final id in c.childGroups.keys) AppTarget.group(id),
     ];
     var target = targets.first;
     // Minutes, or -1: until a chosen time, 0: until lifted.

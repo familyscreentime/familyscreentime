@@ -3,6 +3,7 @@
 library;
 
 import 'dart:async';
+import 'dart:isolate';
 
 import 'event.dart';
 import 'hlc.dart';
@@ -189,12 +190,18 @@ class SyncNode {
     final taken = <SyncEvent>[];
     var gap = false;
     var changed = false;
+    // Signatures are checked all at once, away from this isolate: checking
+    // hundreds of them would freeze an interface.
+    final checked = await _checkSignatures([
+      for (final e in events)
+        if (store.accepts(e)) e,
+    ]);
     for (final e in events) {
       if (!store.accepts(e)) {
         if (e.seq > store.lastSeq(e.origin)) gap = true;
         continue;
       }
-      if (!await _authorized(e)) continue;
+      if (!await _authorized(e, checked[e])) continue;
       clock.receive(e.hlc);
       final added = store.transaction(() {
         // Another process may have added it while it was checked.
@@ -227,20 +234,53 @@ class SyncNode {
   /// Source of the events passed on by [readOthers].
   static const fromDisk = 'disk';
 
-  Future<bool> _authorized(SyncEvent e) async {
+  /// The key [e] must be signed with, as things stand; `null` if unknown.
+  String? _keyFor(SyncEvent e) => switch (e.signer) {
+    Signer.parent => root.parentKey,
+    Signer.device => memberKey(deviceOfOrigin(e.origin)),
+  };
+
+  /// Checks the signatures of [events] whose key is known now, in another
+  /// isolate when there are many: the key each was checked with, if valid.
+  Future<Map<SyncEvent, String>> _checkSignatures(
+    List<SyncEvent> events,
+  ) async {
+    final jobs = [
+      for (final e in events)
+        if (_keyFor(e) case final key?) (e, key),
+    ];
+    if (jobs.isEmpty) return const {};
+    final inputs = [for (final (e, key) in jobs) (e.signedBytes, e.sig, key)];
+    final results = inputs.length < 8
+        ? await _verifyAll(inputs)
+        : await Isolate.run(() => _verifyAll(inputs));
+    return {
+      for (var i = 0; i < jobs.length; i++)
+        if (results[i]) jobs[i].$1: jobs[i].$2,
+    };
+  }
+
+  static Future<List<bool>> _verifyAll(
+    List<(List<int>, String, String)> inputs,
+  ) async => [
+    for (final (message, sig, key) in inputs)
+      await verifySignature(message, sig, key),
+  ];
+
+  /// Whether [e] may be taken in. [checkedWith]: the key its signature was
+  /// found valid with, if it was checked beforehand.
+  Future<bool> _authorized(SyncEvent e, [String? checkedWith]) async {
     // Use of apps only under usage origins, and only there.
     if ((e.type == EventType.usage) != isUsageOrigin(e.origin)) return false;
-    switch (e.signer) {
-      case Signer.parent:
-        return verifyEvent(e, root.parentKey);
-      case Signer.device:
-        final id = deviceOfOrigin(e.origin);
-        final device = replica[SyncKeys.device(id)];
-        final key = memberKey(id);
-        if (device == null || key == null) return false;
-        if (!await verifyEvent(e, key)) return false;
-        return policy.deviceMay(e, device, replica);
-    }
+    final key = _keyFor(e);
+    if (key == null) return false;
+    // Checked beforehand with the same key, or now (a device registered
+    // earlier in the same batch).
+    if (checkedWith != key && !await verifyEvent(e, key)) return false;
+    if (e.signer == Signer.parent) return true;
+    final device = replica[SyncKeys.device(deviceOfOrigin(e.origin))];
+    if (device == null) return false;
+    return policy.deviceMay(e, device, replica);
   }
 
   Future<void> close() async {

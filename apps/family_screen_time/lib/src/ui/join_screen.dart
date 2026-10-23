@@ -1,6 +1,7 @@
-/// First launch on a device joining a family already set up elsewhere:
-/// find the device welcoming it on the network, compare the code, then
-/// enter the family's parent code.
+/// A device joining devices linked already, at first launch or set up on
+/// its own already (parent mode): find the device welcoming it on the
+/// network, compare the code, enter their parent code, and, if this device
+/// had rules for a child they know, choose what becomes of them.
 library;
 
 import 'dart:async';
@@ -27,7 +28,7 @@ class JoinScreen extends StatefulWidget {
   State<JoinScreen> createState() => _JoinScreenState();
 }
 
-enum _Stage { searching, comparing, waiting, code }
+enum _Stage { searching, comparing, waiting, code, rules }
 
 class _JoinScreenState extends State<JoinScreen> {
   final _hosts = <String, LanService>{};
@@ -39,6 +40,9 @@ class _JoinScreenState extends State<JoinScreen> {
   final _parentCode = TextEditingController();
   String? _error;
   bool _checking = false;
+
+  /// Joined for good: the log is this device's.
+  bool _done = false;
 
   @override
   void initState() {
@@ -69,6 +73,8 @@ class _JoinScreenState extends State<JoinScreen> {
   void dispose() {
     _search?.cancel();
     _parentCode.dispose();
+    // Given up before the end: this device stays as it was.
+    if (!_done) _joined?.close();
     super.dispose();
   }
 
@@ -79,11 +85,21 @@ class _JoinScreenState extends State<JoinScreen> {
       _stage = _Stage.comparing;
     });
     try {
+      c.touch();
       final me = await DeviceIdentity.generate(c.settings.deviceId);
+      final settings = c.settings;
+      final child = settings.setupDone && !settings.parentDevice
+          ? c.family.child(settings.childId)
+          : null;
       final welcome = await joinThrough(
         host,
         me: me,
-        info: {'name': 'Android', 'platform': 'android'},
+        info: {
+          'name': await c.platform.deviceName(),
+          'platform': 'android',
+          // Set up already: the parent says who this child is there.
+          if (child != null) 'child': {'id': child.id, 'name': child.name},
+        },
         confirm: (code) {
           final checked = _codeChecked = Completer<bool>();
           if (mounted) setState(() => _code = code);
@@ -95,7 +111,10 @@ class _JoinScreenState extends State<JoinScreen> {
         identity: me,
         welcome: welcome,
       );
-      if (!mounted) return;
+      if (!mounted) {
+        await log.close();
+        return;
+      }
       setState(() {
         _joined = log;
         _stage = _Stage.code;
@@ -132,8 +151,30 @@ class _JoinScreenState extends State<JoinScreen> {
       });
       return;
     }
-    await c.completeJoin(log, _parentCode.text);
+    if (c.joinAsksForRules(log)) {
+      c.touch();
+      setState(() {
+        _checking = false;
+        _stage = _Stage.rules;
+      });
+      return;
+    }
+    await _complete(keepRules: false);
+  }
+
+  Future<void> _complete({required bool keepRules}) async {
+    final c = widget.controller;
+    setState(() => _checking = true);
+    await c.completeJoin(_joined!, _parentCode.text, keepRules: keepRules);
+    _done = true;
     if (mounted) Navigator.of(context).pop(true);
+  }
+
+  /// The child's name among the linked devices.
+  String _childThere() {
+    final id = _joined?.registration?['childId'];
+    final child = _joined?.node.replica['child/$id'];
+    return child?['name'] as String? ?? '';
   }
 
   @override
@@ -220,6 +261,19 @@ class _JoinScreenState extends State<JoinScreen> {
               FilledButton(
                 onPressed: _checking ? null : _checkParentCode,
                 child: Text(s.t('continue')),
+              ),
+            ],
+            _Stage.rules => [
+              Text(s.t('joinRulesText', {'child': _childThere()})),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: _checking ? null : () => _complete(keepRules: false),
+                child: Text(s.t('joinRulesDrop')),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: _checking ? null : () => _complete(keepRules: true),
+                child: Text(s.t('joinRulesKeep')),
               ),
             ],
           },

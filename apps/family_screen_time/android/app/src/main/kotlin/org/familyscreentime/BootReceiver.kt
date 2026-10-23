@@ -9,7 +9,8 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> MonitorService.start(context)
+            Intent.ACTION_MY_PACKAGE_REPLACED ->
+                if (Health.monitorWanted(context)) MonitorService.start(context)
         }
     }
 }

@@ -16,6 +16,7 @@ const _titles = {
   'notifications': 'permNotifications',
   'battery': 'permBattery',
   'deviceAdmin': 'permDeviceAdmin',
+  'autostart': 'permAutostart',
 };
 
 const _texts = {
@@ -25,6 +26,7 @@ const _texts = {
   'notifications': 'permNotificationsText',
   'battery': 'permBatteryText',
   'deviceAdmin': 'permDeviceAdminText',
+  'autostart': 'permAutostartText',
 };
 
 /// Explanations shown before a sensitive permission is turned on.
@@ -116,48 +118,94 @@ class _PermissionsViewState extends State<PermissionsView>
     await _refresh();
   }
 
+  /// The permissions shown: Xiaomi's autostart, when this is one, after
+  /// the battery.
+  List<String> get _kinds {
+    final xiaomi =
+        _status.containsKey('autostart') || _status['autostartUnknown'] == true;
+    return [
+      for (final kind in permissionKinds) ...[
+        kind,
+        if (kind == 'battery' && xiaomi) 'autostart',
+      ],
+    ];
+  }
+
+  Widget _tile(BuildContext context, String kind) {
+    final s = widget.controller.s;
+    final error = Theme.of(context).colorScheme.error;
+    final on = _status[kind] == true;
+    // Ticked in Android's settings, but not running.
+    final stopped =
+        kind == 'accessibility' && _status['accessibilityStopped'] == true;
+    final unknown = kind == 'autostart' && _status['autostartUnknown'] == true;
+    return Card(
+      child: ListTile(
+        leading: stopped
+            ? Icon(Icons.error, color: error)
+            : unknown
+            ? const Icon(Icons.help_outline)
+            : Icon(
+                on ? Icons.check_circle : Icons.radio_button_unchecked,
+                color: on
+                    ? Colors.green
+                    : requiredPermissions.contains(kind) || kind == 'autostart'
+                    ? error
+                    : null,
+              ),
+        title: Text(s.t(_titles[kind]!)),
+        subtitle: Text(
+          s.t(
+            stopped
+                ? 'permAccessibilityStopped'
+                : unknown
+                ? 'permAutostartUnknown'
+                : _texts[kind]!,
+          ),
+          style: stopped ? TextStyle(color: error) : null,
+        ),
+        isThreeLine: true,
+        trailing: on && kind == 'deviceAdmin'
+            // Turned off here, behind the parent code: the Android
+            // settings for it are closed to the child.
+            ? TextButton(
+                onPressed: () => _disableProtection(context),
+                child: Text(s.t('disable')),
+              )
+            : on
+            ? Text(s.t('enabled'))
+            : FilledButton.tonal(
+                // Already agreed to: no explanation again.
+                onPressed: stopped || unknown
+                    ? () => widget.controller.platform.openPermissionSettings(
+                        kind,
+                      )
+                    : () => _enable(context, kind),
+                child: Text(
+                  s.t(
+                    stopped
+                        ? 'restart'
+                        : unknown
+                        ? 'open'
+                        : 'enable',
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final s = widget.controller.s;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final kind in permissionKinds)
-          Card(
-            child: ListTile(
-              leading: Icon(
-                _status[kind] == true
-                    ? Icons.check_circle
-                    : Icons.radio_button_unchecked,
-                color: _status[kind] == true
-                    ? Colors.green
-                    : requiredPermissions.contains(kind)
-                    ? Theme.of(context).colorScheme.error
-                    : null,
-              ),
-              title: Text(s.t(_titles[kind]!)),
-              subtitle: Text(s.t(_texts[kind]!)),
-              isThreeLine: true,
-              trailing: _status[kind] == true && kind == 'deviceAdmin'
-                  // Turned off here, behind the parent code: the Android
-                  // settings for it are closed to the child.
-                  ? TextButton(
-                      onPressed: () => _disableProtection(context),
-                      child: Text(s.t('disable')),
-                    )
-                  : _status[kind] == true
-                  ? Text(s.t('enabled'))
-                  : FilledButton.tonal(
-                      onPressed: () => _enable(context, kind),
-                      child: Text(s.t('enable')),
-                    ),
-            ),
-          ),
+        for (final kind in _kinds) _tile(context, kind),
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
             icon: const Icon(Icons.info_outline),
-            label: Text(s.t('permAppDetails')),
+            label: Text(widget.controller.s.t('permAppDetails')),
             onPressed: () =>
                 widget.controller.platform.openPermissionSettings('appDetails'),
           ),

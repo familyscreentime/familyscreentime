@@ -57,6 +57,7 @@ Map<String, Map<String, Object?>> familyEntities(FamilyData f) {
   final state = _map(j['state']);
   final groups = _map(config['appGroups']);
   final names = _map(j['groupNames']);
+  final owners = _map(j['groupOwners']);
   final children = _items(j['children']);
   final profiles = _items(config['profiles']);
   return {
@@ -75,6 +76,7 @@ Map<String, Map<String, Object?>> familyEntities(FamilyData f) {
       '${FamilyKeys.group}$id': {
         'apps': groups[id] ?? const <String>[],
         'name': ?names[id],
+        'childId': ?owners[id],
       },
     for (final e in _map(config['deviceGroups']).entries)
       '${FamilyKeys.deviceGroup}${e.key}': {'devices': e.value},
@@ -145,6 +147,10 @@ FamilyData familyFromEntities(
     'groupNames': {
       for (final e in groups.entries)
         if (e.value['name'] != null) e.key: e.value['name'],
+    },
+    'groupOwners': {
+      for (final e in groups.entries)
+        if (e.value['childId'] != null) e.key: e.value['childId'],
     },
     'appNames': {
       for (final e in kind(FamilyKeys.appName).entries) e.key: e.value['name'],

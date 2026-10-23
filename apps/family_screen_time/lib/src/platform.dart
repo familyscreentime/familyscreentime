@@ -70,10 +70,14 @@ class PlatformApi {
   }
 
   /// Names and icons of [packages]; missing ones are not installed (or not
-  /// visible to this app).
-  Future<Map<String, AppInfo>> appInfo(Iterable<String> packages) async {
+  /// visible to this app). Icons are [iconSize] pixels wide when given.
+  Future<Map<String, AppInfo>> appInfo(
+    Iterable<String> packages, {
+    int? iconSize,
+  }) async {
     final m = await _channel.invokeMapMethod<String, Object?>('appInfo', {
       'packages': packages.toList(),
+      'size': ?iconSize,
     });
     return {
       for (final e in (m ?? const {}).entries)
@@ -121,6 +125,15 @@ class PlatformApi {
   }
 
   Future<void> startMonitor() => _channel.invokeMethod('startMonitor');
+
+  /// The device's maker and model ("Xiaomi Redmi Pad 2"), to name it.
+  Future<String> deviceName() async {
+    try {
+      return await _channel.invokeMethod<String>('deviceName') ?? 'Android';
+    } on Object {
+      return 'Android';
+    }
+  }
 
   Future<void> reloadMonitor() => _channel.invokeMethod('reloadMonitor');
 

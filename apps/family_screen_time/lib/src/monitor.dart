@@ -70,6 +70,11 @@ class Monitor {
   String? _overlaySentStyle;
 
   Future<void> start() async {
+    // A parent's device limits nothing: Android started this by mistake.
+    if ((await store.loadSettings()).parentDevice) {
+      await _channel.invokeMethod('unwanted');
+      return;
+    }
     _channel.setMethodCallHandler(_onCall);
     await _load();
     await _recoverOpenSegment();
@@ -105,6 +110,10 @@ class Monitor {
   /// recorded there. Never stops the monitor.
   Future<void> _openLog() async {
     try {
+      // Linked to other devices, or unlinked, from the interface: the log
+      // in use changed.
+      final current = await SyncFiles(store).currentDatabase();
+      if (_log != null && _log!.dbName != current) await _closeLog();
       final log = _log ??= await FamilySync.open(store, background: true);
       if (log == null) return;
       await log.readOthers();
@@ -116,13 +125,55 @@ class Monitor {
       }
       log.pruneUsage();
       await _startLan(log);
+      await _publishApps(log);
     } on Object catch (e) {
       debugPrint('Family log: $e');
     }
   }
 
+  /// Shares the names and icons of the apps installed here with the
+  /// family's devices, once a day and whenever an app is installed or
+  /// removed.
+  Future<void> _publishApps(FamilySync log, {bool now = false}) async {
+    try {
+      final done = log.files.appsPublished;
+      final today = dayToJson(DateTime.now());
+      if (!now && await done.exists() && await done.readAsString() == today) {
+        return;
+      }
+      final watch = Stopwatch()..start();
+      const platform = PlatformApi();
+      final apps = await platform.launcherApps();
+      final shared = log.publishedApps();
+      // Icons are drawn only for the apps not shared yet.
+      final icons = await platform.appInfo([
+        for (final a in apps)
+          if (!shared.containsKey(a.package)) a.package,
+      ], iconSize: sharedIconSize);
+      final changes = await log.publishApps({
+        for (final a in apps) a.package: a.label,
+      }, icons: icons);
+      debugPrint(
+        'Apps shared: ${apps.length} apps, $changes changes, '
+        '${watch.elapsedMilliseconds} ms',
+      );
+      await done.writeAsString(today);
+    } on Object catch (e) {
+      debugPrint('Apps not shared: $e');
+    }
+  }
+
   LanSync? _lan;
   Future<void> _remoteQueue = Future.value();
+
+  Future<void> _closeLog() async {
+    final lan = _lan;
+    _lan = null;
+    final log = _log;
+    _log = null;
+    await lan?.stop();
+    await log?.close();
+  }
 
   /// The family's other devices on the local network: kept in sync while
   /// they are reachable.
@@ -211,6 +262,11 @@ class Monitor {
     if (packages.isEmpty) return;
     try {
       final info = await const PlatformApi().appInfo(packages);
+      // Apps installed only on the family's other devices.
+      final shared = _log?.sharedApps(
+        packages.where((p) => !info.containsKey(p)),
+      );
+      if (shared != null) info.addAll(shared);
       _labels = {for (final e in info.entries) e.key: e.value.label};
     } on Object {
       // Package names are shown instead.
@@ -235,8 +291,19 @@ class Monitor {
         _screenOn = args['on'] as bool? ?? true;
         if (!_screenOn) await _switchTo(null);
       case 'reload':
+        // Became a parent's device, by joining others.
+        if ((await store.loadSettings()).parentDevice) {
+          await _closeLog();
+          await _channel.invokeMethod('unwanted');
+          return null;
+        }
         await _load();
         await _evaluate();
+      case 'appsChanged':
+        // Installed or removed just now: the family's devices know at once,
+        // so the parent can limit a new app straight away.
+        final log = _log;
+        if (log != null) await _publishApps(log, now: true);
     }
     return null;
   }

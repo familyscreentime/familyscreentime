@@ -32,6 +32,10 @@ class AppSettings {
   /// Android's own usage history has been imported (done once).
   final bool historyImported;
 
+  /// A parent's device: it shows and changes the family's settings, and
+  /// limits nothing itself.
+  final bool parentDevice;
+
   /// Floating countdown chosen by the child: off, digits or disc.
   final String overlay;
 
@@ -53,6 +57,7 @@ class AppSettings {
     this.pinFailures = 0,
     this.pinLockedUntil,
     this.historyImported = false,
+    this.parentDevice = false,
     this.overlay = 'off',
     this.warningMinutes = defaultWarningMinutes,
     this.hiddenCountdowns = const {},
@@ -69,6 +74,7 @@ class AppSettings {
     DateTime? pinLockedUntil,
     bool clearLock = false,
     bool? historyImported,
+    bool? parentDevice,
     String? overlay,
     List<int>? warningMinutes,
     Set<String>? hiddenCountdowns,
@@ -83,6 +89,7 @@ class AppSettings {
     pinFailures: pinFailures ?? this.pinFailures,
     pinLockedUntil: clearLock ? null : pinLockedUntil ?? this.pinLockedUntil,
     historyImported: historyImported ?? this.historyImported,
+    parentDevice: parentDevice ?? this.parentDevice,
     overlay: overlay ?? this.overlay,
     warningMinutes: warningMinutes ?? this.warningMinutes,
     hiddenCountdowns: hiddenCountdowns ?? this.hiddenCountdowns,
@@ -100,6 +107,7 @@ class AppSettings {
     if (pinLockedUntil != null)
       'pinLockedUntil': instantToJson(pinLockedUntil!),
     if (historyImported) 'historyImported': true,
+    if (parentDevice) 'parentDevice': true,
     if (overlay != 'off') 'overlay': overlay,
     'warningMinutes': warningMinutes,
     if (hiddenCountdowns.isNotEmpty)
@@ -117,6 +125,7 @@ class AppSettings {
     pinFailures: (j['pinFailures'] as num?)?.toInt() ?? 0,
     pinLockedUntil: optionalInstant(j['pinLockedUntil']),
     historyImported: j['historyImported'] as bool? ?? false,
+    parentDevice: j['parentDevice'] as bool? ?? false,
     overlay: j['overlay'] as String? ?? 'off',
     hiddenCountdowns: {
       for (final k in j['hiddenCountdowns'] as List<Object?>? ?? const [])
@@ -219,6 +228,10 @@ class FamilyData {
   /// Display names of the app groups, by group id.
   final Map<String, String> groupNames;
 
+  /// The child each group of apps belongs to, by group id: every child has
+  /// their own groups, edited in their settings (see [ownGroups]).
+  final Map<String, String> groupOwners;
+
   /// Names chosen by the parent for apps, by package.
   final Map<String, String> appNames;
 
@@ -246,6 +259,7 @@ class FamilyData {
     this.config = const FamilyConfig(),
     this.state = const FamilyState(),
     this.groupNames = const {},
+    this.groupOwners = const {},
     this.appNames = const {},
     this.graceReminderMinutes = 1,
     this.injected = const [],
@@ -259,6 +273,7 @@ class FamilyData {
     FamilyConfig? config,
     FamilyState? state,
     Map<String, String>? groupNames,
+    Map<String, String>? groupOwners,
     Map<String, String>? appNames,
     int? graceReminderMinutes,
     List<UsageSegment>? injected,
@@ -270,6 +285,7 @@ class FamilyData {
     config: config ?? this.config,
     state: state ?? this.state,
     groupNames: groupNames ?? this.groupNames,
+    groupOwners: groupOwners ?? this.groupOwners,
     appNames: appNames ?? this.appNames,
     graceReminderMinutes: graceReminderMinutes ?? this.graceReminderMinutes,
     injected: injected ?? this.injected,
@@ -285,11 +301,26 @@ class FamilyData {
     return null;
   }
 
+  /// Every group id, named or not.
+  Set<String> get groupIds => {...config.appGroups.keys, ...groupNames.keys};
+
+  /// The groups of [childId], by id, with their names, by name.
+  Map<String, String> groupsOf(String? childId) {
+    final ids = [
+      for (final id in groupIds)
+        if (groupOwners[id] == childId) id,
+    ];
+    String name(String id) => groupNames[id] ?? id;
+    ids.sort((a, b) => name(a).toLowerCase().compareTo(name(b).toLowerCase()));
+    return {for (final id in ids) id: name(id)};
+  }
+
   Json toJson() => {
     'children': [for (final c in children) c.toJson()],
     'config': familyConfigToJson(config),
     'state': familyStateToJson(state),
     'groupNames': groupNames,
+    if (groupOwners.isNotEmpty) 'groupOwners': groupOwners,
     if (appNames.isNotEmpty) 'appNames': appNames,
     'graceReminderMinutes': graceReminderMinutes,
     if (injected.isNotEmpty)
@@ -309,6 +340,10 @@ class FamilyData {
     state: familyStateFromJson(j['state'] as Json? ?? const {}),
     groupNames: {
       for (final e in (j['groupNames'] as Json? ?? const {}).entries)
+        e.key: e.value as String,
+    },
+    groupOwners: {
+      for (final e in (j['groupOwners'] as Json? ?? const {}).entries)
         e.key: e.value as String,
     },
     appNames: {
@@ -402,7 +437,7 @@ class LocalStore {
 
   Future<FamilyData> loadFamily() async {
     final j = await _readJson('family.json');
-    return j == null ? const FamilyData() : FamilyData.fromJson(j);
+    return j == null ? const FamilyData() : ownGroups(FamilyData.fromJson(j));
   }
 
   Future<void> saveFamily(FamilyData f) =>
@@ -456,6 +491,30 @@ class LocalStore {
     return result;
   }
 
+  /// Rewrites the usage held here, recorded and imported: [change] gives
+  /// each segment as it becomes, or `null` to drop it.
+  Future<void> rewriteUsage(UsageSegment? Function(UsageSegment) change) async {
+    for (final dir in [_usageDir, _importedDir]) {
+      if (!await dir.exists()) continue;
+      await for (final f in dir.list()) {
+        if (f is! File || !f.path.endsWith('.jsonl')) continue;
+        final out = StringBuffer();
+        for (final line in await f.readAsLines()) {
+          if (line.trim().isEmpty) continue;
+          try {
+            final seg = change(usageSegmentFromJson(jsonDecode(line) as Json));
+            if (seg != null) out.writeln(jsonEncode(usageSegmentToJson(seg)));
+          } on Object {
+            // A line cut short by a crash is dropped.
+          }
+        }
+        final tmp = File('${f.path}.tmp');
+        await tmp.writeAsString(out.toString(), flush: true);
+        await tmp.rename(f.path);
+      }
+    }
+  }
+
   /// Appends a closed segment to the file of the day it starts on.
   Future<void> appendUsage(UsageSegment s) async {
     await _usageDir.create(recursive: true);
@@ -501,4 +560,92 @@ Iterable<UsageSegment> splitByDay(UsageSegment s) sync* {
           );
     from = to;
   }
+}
+
+/// [f] with every group of apps belonging to a child. Before 0.22.1 the
+/// groups were the whole family's: each child now gets their own copy of
+/// each, the first child keeping its id, the others `<id>.<child>`, and
+/// their rules, extra time and blocks follow their copy. The same on every
+/// device, so devices that have not exchanged it yet still agree.
+FamilyData ownGroups(FamilyData f) {
+  final shared = [
+    for (final id in f.groupIds)
+      if (!f.groupOwners.containsKey(id)) id,
+  ]..sort();
+  if (shared.isEmpty || f.children.isEmpty) return f;
+  final first = f.children.first.id;
+  String copyFor(String id, String child) => child == first ? id : '$id.$child';
+  final groups = {...f.config.appGroups};
+  final names = {...f.groupNames};
+  final owners = {...f.groupOwners};
+  for (final id in shared) {
+    for (final c in f.children) {
+      final copy = copyFor(id, c.id);
+      owners[copy] = c.id;
+      if (copy == id) continue;
+      if (groups.containsKey(id)) groups[copy] = {...groups[id]!};
+      if (names.containsKey(id)) names[copy] = names[id]!;
+    }
+  }
+  final sharedIds = shared.toSet();
+  AppTarget retarget(AppTarget t, String child) =>
+      t.kind == TargetKind.group && sharedIds.contains(t.id)
+      ? AppTarget.group(copyFor(t.id!, child))
+      : t;
+  final s = f.state;
+  final rules = [
+    for (final r in s.rules)
+      ruleFromJson({
+        ...ruleToJson(r),
+        'appTarget': appTargetToJson(retarget(r.appTarget, r.childId)),
+      }),
+  ];
+  final childOfRule = {for (final r in s.rules) r.id: r.childId};
+  return f.copyWith(
+    config: f.config.copyWith(appGroups: groups),
+    groupNames: names,
+    groupOwners: owners,
+    state: s.copyWith(
+      rules: rules,
+      bonuses: [
+        for (final b in s.bonuses)
+          b.appTarget == null
+              ? b
+              : bonusFromJson({
+                  ...bonusToJson(b),
+                  'appTarget': appTargetToJson(
+                    retarget(b.appTarget!, b.childId),
+                  ),
+                }),
+      ],
+      temporaryBlocks: [
+        for (final b in s.temporaryBlocks)
+          temporaryBlockFromJson({
+            ...temporaryBlockToJson(b),
+            'appTarget': appTargetToJson(retarget(b.appTarget, b.childId)),
+          }),
+      ],
+    ),
+    injected: [
+      for (final u in f.injected)
+        u.injectedTarget == null
+            ? u
+            : usageSegmentFromJson({
+                ...usageSegmentToJson(u),
+                'injectedTarget': appTargetToJson(
+                  retarget(u.injectedTarget!, u.childId),
+                ),
+              }),
+    ],
+    selfLimitLog: [
+      for (final e in f.selfLimitLog)
+        switch (childOfRule[e.ruleId]) {
+          final child? => SelfLimitEvent.fromJson({
+            ...e.toJson(),
+            'target': appTargetToJson(retarget(e.target, child)),
+          }),
+          null => e,
+        },
+    ],
+  );
 }

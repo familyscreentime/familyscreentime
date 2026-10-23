@@ -63,7 +63,7 @@ class _LimitScreenState extends State<LimitScreen> {
     final apps = c.family.config.appGroups[id] ?? const <String>{};
     if (apps.isNotEmpty) {
       try {
-        info = await c.platform.appInfo(apps);
+        info = await c.appInfo(apps);
       } on Object {
         // Package names are shown instead.
       }
@@ -96,6 +96,7 @@ class _LimitScreenState extends State<LimitScreen> {
     if (!await confirm(context, c.s, c.s.t('deleteGroupConfirm'))) return;
     final groups = {...c.family.config.appGroups}..remove(id);
     final names = {...c.family.groupNames}..remove(id);
+    final owners = {...c.family.groupOwners}..remove(id);
     final rules = c.family.state.rules
         .where((r) => r.appTarget != AppTarget.group(id))
         .toList();
@@ -103,6 +104,7 @@ class _LimitScreenState extends State<LimitScreen> {
       c.family.copyWith(
         config: configWithGroups(c.family.config, groups),
         groupNames: names,
+        groupOwners: owners,
         state: stateWithRules(c.family.state, rules),
       ),
     );
@@ -271,7 +273,7 @@ class _AppPickerState extends State<_AppPicker> {
   void initState() {
     super.initState();
     final c = widget.controller;
-    c.platform.launcherApps().then((apps) {
+    c.familyApps().then((apps) {
       String name(InstalledApp a) =>
           c.appName(a.package, androidLabel: a.label).toLowerCase();
       if (mounted) {

@@ -146,6 +146,61 @@ class _ParentHomeState extends State<ParentHome> {
     await _loadTimes();
   }
 
+  /// Picks other children's groups to copy for this child.
+  Future<void> _copyGroups(BuildContext context) async {
+    final c = widget.controller;
+    final s = c.s;
+    final groups = c.otherChildrenGroups;
+    String owner(String id) =>
+        c.family.child(c.family.groupOwners[id])?.name ?? '';
+    final chosen = <String>{};
+    final picked = await showDialog<Set<String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(s.t('copyGroups')),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(s.t('copyGroupsText')),
+                const SizedBox(height: 8),
+                for (final e in groups.entries)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: chosen.contains(e.key),
+                    title: Text(e.value),
+                    subtitle: Text(owner(e.key)),
+                    onChanged: (v) => setState(() {
+                      if (v == true) {
+                        chosen.add(e.key);
+                      } else {
+                        chosen.remove(e.key);
+                      }
+                    }),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(s.t('cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, chosen),
+              child: Text(s.t('copy')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || picked.isEmpty) return;
+    await c.copyGroups(picked);
+    await _loadTimes();
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
@@ -155,7 +210,12 @@ class _ParentHomeState extends State<ParentHome> {
       final header = Theme.of(context).textTheme.titleMedium;
       return Scaffold(
         appBar: AppBar(
-          title: Text(s.t('parentTitle')),
+          title: Text(
+            // On a parent's device: whose settings these are.
+            c.settings.parentDevice && c.child != null
+                ? c.child!.name
+                : s.t('parentTitle'),
+          ),
           actions: [
             IconButton(
               tooltip: s.t('lock'),
@@ -184,7 +244,7 @@ class _ParentHomeState extends State<ParentHome> {
               target: const AppTarget.all(),
               today: _totalTime,
             ),
-            for (final e in c.family.groupNames.entries)
+            for (final e in c.childGroups.entries)
               _limitTile(
                 context,
                 icon: Icons.folder_outlined,
@@ -201,7 +261,7 @@ class _ParentHomeState extends State<ParentHome> {
                 target: AppTarget.app(app),
                 today: _appTimes[app],
               ),
-            if (c.family.groupNames.isEmpty)
+            if (c.childGroups.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(s.t('noGroups')),
@@ -211,6 +271,12 @@ class _ParentHomeState extends State<ParentHome> {
               title: Text(s.t('addGroup')),
               onTap: () => _open(context, GroupEditor(controller: c)),
             ),
+            if (c.otherChildrenGroups.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.copy_all_outlined),
+                title: Text(s.t('copyGroups')),
+                onTap: () => _copyGroups(context),
+              ),
             ListTile(
               leading: const Icon(Icons.add),
               title: Text(s.t('limitAnApp')),
@@ -358,12 +424,15 @@ class _ParentHomeState extends State<ParentHome> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _open(context, VolumeScreen(controller: c)),
             ),
-            const Divider(),
-            ListTile(title: Text(s.t('permissionsTitle'), style: header)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: PermissionsView(controller: c),
-            ),
+            // This device's permissions: none needed on a parent's device.
+            if (!c.settings.parentDevice) ...[
+              const Divider(),
+              ListTile(title: Text(s.t('permissionsTitle'), style: header)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: PermissionsView(controller: c),
+              ),
+            ],
             const Divider(),
             ListTile(
               leading: const Icon(Icons.password),

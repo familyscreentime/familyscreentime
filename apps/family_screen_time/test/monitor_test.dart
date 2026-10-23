@@ -98,6 +98,22 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('on a parent\'s device, the monitor stops at once', () async {
+    await store.saveSettings(
+      const AppSettings(
+        deviceId: 'papa',
+        language: 'fr',
+        setupDone: true,
+        parentDevice: true,
+      ),
+    );
+    calls.clear();
+    final other = Monitor(store);
+    await other.start();
+    expect(calls.map((c) => c.method), ['unwanted']);
+    other.dispose();
+  });
+
   test('opening a blocked app shows the block screen', () async {
     await send('foreground', {'package': 'minecraft'});
     final block = calls.where((c) => c.method == 'block').toList();
@@ -123,6 +139,43 @@ void main() {
     final usage = await store.loadUsage(since: dayOf(DateTime.now()));
     expect(usage.single.appId, 'youtube');
     expect(await store.loadOpen(), isNull);
+  });
+
+  test('an app installed is shared with the family at once', () async {
+    const platform = MethodChannel('org.familyscreentime/platform');
+    var installed = [
+      {'package': 'minecraft', 'label': 'Minecraft'},
+    ];
+    messenger.setMockMethodCallHandler(platform, (call) async {
+      switch (call.method) {
+        case 'launcherApps':
+          return installed;
+        case 'appInfo':
+          final wanted = (call.arguments as Map)['packages'] as List;
+          return {
+            for (final a in installed)
+              if (wanted.contains(a['package']))
+                a['package']: {'label': a['label']},
+          };
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(platform, null));
+    final (ui, _) = await FamilySync.create(
+      store: store,
+      settings: await store.loadSettings(),
+      family: await store.loadFamily(),
+      parentCode: '123456',
+      deviceName: 'Tablette',
+    );
+    await send('reload', null);
+    expect(ui.sharedAppNames(), {'minecraft': 'Minecraft'});
+    installed = [
+      ...installed,
+      {'package': 'roblox', 'label': 'Roblox'},
+    ];
+    await send('appsChanged', null);
+    expect(ui.sharedAppNames(), {'minecraft': 'Minecraft', 'roblox': 'Roblox'});
   });
 
   test('with a family log, use goes into it, history once', () async {

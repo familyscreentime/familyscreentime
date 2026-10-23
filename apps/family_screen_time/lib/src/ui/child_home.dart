@@ -77,7 +77,7 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
     final engine = RuleEngine(c.family.config);
     final s = c.family.state;
     final state = s.copyWith(usage: usage);
-    final childId = c.settings.childId!;
+    final childId = c.childId!;
     // The parent's total screen time first, then the groups and apps, then
     // the limits the child set.
     int rank(Rule r) => r.setByChild
@@ -123,7 +123,7 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
     };
     if (unknown.isNotEmpty) {
       try {
-        final info = await c.platform.appInfo(unknown);
+        final info = await c.appInfo(unknown);
         _info = {..._info, ...info};
       } on Object {
         // Package names are shown instead.

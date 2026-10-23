@@ -60,7 +60,7 @@ class _SelfLimitReportScreenState extends State<SelfLimitReportScreen> {
               engine: RuleEngine(c.family.config),
               log: c.family.selfLimitLog,
               usage: usage,
-              childId: c.settings.childId!,
+              childId: c.childId!,
               now: now,
               period: _period,
             );

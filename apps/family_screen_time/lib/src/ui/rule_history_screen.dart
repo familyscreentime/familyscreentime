@@ -45,7 +45,7 @@ class _RuleHistoryScreenState extends State<RuleHistoryScreen> {
       RuleEngine(c.family.config),
       state,
       widget.rule,
-      childId: c.settings.childId!,
+      childId: c.childId!,
       now: widget.now ?? DateTime.now(),
     );
     if (mounted) setState(() => _history = history);

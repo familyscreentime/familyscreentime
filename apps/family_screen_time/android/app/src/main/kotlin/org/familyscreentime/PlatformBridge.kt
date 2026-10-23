@@ -55,12 +55,19 @@ class PlatformBridge(
                 ProtectionGuard.allowFor(SETTINGS_ALLOWANCE_MS)
                 result.success(openPermissionSettings(call.argument<String>("kind") ?: ""))
             }
-            "launcherApps" -> result.success(launcherApps())
+            "launcherApps" -> {
+                // Reading every app's name takes a while: off the main thread.
+                worker.execute {
+                    val apps = launcherApps()
+                    main.post { result.success(apps) }
+                }
+            }
             "appInfo" -> {
                 val packages = call.argument<List<String>>("packages") ?: emptyList()
+                val size = call.argument<Int>("size")
                 // Drawing icons takes a moment: off the main thread.
                 worker.execute {
-                    val info = appInfo(packages)
+                    val info = appInfo(packages, size)
                     main.post { result.success(info) }
                 }
             }
@@ -78,6 +85,7 @@ class PlatformBridge(
                 }
             }
             "startMonitor" -> {
+                Health.setMonitorWanted(context, true)
                 MonitorService.start(context)
                 result.success(null)
             }
@@ -118,24 +126,33 @@ class PlatformBridge(
         }
     }
 
-    private fun permissionStatus(): Map<String, Boolean> = mapOf(
-        "accessibility" to isAccessibilityEnabled(),
-        "usageAccess" to hasUsageAccess(),
-        "overlay" to (Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(context)),
-        "notifications" to notificationsAllowed(),
-        "battery" to isIgnoringBatteryOptimizations(),
-        "deviceAdmin" to isDeviceAdmin(),
-    )
-
-    private fun isAccessibilityEnabled(): Boolean {
-        val enabled = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-        ) ?: return false
-        val me = ComponentName(context, ForegroundAccessibilityService::class.java)
-        return enabled.split(':').any {
-            ComponentName.unflattenFromString(it) == me
+    /**
+     * The accessibility service counts only while it runs: ticked but
+     * stopped by the system, it is reported as `accessibilityStopped`. On
+     * Xiaomi devices, `autostart` is their own switch (or
+     * `autostartUnknown` when it cannot be read).
+     */
+    private fun permissionStatus(): Map<String, Boolean> {
+        val enabled = Health.accessibilityEnabled(context)
+        val running = ForegroundAccessibilityService.instance != null
+        val status = mutableMapOf(
+            "accessibility" to (enabled && running),
+            "usageAccess" to hasUsageAccess(),
+            "overlay" to (Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(context)),
+            "notifications" to notificationsAllowed(),
+            "battery" to isIgnoringBatteryOptimizations(),
+            "deviceAdmin" to isDeviceAdmin(),
+        )
+        if (enabled && !running) status["accessibilityStopped"] = true
+        if (Health.isXiaomi) {
+            val autostart = Health.xiaomiAutostart(context)
+            if (autostart == null) {
+                status["autostartUnknown"] = true
+            } else {
+                status["autostart"] = autostart
+            }
         }
+        return status
     }
 
     private fun hasUsageAccess(): Boolean {
@@ -203,6 +220,7 @@ class PlatformBridge(
                     context.getString(R.string.admin_description),
                 )
             "appDetails" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)
+            "autostart" -> Health.xiaomiAutostartIntent()
             else -> return false
         }
         // The device-admin screen closes at once when opened as a new task,
@@ -243,9 +261,12 @@ class PlatformBridge(
      * Names and icons (PNG) of the given packages. Packages that are not
      * installed, or not visible to this app, are left out.
      */
-    private fun appInfo(packages: List<String>): Map<String, Map<String, Any>> {
+    private fun appInfo(packages: List<String>, iconSize: Int? = null): Map<String, Map<String, Any>> {
         val pm = context.packageManager
-        val size = (48 * context.resources.displayMetrics.density).toInt().coerceIn(48, 144)
+        // A given size in pixels (icons shared with the family's devices
+        // are kept small), or 48 dp.
+        val size = iconSize
+            ?: (48 * context.resources.displayMetrics.density).toInt().coerceIn(48, 144)
         val out = HashMap<String, Map<String, Any>>()
         for (pkg in packages) {
             try {

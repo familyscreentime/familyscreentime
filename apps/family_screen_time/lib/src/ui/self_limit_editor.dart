@@ -66,7 +66,7 @@ class _SelfLimitEditorState extends State<SelfLimitEditor> {
     final theme = Theme.of(context);
     final targets = <AppTarget>[
       const AppTarget.all(),
-      for (final id in c.family.groupNames.keys) AppTarget.group(id),
+      for (final id in c.childGroups.keys) AppTarget.group(id),
       if (_target.kind == TargetKind.single) _target,
     ];
     return Scaffold(

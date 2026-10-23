@@ -108,4 +108,52 @@ void main() {
     expect(opened, ['accessibility']);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('a service stopped by Android, and Xiaomi\'s autostart', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final opened = <Object?>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'permissionStatus') {
+            return {
+              'accessibility': false,
+              'accessibilityStopped': true,
+              'autostart': false,
+            };
+          }
+          if (call.method == 'openPermissionSettings') {
+            opened.add((call.arguments as Map<Object?, Object?>)['kind']);
+          }
+          return null;
+        });
+    final dir = Directory.systemTemp.createTempSync('fst');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final c = AppController(
+      LocalStore(dir),
+      const AppSettings(deviceId: 'd', language: 'fr', childId: 'emma'),
+      const FamilyData(),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(child: PermissionsView(controller: c)),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('arrêtée par Android'), findsOneWidget);
+    expect(find.text('Démarrage automatique'), findsOneWidget);
+    // Straight to the settings: it was agreed to already.
+    await tester.tap(find.text('Relancer'));
+    await tester.pump();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(opened, ['accessibility']);
+    expect(await missingRequiredPermission(c), isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

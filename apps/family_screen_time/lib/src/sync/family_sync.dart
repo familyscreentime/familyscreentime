@@ -14,6 +14,7 @@ import 'package:screentime_engine/screentime_engine.dart';
 import 'package:screentime_sync/screentime_sync.dart';
 
 import '../family.dart';
+import '../platform.dart';
 import '../store.dart';
 import 'family_entities.dart';
 
@@ -59,9 +60,18 @@ class FamilySyncPolicy extends SyncPolicy {
     if (e.key.startsWith(FamilyKeys.selfLimitLog)) {
       return e.type == EventType.put;
     }
+    // Its own installed apps: names and icons, for the other devices.
+    if (e.key.startsWith(appsOf(deviceOfOrigin(e.origin)))) return true;
     return false;
   }
 }
+
+/// Keys of a device's installed apps in the log: `app/<device>/<package>`,
+/// with `label` and `icon` (PNG, base64). Each device writes its own.
+String appsOf(String deviceId) => 'app/$deviceId/';
+
+/// Width of the icons shared with the family's devices, in pixels.
+const sharedIconSize = 48;
 
 /// Files of the sync, in the app's folder.
 class SyncFiles {
@@ -72,13 +82,59 @@ class SyncFiles {
   File get identity => File('${dir.path}/identity.json');
   File get root => File('${dir.path}/root.json');
 
-  /// The family log and merged entities (SQLite), shared by the
-  /// interface and the monitor.
-  String get database => '${dir.path}/family.db';
+  /// A log and its merged entities (SQLite), shared by the interface and
+  /// the monitor. Each link to other devices starts a new one, named in
+  /// [root] (`family.db` before 0.22).
+  String database(String name) => '${dir.path}/$name';
+
+  /// Name of the log in use; `null` while this device is linked to none.
+  Future<String?> currentDatabase() async {
+    try {
+      if (!await exist) return null;
+      return (await _read(root))['db'] as String? ?? legacyDatabase;
+    } on Object {
+      return null;
+    }
+  }
+
+  static const legacyDatabase = 'family.db';
+
+  /// A name for a new log.
+  static String newDatabase() => 'family-${newId()}.db';
+
+  /// Files of the link in use, other than its log: forgotten when this
+  /// device joins other devices or leaves them.
+  List<File> get _linkFiles => [
+    identity,
+    root,
+    peers,
+    appsPublished,
+    othersUsage,
+    usageHistory,
+  ];
+
+  /// Deletes the logs other than [keep] (left by an earlier link). Another
+  /// process still using one keeps it until it closes it.
+  Future<void> removeStale({String? keep}) async {
+    if (!await dir.exists()) return;
+    await for (final f in dir.list()) {
+      final name = f.uri.pathSegments.last;
+      if (!name.startsWith('family') || !name.contains('.db')) continue;
+      if (keep != null && name.startsWith(keep)) continue;
+      try {
+        await f.delete();
+      } on Object {
+        // Tried again next time.
+      }
+    }
+  }
 
   /// The family's devices as the monitor last saw them on the network
   /// (written by the monitor, read by the interface).
   File get peers => File('${dir.path}/peers.json');
+
+  /// The day this device last shared its installed apps.
+  File get appsPublished => File('${dir.path}/apps-published');
 
   /// Present once the use recorded by the family's other devices, held in
   /// the log, has been added to this device's use (see
@@ -110,7 +166,13 @@ class FamilySync {
   /// This device's id (the interface writes as [uiOrigin]).
   final String deviceId;
 
-  FamilySync._(this.node, this.files, this.deviceId);
+  /// Name of the log file (see [SyncFiles.database]).
+  final String dbName;
+
+  /// Until [commit]: the identity of a device joining others.
+  DeviceIdentity? _pending;
+
+  FamilySync._(this.node, this.files, this.deviceId, this.dbName);
 
   static String uiOrigin(String deviceId) => '$deviceId~ui';
 
@@ -134,21 +196,23 @@ class FamilySync {
     final identity = await DeviceIdentity.fromJson(
       await SyncFiles._read(files.identity),
     );
-    final root = FamilyRoot.fromJson(await SyncFiles._read(files.root));
+    final rootJson = await SyncFiles._read(files.root);
+    final root = FamilyRoot.fromJson(rootJson);
+    final db = rootJson['db'] as String? ?? SyncFiles.legacyDatabase;
     final id = identity.deviceId;
     final ui = uiOrigin(id);
     final node = SyncNode(
       me: background ? identity : DeviceIdentity(ui, identity.signing),
       root: root,
-      store: SqliteSyncStore.open(files.database),
+      store: SqliteSyncStore.open(files.database(db)),
       policy: policy,
     );
-    return FamilySync._(node, files, id);
+    return FamilySync._(node, files, id, db);
   }
 
-  /// Creates the family on this device, from the interface: its keys, the
-  /// parent key sealed by [parentCode], this device's registration and the
-  /// family's current data. Returns the sync and the parent key.
+  /// Starts linking this device to others, from the interface: its keys,
+  /// the parent key sealed by [parentCode], this device's registration and
+  /// the family's current data. Returns the sync and the parent key.
   static Future<(FamilySync, SigningKey)> create({
     required LocalStore store,
     required AppSettings settings,
@@ -157,6 +221,7 @@ class FamilySync {
     required String deviceName,
   }) async {
     final files = SyncFiles(store);
+    final db = SyncFiles.newDatabase();
     final identity = await DeviceIdentity.generate(settings.deviceId);
     final ui = uiOrigin(identity.deviceId);
     final created = await createFamily(
@@ -169,39 +234,70 @@ class FamilySync {
         'childId': ?settings.childId,
         'platform': Platform.operatingSystem,
       },
-      store: await _openStore(files),
+      store: await _openStore(files, db),
       policy: policy,
     );
-    final sync = FamilySync._(created.node, files, identity.deviceId);
+    final sync = FamilySync._(created.node, files, identity.deviceId, db);
     await sync.recordChange(null, family, parentKey: created.parentKey);
-    // Written last: the family exists on this device once both are there.
-    await SyncFiles._write(files.identity, identity.toJson());
-    await SyncFiles._write(files.root, created.root.toJson());
+    await sync._writeLink(identity, created.root);
     return (sync, created.parentKey);
   }
 
-  /// Joins the family this device was welcomed into: keeps its keys and
-  /// the family's root, and takes in the log received (checking it).
+  /// Takes in the log of the devices this one was welcomed by (checking
+  /// it). Nothing changes on this device until [commit]: until then the
+  /// link in use, if any, stays as it was.
   static Future<FamilySync> join({
     required LocalStore store,
     required DeviceIdentity identity,
     required Welcome welcome,
   }) async {
     final files = SyncFiles(store);
-    if (await files.dir.exists()) await files.dir.delete(recursive: true);
+    final db = SyncFiles.newDatabase();
     final node = SyncNode(
       me: DeviceIdentity(uiOrigin(identity.deviceId), identity.signing),
       root: welcome.root,
-      store: await _openStore(files),
+      store: await _openStore(files, db),
       policy: policy,
     );
     await node.ingest(welcome.events);
-    await SyncFiles._write(files.identity, identity.toJson());
-    await SyncFiles._write(files.root, welcome.root.toJson());
-    // What it recorded before is not the family's: nothing to send.
-    await files.usageHistory.writeAsString(DateTime.now().toIso8601String());
-    return FamilySync._(node, files, identity.deviceId);
+    return FamilySync._(node, files, identity.deviceId, db)
+      .._pending = identity;
   }
+
+  /// Makes the log taken in by [join] this device's: the earlier link is
+  /// forgotten. The monitor, told to reload, moves to it.
+  Future<void> commit() async {
+    final identity = _pending;
+    if (identity == null) return;
+    for (final f in files._linkFiles) {
+      if (await f.exists()) await f.delete();
+    }
+    await _writeLink(identity, node.root);
+    _pending = null;
+  }
+
+  /// Written last, the root names the log: the link exists on this device
+  /// once both files are there.
+  Future<void> _writeLink(DeviceIdentity identity, FamilyRoot root) async {
+    await SyncFiles._write(files.identity, identity.toJson());
+    await SyncFiles._write(files.root, {...root.toJson(), 'db': dbName});
+  }
+
+  /// Unlinks this device: it keeps working on its own, the log is
+  /// forgotten (the monitor lets go of it when told to reload).
+  static Future<void> leave(LocalStore store) async {
+    final files = SyncFiles(store);
+    for (final f in files._linkFiles) {
+      if (await f.exists()) await f.delete();
+    }
+    await files.removeStale();
+  }
+
+  /// Renames device [id], for every device.
+  Future<void> renameDevice(String id, String name, SigningKey parentKey) =>
+      node.emit([
+        EventDraft.patch(SyncKeys.device(id), {'name': name}),
+      ], parentKey: parentKey);
 
   /// This device's registration (name, role, child…).
   Map<String, Object?>? get registration =>
@@ -253,7 +349,11 @@ class FamilySync {
       if (deviceOfOrigin(e.origin) == deviceId) continue;
       await store.appendUsage(usageSegmentFromJson(e.data));
     }
-    if (!a.replicaChanged) return null;
+    // The family file is written again only if the family's data changed
+    // (not for a device's apps or registration).
+    if (!a.replicaChanged || !a.events.any((e) => isFamilyKey(e.key))) {
+      return null;
+    }
     final family = compose(await store.loadFamily());
     await store.saveFamily(family);
     return family;
@@ -285,6 +385,62 @@ class FamilySync {
     await done.writeAsString(DateTime.now().toIso8601String());
     return added;
   }
+
+  /// Packages and names of the apps this device shared.
+  Map<String, String> publishedApps() => _labels(appsOf(deviceId));
+
+  Map<String, String> _labels(String prefix) => {
+    for (final e in node.replica.withPrefix(prefix).entries)
+      e.key.substring(e.key.indexOf('/', 4) + 1):
+          e.value['label'] as String? ?? '',
+  };
+
+  /// Shares the apps installed here with the family's devices: [labels]
+  /// by package, and [icons] of the apps not shared yet. Only what changed
+  /// is recorded: new apps, names changed, apps removed.
+  Future<int> publishApps(
+    Map<String, String> labels, {
+    Map<String, AppInfo> icons = const {},
+  }) async {
+    final prefix = appsOf(deviceId);
+    final shared = publishedApps();
+    final drafts = <EventDraft>[
+      for (final e in labels.entries)
+        if (!shared.containsKey(e.key))
+          EventDraft.put('$prefix${e.key}', {
+            'label': e.value,
+            if (icons[e.key]?.icon case final icon?) 'icon': base64Encode(icon),
+          })
+        else if (shared[e.key] != e.value)
+          EventDraft.patch('$prefix${e.key}', {'label': e.value}),
+      for (final package in shared.keys)
+        if (!labels.containsKey(package)) EventDraft.delete('$prefix$package'),
+    ];
+    if (drafts.isNotEmpty) await node.emit(drafts);
+    return drafts.length;
+  }
+
+  /// Names and icons of [packages] as the family's devices shared them.
+  Map<String, AppInfo> sharedApps(Iterable<String> packages) {
+    final found = <String, AppInfo>{};
+    final devices = this.devices.keys.toList();
+    for (final package in packages) {
+      for (final d in devices) {
+        final app = node.replica['${appsOf(d)}$package'];
+        if (app == null) continue;
+        final icon = app['icon'];
+        found[package] = AppInfo(
+          app['label'] as String? ?? package,
+          icon is String ? base64Decode(icon) : null,
+        );
+        break;
+      }
+    }
+    return found;
+  }
+
+  /// Every app the family's devices shared, by package, with its name.
+  Map<String, String> sharedAppNames() => _labels('app/');
 
   /// The parent key, unlocked by [parentCode]; `null` if it does not open.
   Future<SigningKey?> unlock(String parentCode) =>
@@ -346,19 +502,47 @@ class FamilySync {
   int pruneUsage([DateTime? now]) =>
       node.store.prune((now ?? DateTime.now()).subtract(usageKept));
 
-  static Future<SqliteSyncStore> _openStore(SyncFiles files) async {
+  static Future<SqliteSyncStore> _openStore(SyncFiles files, String db) async {
     await files.dir.create(recursive: true);
-    return SqliteSyncStore.open(files.database);
+    return SqliteSyncStore.open(files.database(db));
   }
 
   Future<void> close() => node.close();
 
   /// The family as merged from the log; what belongs to this device only
   /// comes from [local].
-  FamilyData compose(FamilyData local) => familyFromEntities({
-    for (final e in node.replica.entities.entries)
-      if (!e.key.startsWith(SyncKeys.devicePrefix) &&
-          !e.key.startsWith('sync/'))
-        e.key: e.value,
+  FamilyData compose(FamilyData local) => ownGroups(_composed(local));
+
+  FamilyData _composed(FamilyData local) => familyFromEntities({
+    // Only the family's own entities: not the devices nor their apps.
+    for (final prefix in familyPrefixes) ...node.replica.withPrefix(prefix),
   }, local);
+
+  /// Records in the log that each child has their own groups of apps
+  /// (see [ownGroups]), when it still holds groups shared by the family.
+  /// Every device already reads them that way.
+  Future<void> recordGroupOwners(SigningKey parentKey) async {
+    final raw = _composed(const FamilyData());
+    final owned = ownGroups(raw);
+    if (identical(owned, raw)) return;
+    await recordChange(raw, owned, parentKey: parentKey);
+  }
+
+  /// Keys of the entities making up the family's data.
+  static final familyPrefixes = [
+    FamilyKeys.family,
+    FamilyKeys.child,
+    FamilyKeys.group,
+    FamilyKeys.deviceGroup,
+    FamilyKeys.appName,
+    FamilyKeys.profile,
+    ...FamilyKeys.stateLists.values,
+    FamilyKeys.injected,
+    FamilyKeys.selfLimitLog,
+  ];
+
+  /// Whether [key] belongs to the family's data (see [compose]).
+  static bool isFamilyKey(String key) => familyPrefixes.any(
+    (p) => key == p || (p.endsWith('/') && key.startsWith(p)),
+  );
 }

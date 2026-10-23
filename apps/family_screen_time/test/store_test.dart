@@ -45,7 +45,7 @@ void main() {
     );
     await store.saveFamily(family);
     final copy = await store.loadFamily();
-    expect(copy.toJson(), family.toJson());
+    expect(copy.toJson(), ownGroups(family).toJson());
     expect(copy.child('c')?.name, 'Emma');
   });
 

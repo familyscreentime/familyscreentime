@@ -8,6 +8,7 @@ import 'controller.dart';
 import 'platform.dart';
 import 'strings.dart';
 import 'ui/child_home.dart';
+import 'ui/parent_device_home.dart';
 import 'ui/setup.dart';
 
 class FamilyScreenTimeApp extends StatefulWidget {
@@ -63,9 +64,11 @@ class _FamilyScreenTimeAppState extends State<FamilyScreenTimeApp> {
         // Every touch keeps parent mode open.
         builder: (context, child) =>
             Listener(onPointerDown: (_) => controller.touch(), child: child),
-        home: controller.settings.setupDone
-            ? ChildHome(controller: controller)
-            : SetupFlow(controller: controller),
+        home: !controller.settings.setupDone
+            ? SetupFlow(controller: controller)
+            : controller.settings.parentDevice
+            ? ParentDeviceHome(controller: controller)
+            : ChildHome(controller: controller),
       ),
     );
   }

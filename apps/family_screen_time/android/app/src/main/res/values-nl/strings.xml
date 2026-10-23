@@ -12,4 +12,6 @@
     <string name="protected_open">Family Screen Time openen</string>
     <string name="admin_disable_warning">Alleen de ouder hoort deze beveiliging uit te schakelen, via de oudermodus van Family Screen Time.</string>
     <string name="parent_mode_channel">Oudermodus</string>
+    <string name="stopped_title">Family Screen Time ziet geen apps meer</string>
+    <string name="stopped_message">Android heeft de herkenningsdienst gestopt. Een ouder moet hem uit- en weer inschakelen: Instellingen, Toegankelijkheid, Family Screen Time. Sta op Xiaomi ook Automatisch starten toe.</string>
 </resources>

@@ -12,4 +12,6 @@
     <string name="protected_open">Ouvrir Family Screen Time</string>
     <string name="admin_disable_warning">Seul le parent devrait désactiver cette protection, depuis le mode parent de Family Screen Time.</string>
     <string name="parent_mode_channel">Mode parent</string>
+    <string name="stopped_title">Family Screen Time ne voit plus les applis</string>
+    <string name="stopped_message">Android a arrêté son service de détection. Un parent doit le désactiver puis le réactiver : Paramètres, Accessibilité, Family Screen Time. Sur Xiaomi, autorisez aussi le démarrage automatique.</string>
 </resources>

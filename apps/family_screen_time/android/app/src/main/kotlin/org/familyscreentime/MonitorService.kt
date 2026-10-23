@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
@@ -52,6 +53,23 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
     private var lastForeground: String? = null
     private var screenOn = true
 
+    /**
+     * An app installed, updated or removed: the monitor shares the list of
+     * apps with the family's devices at once (a few seconds later, so an
+     * update's removal and addition count as one).
+     */
+    private val packageReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.data?.schemeSpecificPart == packageName) return
+            // An update removes then adds the same app: nothing new.
+            if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
+            main.removeCallbacks(appsChanged)
+            main.postDelayed(appsChanged, 10_000)
+        }
+    }
+
+    private val appsChanged = Runnable { channel?.invokeMethod("appsChanged", null) }
+
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -70,6 +88,7 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
             if (screenOn && ForegroundAccessibilityService.instance == null) {
                 foregroundFromUsageStats()?.let { onForegroundApp(it) }
             }
+            checkAccessibility()
             main.postDelayed(this, POLL_MS)
         }
     }
@@ -89,6 +108,41 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** Since when the accessibility service is ticked but stopped (0: it runs). */
+    private var stoppedSince = 0L
+    private var stoppedShown = false
+
+    /**
+     * Tells, in a notification, when Android stopped the accessibility
+     * service without unticking it: apps are then no longer seen (only
+     * guessed from the usage statistics, when allowed).
+     */
+    private fun checkAccessibility() {
+        if (!Health.accessibilityStopped(this)) {
+            stoppedSince = 0L
+            if (stoppedShown) {
+                notificationManager().cancel(STOPPED_ID)
+                stoppedShown = false
+            }
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (stoppedSince == 0L) stoppedSince = now
+        if (stoppedShown || now - stoppedSince < STOPPED_GRACE_MS) return
+        android.util.Log.w("FamilyScreenTime", "Accessibility service ticked but stopped")
+        val message = getString(R.string.stopped_message)
+        val n = builder(WARNING_CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle(getString(R.string.stopped_title))
+            .setContentText(message)
+            .setStyle(Notification.BigTextStyle().bigText(message))
+            .setContentIntent(openAppIntent())
+            .setOngoing(true)
+            .build()
+        notificationManager().notify(STOPPED_ID, n)
+        stoppedShown = true
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -115,11 +169,24 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
         } else {
             registerReceiver(screenReceiver, filter)
         }
+        val packages = IntentFilter().apply {
+            // Not ACTION_PACKAGE_CHANGED: some apps (Google Play services)
+            // send it all the time.
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addDataScheme("package")
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(packageReceiver, packages, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(packageReceiver, packages)
+        }
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         screenOn = pm.isInteractive && !keyguardLocked()
         startEngine()
         main.postDelayed(poller, POLL_MS)
         main.postDelayed(safetyWatcher, SAFETY_POLL_MS)
+        if (Health.monitorWanted(this)) Watchdog.schedule(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -134,6 +201,8 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
         main.removeCallbacks(poller)
         main.removeCallbacks(safetyWatcher)
         unregisterReceiver(screenReceiver)
+        unregisterReceiver(packageReceiver)
+        main.removeCallbacks(appsChanged)
         engine?.destroy()
         engine = null
         super.onDestroy()
@@ -195,6 +264,12 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            // Not on this device (a parent's): no monitor, no watchdog.
+            "unwanted" -> {
+                Health.setMonitorWanted(this, false)
+                result.success(null)
+                main.post { stopSelf() }
+            }
             "state" -> result.success(
                 mapOf("foreground" to lastForeground, "screenOn" to screenOn),
             )
@@ -483,6 +558,8 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
         private const val SHOWN_WARNING_CHANNEL = "warnings_shown"
         private const val MONITOR_ID = 1
         private const val WARNING_ID = 2
+        private const val STOPPED_ID = 3
+        private const val STOPPED_GRACE_MS = 60_000L
         private const val POLL_MS = 3_000L
         private const val SAFETY_POLL_MS = 1_000L
 

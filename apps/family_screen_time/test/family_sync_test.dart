@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:family_screen_time/src/controller.dart';
+import 'package:family_screen_time/src/platform.dart';
 import 'package:family_screen_time/src/self_limits.dart';
 import 'package:family_screen_time/src/store.dart';
 import 'package:family_screen_time/src/sync/family_entities.dart';
@@ -167,6 +168,25 @@ void main() {
       );
     });
 
+    test('its own apps\' names and icons', () {
+      expect(
+        policy.deviceMay(
+          event('put', 'app/tablet/com.roblox.client', {'label': 'Roblox'}),
+          device,
+          replica,
+        ),
+        isTrue,
+      );
+      expect(
+        policy.deviceMay(
+          event('put', 'app/phone/com.roblox.client', {'label': 'Roblox'}),
+          device,
+          replica,
+        ),
+        isFalse,
+      );
+    });
+
     test('its own use only', () {
       expect(
         policy.deviceMay(
@@ -231,13 +251,13 @@ void main() {
       expect(await sync.unlock('000000'), isNull);
       expect(
         canonicalJson(sync.compose(family).toJson()),
-        canonicalJson(family.toJson()),
+        canonicalJson(ownGroups(family).toJson()),
       );
 
       final monitor = (await FamilySync.open(store, background: true))!;
       expect(
         canonicalJson(monitor.compose(family).toJson()),
-        canonicalJson(family.toJson()),
+        canonicalJson(ownGroups(family).toJson()),
       );
       // The interface changes a rule in parent mode; the monitor reads it.
       final changed = family.copyWith(
@@ -261,6 +281,40 @@ void main() {
         ),
       ]);
       expect((await sync.readOthers()).single.type, 'usage');
+    });
+
+    test('installed apps are shared, only what changed', () async {
+      final (sync, _) = await FamilySync.create(
+        store: store,
+        settings: settings,
+        family: richFamily(),
+        parentCode: '123456',
+        deviceName: 'Tablette',
+      );
+      final roblox = AppInfo('Roblox', Uint8List.fromList([1, 2, 3]));
+      expect(
+        await sync.publishApps(
+          {'com.roblox.client': 'Roblox'},
+          icons: {'com.roblox.client': roblox},
+        ),
+        1,
+      );
+      expect(await sync.publishApps({'com.roblox.client': 'Roblox'}), 0);
+      // A new name only.
+      expect(await sync.publishApps({'com.roblox.client': 'Roblox 2'}), 1);
+      expect(sync.sharedApps(['com.roblox.client']).values.single.icon, [
+        1,
+        2,
+        3,
+      ]);
+      final shared = sync.sharedApps(['com.roblox.client', 'other']);
+      expect(shared.keys, ['com.roblox.client']);
+      expect(shared.values.single.label, 'Roblox 2');
+      expect(shared.values.single.icon, [1, 2, 3]);
+      expect(sync.sharedAppNames(), {'com.roblox.client': 'Roblox 2'});
+      // Uninstalled: gone for the family too.
+      expect(await sync.publishApps({}), 1);
+      expect(sync.sharedAppNames(), isEmpty);
     });
 
     test(
@@ -294,26 +348,29 @@ void main() {
       },
     );
 
-    test(
-      'the controller creates the family when the code is entered',
-      () async {
-        await store.saveSettings(settings);
-        final c = AppController(store, settings, richFamily());
-        expect(await c.sync, isNull);
-        c.parentCodeEntered('123456');
-        c.enterParentMode();
-        await c.updateFamily(c.family.copyWith(graceReminderMinutes: 7));
-        final log = (await c.sync)!;
-        expect(log.compose(c.family).graceReminderMinutes, 7);
-        final last = log.node.store.missingFor(const {}, limit: 1 << 30).last;
-        expect(last.signer, Signer.parent);
-        expect(await SyncFiles(store).exist, isTrue);
-        // A new code reaches the log too.
-        await c.changeParentCode('654321');
-        expect(await log.unlock('654321'), isNotNull);
-        c.leaveParentMode();
-        c.dispose();
-      },
-    );
+    test('the controller starts the log only when linking', () async {
+      await store.saveSettings(settings);
+      final c = AppController(store, settings, richFamily());
+      expect(await c.sync, isNull);
+      c.parentCodeEntered('123456');
+      c.enterParentMode();
+      // On its own, the device keeps no log.
+      await c.updateFamily(c.family.copyWith(graceReminderMinutes: 6));
+      expect(await c.sync, isNull);
+      expect(await SyncFiles(store).exist, isFalse);
+      final (log, _) = (await c.startLinking())!;
+      expect(identical(await c.sync, log), isTrue);
+      expect(log.compose(c.family).graceReminderMinutes, 6);
+      await c.updateFamily(c.family.copyWith(graceReminderMinutes: 7));
+      expect(log.compose(c.family).graceReminderMinutes, 7);
+      final last = log.node.store.missingFor(const {}, limit: 1 << 30).last;
+      expect(last.signer, Signer.parent);
+      expect(await SyncFiles(store).exist, isTrue);
+      // A new code reaches the log too.
+      await c.changeParentCode('654321');
+      expect(await log.unlock('654321'), isNotNull);
+      c.leaveParentMode();
+      c.dispose();
+    });
   });
 }

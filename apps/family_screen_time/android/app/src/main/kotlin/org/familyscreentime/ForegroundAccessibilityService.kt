@@ -17,7 +17,7 @@ class ForegroundAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         instance = this
-        MonitorService.start(this)
+        if (Health.monitorWanted(this)) MonitorService.start(this)
         MonitorService.instance?.overlayHostChanged()
     }
 

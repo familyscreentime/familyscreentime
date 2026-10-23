@@ -62,7 +62,7 @@ class _UsageScreenState extends State<UsageScreen> {
         if (s.appId != null) usedApp(s.appId!),
     };
     try {
-      final info = await c.platform.appInfo(apps);
+      final info = await c.appInfo(apps);
       if (mounted) setState(() => _info = info);
     } on Object {
       // Names fall back to package names.
@@ -84,7 +84,7 @@ class _UsageScreenState extends State<UsageScreen> {
               builder: (context, _) {
                 final report = buildUsageReport(
                   history,
-                  childId: c.settings.childId ?? '',
+                  childId: c.childId ?? '',
                   now: DateTime.now(),
                   days: _days,
                   exclude: c.family.config.neverBlocked,
@@ -344,21 +344,19 @@ class AppUsageScreen extends StatelessWidget {
   Future<void> _editGroups(BuildContext context) async {
     final c = controller;
     final groups = c.family.config.appGroups;
-    final chosen = {
-      for (final e in groups.entries)
-        if (e.value.contains(app.appId)) e.key,
-    };
+    final mine = c.childGroups;
+    final chosen = {...c.groupsOf(app.appId)};
     final result = await showDialog<Set<String>>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text(c.s.t('appEditGroups')),
-          content: c.family.groupNames.isEmpty
+          content: mine.isEmpty
               ? Text(c.s.t('noGroups'))
               : Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    for (final e in c.family.groupNames.entries)
+                    for (final e in mine.entries)
                       CheckboxListTile(
                         value: chosen.contains(e.key),
                         title: Text(e.value),
@@ -386,11 +384,13 @@ class AppUsageScreen extends StatelessWidget {
       ),
     );
     if (result == null) return;
+    // Only this child's groups change.
     final updated = {
-      for (final e in groups.entries)
-        e.key: {
-          ...e.value.where((p) => p != app.appId),
-          if (result.contains(e.key)) app.appId,
+      ...groups,
+      for (final id in mine.keys)
+        id: {
+          ...?groups[id]?.where((p) => p != app.appId),
+          if (result.contains(id)) app.appId,
         },
     };
     await c.updateFamily(
@@ -405,10 +405,7 @@ class AppUsageScreen extends StatelessWidget {
       final c = controller;
       final s = c.s;
       final theme = Theme.of(context);
-      final groups = [
-        for (final e in c.family.config.appGroups.entries)
-          if (e.value.contains(app.appId)) c.family.groupNames[e.key] ?? e.key,
-      ];
+      final groups = [for (final id in c.groupsOf(app.appId)) c.groupName(id)];
       final limitedBy = [
         for (final r in c.activeChildRules)
           if ((r.hasQuota || r.schedule != null) &&

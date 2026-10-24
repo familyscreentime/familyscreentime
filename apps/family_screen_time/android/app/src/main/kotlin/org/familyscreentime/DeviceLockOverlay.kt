@@ -17,7 +17,7 @@ import android.widget.TextView
 
 /**
  * Covers the whole device when there is no screen time left and the parent
- * chose to lock it, like Family Link: the home screen, the settings and
+ * chose to lock it: the home screen, the settings and
  * every app stay behind it. The apps the parent keeps available (the phone,
  * say) and this app open from its buttons, and it steps aside while one of
  * them is in front.

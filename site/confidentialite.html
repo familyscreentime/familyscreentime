@@ -19,25 +19,25 @@
 
 <h1>Règles de confidentialité</h1>
 <p class="muted">Application Android Family Screen Time (org.familyscreentime). Dernière mise à jour : 23 octobre 2026.</p>
-<div class="card"><p><strong>En bref :</strong> Family Screen Time ne collecte aucune donnée. Tout ce que l'application enregistre reste sur l'appareil où elle est installée. Rien n'est envoyé à l'éditeur ni à des tiers : pas de compte, pas de publicité, pas de statistiques d'audience, pas de service tiers. Si le parent relie plusieurs appareils de la famille, ils échangent ces données entre eux, directement sur le réseau Wi-Fi de la maison, chiffrées de bout en bout.</p></div>
+<div class="card"><p><strong>En bref :</strong> Family Screen Time ne collecte aucune donnée. Tout ce que l'application enregistre reste sur l'appareil où elle est installée. Rien n'est envoyé à l'éditeur ni à des tiers : pas de compte, pas de publicité, pas de statistiques d'audience, pas de service tiers. Si le parent relie plusieurs appareils, ils échangent ces données entre eux, directement sur le réseau Wi-Fi de la maison, chiffrées de bout en bout.</p></div>
 
 <h2>Qui sommes-nous ?</h2>
 <p>Family Screen Time est un logiciel libre (licence MIT) publié sur familyscreentime.org. Pour toute question : <a href="mailto:contact@familyscreentime.org">contact@familyscreentime.org</a>.</p>
 
-<h2>Ce que l'application traite, sur l'appareil seulement</h2>
+<h2>Ce que l'application traite, sur vos appareils seulement</h2>
 <table>
 <tr><th>Donnée</th><th>Pourquoi</th></tr>
 <tr><td>L'appli à l'écran et la durée de son utilisation</td><td>Compter le temps d'écran et appliquer les limites fixées par le parent.</td></tr>
 <tr><td>L'historique d'utilisation des applis tenu par Android (environ 10 jours, à la première ouverture)</td><td>Afficher les statistiques d'utilisation dès le premier jour. Il ne sert pas aux limites.</td></tr>
-<tr><td>Les règles, groupes d'applis, noms donnés aux applis, périodes, bonus et blocages</td><td>Faire fonctionner l'application selon les réglages du parent.</td></tr>
+<tr><td>Les règles, groupes d'applis de chaque enfant, noms donnés aux applis, périodes, bonus et blocages</td><td>Faire fonctionner l'application selon les réglages du parent.</td></tr>
 <tr><td>Le prénom de l'enfant</td><td>L'afficher dans l'application.</td></tr>
-<tr><td>Le code parent, enregistré sous forme d'empreinte (PBKDF2), jamais en clair ; la clé de la famille, chiffrée par ce code (Argon2id)</td><td>Protéger les réglages, et signer les décisions du parent pour les autres appareils de la famille.</td></tr>
+<tr><td>Le code parent, enregistré sous forme d'empreinte (PBKDF2), jamais en clair ; la clé des appareils reliés, chiffrée par ce code (Argon2id)</td><td>Protéger les réglages, et signer les décisions du parent pour les autres appareils reliés.</td></tr>
 <tr><td>Les limites que l'enfant se fixe et leur historique</td><td>Les appliquer, et montrer au parent comment elles sont tenues. L'enfant en est informé.</td></tr>
 </table>
 <p>Ces données sont stockées dans l'espace privé de l'application. Elles sont effacées quand l'application est désinstallée.</p>
 
-<h2>Synchronisation entre les appareils de la famille</h2>
-<p>Le parent peut relier les appareils de la famille (la tablette et le téléphone d'un enfant, par exemple). Ils partagent alors les réglages, le temps utilisé et la liste des appareils, pour que les limites soient les mêmes partout. Ces échanges se font directement entre les appareils, sur le réseau local de la maison : ils sont chiffrés de bout en bout, et chaque appareil vérifie que les décisions du parent sont signées par la clé de la famille. Ils ne passent par aucun serveur de l'éditeur. Un appareil retiré de la famille n'est plus synchronisé.</p>
+<h2>Appareils reliés</h2>
+<p>C'est facultatif : un appareil installé seul ne communique avec aucun autre. Le parent peut relier des appareils (la tablette et le téléphone d'un enfant, le téléphone d'un parent, par exemple), en mode parent et en comparant un code affiché sur les deux écrans. Ils partagent alors les réglages, le temps utilisé, la liste des appareils reliés (nom, rôle, enfant) et, pour chaque appareil d'enfant, le nom et l'icône des applis installées, pour que le parent puisse les limiter depuis un autre appareil. Ces échanges se font directement entre les appareils, sur le réseau local de la maison : ils sont chiffrés de bout en bout, et chaque appareil vérifie que les décisions du parent sont signées par la clé des appareils reliés. Ils ne passent par aucun serveur de l'éditeur. Un appareil détaché ou retiré n'est plus synchronisé ; un appareil détaché ne garde que les données de son enfant et le temps utilisé sur lui.</p>
 
 <h2>Le service d'accessibilité</h2>
 <p>L'application utilise le service d'accessibilité d'Android pour savoir quelle appli est à l'écran, pour fermer une appli bloquée et pour afficher les avertissements, le décompte et l'écran de verrouillage par-dessus les autres applis. Quand le parent active la protection contre la désinstallation, elle ferme aussi les pages des réglages qui permettraient de désactiver l'application. Pour les reconnaître, elle lit le contenu de l'écran uniquement sur les pages de sécurité et d'autorisations d'Android, sans rien enregistrer. L'utilisateur est informé et donne son accord avant l'activation de ce service.</p>
@@ -48,22 +48,22 @@
 <li><b>Accès aux données d'utilisation</b> : historique d'utilisation, repérage de l'appli à l'écran si l'accessibilité est coupée.</li>
 <li><b>Affichage par-dessus les autres applis</b> : écran de blocage, décompte.</li>
 <li><b>Notifications</b> : décompte, avertissements, mode parent.</li>
-<li><b>Réseau</b> (Internet, état du réseau, multidiffusion Wi-Fi) : trouver les appareils de la famille sur le réseau de la maison et échanger avec eux.</li>
+<li><b>Réseau</b> (Internet, état du réseau, multidiffusion Wi-Fi) : trouver les appareils reliés sur le réseau de la maison et échanger avec eux.</li>
 <li><b>Administrateur de l'appareil</b> (facultatif) : empêcher la désinstallation sans le parent. Aucune autre règle d'administration n'est utilisée.</li>
 <li><b>Démarrage, service au premier plan, exclusion de l'optimisation de batterie</b> : garder le suivi actif.</li>
 </ul>
 
 <h2>Partage</h2>
-<p>Aucune donnée n'est partagée avec l'éditeur ni avec des tiers, vendue ni transmise, en dehors des appareils de la famille que le parent a reliés. L'application ne contient aucun outil de suivi.</p>
+<p>Aucune donnée n'est partagée avec l'éditeur ni avec des tiers, vendue ni transmise, en dehors des appareils que le parent a reliés. L'application ne contient aucun outil de suivi.</p>
 
 <h2>Enfants</h2>
 <p>L'application est conçue pour être installée par un parent sur l'appareil de son enfant. Elle ne collecte aucune donnée personnelle sur l'enfant pour l'éditeur. L'enfant voit ses règles, son temps restant, et sait que le parent voit l'historique de ses propres limites.</p>
 
 <h2>Évolutions</h2>
-<p>Une version future pourra proposer une synchronisation entre les appareils de la famille, par le réseau local ou par un serveur que la famille héberge elle-même. Ces règles seront mises à jour avant toute version qui fera sortir des données de l'appareil.</p>
+<p>Une version future pourra aussi synchroniser les appareils reliés par un serveur que la famille héberge elle-même. Ces règles seront mises à jour avant toute version qui enverra des données ailleurs que sur les appareils reliés.</p>
 
 <h2>Vos droits</h2>
-<p>Comme aucune donnée ne quitte l'appareil, l'éditeur ne détient aucune donnée vous concernant. Vous pouvez effacer toutes les données en désinstallant l'application ou en vidant ses données dans les réglages d'Android. Pour toute question : <a href="mailto:contact@familyscreentime.org">contact@familyscreentime.org</a>.</p>
+<p>Comme aucune donnée ne quitte vos appareils, l'éditeur ne détient aucune donnée vous concernant. Vous pouvez effacer toutes les données en désinstallant l'application ou en vidant ses données dans les réglages d'Android. Pour toute question : <a href="mailto:contact@familyscreentime.org">contact@familyscreentime.org</a>.</p>
 
 </main>
 <footer class="wrap"><a href="confidentialite.html">Règles de confidentialité</a> · <a href="https://github.com/familyscreentime/familyscreentime">Logiciel libre (licence MIT)</a> · contact@familyscreentime.org</footer>

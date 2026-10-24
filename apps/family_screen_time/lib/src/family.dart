@@ -8,14 +8,15 @@ import 'store.dart';
 import 'strings.dart';
 
 /// System components that must never be blocked: blocking them would break
-/// the device, Family Link supervision, or the parent's access to settings.
+/// the device, Google's parental supervision, or the parent's access to
+/// settings.
 const knownSystemPackages = {
   'com.android.systemui',
   'com.android.settings',
   'com.google.android.gms',
   'com.google.android.apps.kids.familylinkhelper',
   'com.google.android.apps.kids.familylink',
-  // Family Link's own lock screen ("Parental control system").
+  // The supervision's own lock screen ("Parental control system").
   'com.google.android.gms.supervision',
   'com.google.android.permissioncontroller',
   'com.android.permissioncontroller',

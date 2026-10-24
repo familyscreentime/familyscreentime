@@ -28,8 +28,8 @@ class FamilyConfig {
   final Set<String> alwaysAllowed;
 
   /// System components that are never blocked (launcher, system UI,
-  /// Family Link, Google Play services…). Internal list, separate from
-  /// [alwaysAllowed].
+  /// Google's parental supervision, Google Play services…). Internal list,
+  /// separate from [alwaysAllowed].
   final Set<String> neverBlocked;
 
   /// Apps never counted nor limited by time (messages, say), but only open

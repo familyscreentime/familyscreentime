@@ -151,7 +151,7 @@ void main() {
     );
     await tester.pumpWidget(MaterialApp(home: ParentDeviceHome(controller: c)));
     await tester.pump();
-    expect(find.text('Mode parent'), findsOneWidget);
+    expect(find.text('Déverrouiller'), findsOneWidget);
     expect(find.text('Emma'), findsNothing);
     // No child of its own: the first one is shown until another is chosen.
     expect(c.childId, 'emma');

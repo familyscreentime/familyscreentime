@@ -621,7 +621,7 @@ void main() {
     );
 
     test(
-      'Family Link\'s lock screen never counts, even recorded before',
+      'the supervision\'s lock screen never counts, even recorded before',
       () async {
         if (!todayOnly) return markTestSkipped('too close to midnight');
         final family = await store.loadFamily();

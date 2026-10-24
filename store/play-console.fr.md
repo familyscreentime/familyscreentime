@@ -30,7 +30,7 @@ Toutes les applications › **Créer une application** :
 | Annonces | Non, mon application ne contient pas d'annonces. |
 | Classification du contenu | Questionnaire ci-dessous. |
 | Public cible et contenu | Décision à prendre : voir ci-dessous. |
-| Sécurité des données | Aucune donnée collectée ni partagée. Détails ci-dessous. |
+| Sécurité des données | Aucune donnée collectée ni partagée (échanges entre appareils reliés chiffrés de bout en bout, exemptés). Détails ci-dessous. |
 | Applications gouvernementales | Non. |
 | Fonctionnalités financières | Aucune. |
 | Santé | Aucune fonctionnalité de santé. |
@@ -89,26 +89,51 @@ que soit l'option choisie.
 
 ### Sécurité des données
 
-- Votre application collecte-t-elle ou partage-t-elle certains des types de
-  données utilisateur requis ? **Non.** (Google ne compte une donnée comme
-  collectée que si elle quitte l'appareil. Tout ce que Family Screen Time
-  enregistre reste dans son stockage privé.)
-- Les questions sur le chiffrement en transit et la suppression des données
-  ne s'affichent plus après ce « Non ». Si elles s'affichent : sans objet,
-  rien n'est transmis ; les données s'effacent en désinstallant l'appli ou
-  en vidant ses données.
+Depuis la 0.20, les appareils reliés échangent des données entre eux : le
+formulaire doit en tenir compte. Ce qui circule, uniquement entre les
+appareils que le parent a reliés, sur le Wi-Fi de la maison, chiffré de
+bout en bout, sans aucun serveur de l'éditeur :
+
+- le prénom des enfants ;
+- les règles, groupes d'applis, bonus, blocages et le temps hors appareil ;
+- le temps passé dans chaque appli (appli, début, fin, appareil) ;
+- le nom et l'icône des applis installées sur chaque appareil d'enfant ;
+- un identifiant aléatoire, un nom et une clé publique par appareil.
+
+Un appareil qui n'est relié à aucun autre n'envoie rien.
+
+L'aide de Google (« Fournir des informations pour la section Sécurité
+des données », octobre 2026) définit la collecte comme la transmission de
+données hors de l'appareil, mais exempte explicitement le chiffrement de
+bout en bout : « User data that is sent off device, but that is unreadable
+by you or anyone other than the sender and recipient as a result of
+end-to-end encryption does not need to be disclosed. » Condition : aucun
+intermédiaire, développeur compris, ne peut lire les données ; seuls
+l'expéditeur et le destinataire ont les clés. C'est le cas ici : chaque
+session entre deux appareils est chiffrée avec des clés éphémères
+(X25519, ChaCha20-Poly1305) connues d'eux seuls, sans serveur ni relais.
+
+Réponses :
+
+- Votre application collecte-t-elle ou partage-t-elle certains des types
+  de données utilisateur requis ? **Non.**
+- Les questions sur le chiffrement en transit et la suppression ne
+  s'affichent plus. Si elles s'affichent : sans objet.
 - Vérifier l'aperçu (« Aucune donnée collectée », « Aucune donnée
   partagée »), puis **Envoyer**.
-- À partir de la 0.20 (synchronisation sur le réseau local) : les
-  appareils de la famille échangent réglages et usage directement entre
-  eux, sur le réseau de la maison, chiffrés de bout en bout, sans aucun
-  serveur de l'éditeur. Google compte comme « collecté » ce que l'appli
-  envoie hors de l'appareil au développeur ou à des tiers : la réponse
-  reste donc **Non** tant qu'aucun serveur à nous n'intervient. À revoir
-  avec le serveur auto-hébergé ; si un examinateur n'est pas d'accord,
-  déclarer « Activité dans l'application » et « Appareil ou autres ID »
-  comme collectés, chiffrés en transit, non partagés, nécessaires au
-  fonctionnement.
+
+Si un examinateur conteste, citer l'exemption ci-dessus. S'il maintient
+son avis, déclarer : collecte **Oui** ; chiffrées en transit **Oui** ;
+suppression **Oui** (détacher l'appareil, désinstaller l'appli ou vider
+ses données) ; types **Informations personnelles › Nom**, **Activité dans
+les applis › Interactions avec l'appli** et **Applis installées**,
+**Identifiants de l'appareil ou autres** ; pour chacun collectées oui,
+partagées non, collecte facultative, finalité **Fonctionnalités de
+l'appli**.
+
+À revoir avec le serveur auto-hébergé : il restera hors exemption s'il
+peut lire les données ; il faudra donc qu'il ne stocke que des événements
+chiffrés de bout en bout.
 
 ### Déclaration relative à l'API d'accessibilité
 
@@ -127,7 +152,9 @@ que soit l'option choisie.
 > off (device administrator deactivation, the app's own settings pages,
 > Android's security page offering to remove its access). For this, screen
 > content is read only on Android's security and permission pages. No data
-> is stored beyond usage times, and nothing leaves the device. Before the
+> is stored beyond usage times, which stay on the device, or go only to the
+> user's other devices the parent linked (over the home Wi-Fi, end-to-end
+> encrypted, never to the developer or third parties). Before the
 > service is turned on, an in-app disclosure explains this and asks for
 > consent. The source code is public: https://github.com/familyscreentime/familyscreentime
 
@@ -166,6 +193,11 @@ que soit l'option choisie.
 - PACKAGE_USAGE_STATS : statistiques d'utilisation et détection de l'appli
   au premier plan quand l'accessibilité ne suffit pas ; l'historique reste
   sur l'appareil.
+- INTERNET, ACCESS_NETWORK_STATE, CHANGE_WIFI_MULTICAST_STATE : les
+  appareils reliés, facultatifs, se trouvent sur le Wi-Fi de la maison
+  (DNS-SD) et échangent réglages et usage directement, chiffrés de bout en
+  bout. Aucun serveur n'est contacté ; un appareil relié à aucun autre
+  n'utilise pas le réseau.
 
 ## 3. Fiche du Play Store
 

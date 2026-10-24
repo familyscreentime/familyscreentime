@@ -17,7 +17,7 @@ the usage screen, the block notice.
 
 **Description complète** :
 
-Family Screen Time aide les familles à régler le temps d'écran, sur l'appareil de l'enfant, sans compte ni serveur : tout reste sur l'appareil.
+Family Screen Time aide les familles à régler le temps d'écran, sur l'appareil de l'enfant, sans compte ni serveur : tout reste chez vous.
 
 Pour le parent, derrière un code :
 • Temps par jour (différent selon le jour si besoin), par semaine ou sur plusieurs jours, pour le temps total, un groupe d'applis (jeux, vidéo…) ou une seule appli.
@@ -33,11 +33,16 @@ Pour l'enfant, tout est visible :
 • Un décompte flottant façon Time Timer et des avertissements avant la fin.
 • Ses propres limites, qu'il se fixe librement, et des pauses volontaires.
 
-À venir : la synchronisation entre les appareils de la famille (réglages depuis le téléphone du parent, temps partagé entre plusieurs appareils), par le réseau local ou par un serveur que vous hébergez vous-même, puis une version Windows. Elle restera facultative.
+Appareils reliés, si vous le souhaitez :
+• La tablette et le téléphone d'un enfant partagent ses règles et son temps ; le parent règle tout depuis son propre téléphone.
+• Directement entre vos appareils, sur le Wi-Fi de la maison, chiffré de bout en bout, sans aucun serveur.
+• Un appareil installé seul peut être relié plus tard sans repartir de zéro ; chaque enfant garde ses propres groupes d'applis.
 
-Respect de la vie privée : aucune donnée n'est collectée ni envoyée. Pas de publicité, pas de suivi. Logiciel libre (licence MIT), code source : https://github.com/familyscreentime/familyscreentime
+À venir : la synchronisation par un serveur que vous hébergez vous-même, puis une version Windows.
 
-Utilisation du service d'accessibilité : Family Screen Time l'utilise pour savoir quelle appli est à l'écran, fermer une appli bloquée et afficher le décompte, les avertissements et l'écran de verrouillage. Avec la protection contre la désinstallation, il ferme aussi les pages des réglages qui permettraient de désactiver l'application. Ces informations restent sur l'appareil.
+Respect de la vie privée : aucune donnée n'est envoyée à l'éditeur ni à des tiers. Pas de publicité, pas de suivi. Logiciel libre (licence MIT), code source : https://github.com/familyscreentime/familyscreentime
+
+Utilisation du service d'accessibilité : Family Screen Time l'utilise pour savoir quelle appli est à l'écran, fermer une appli bloquée et afficher le décompte, les avertissements et l'écran de verrouillage. Avec la protection contre la désinstallation, il ferme aussi les pages des réglages qui permettraient de désactiver l'application. Ces informations restent sur vos appareils.
 
 ## Nederlands (nl-NL)
 
@@ -47,7 +52,7 @@ Utilisation du service d'accessibilité : Family Screen Time l'utilise pour savo
 
 **Volledige beschrijving**:
 
-Family Screen Time helpt gezinnen de schermtijd te regelen, op het toestel van het kind, zonder account of server: alles blijft op het toestel.
+Family Screen Time helpt gezinnen de schermtijd te regelen, op het toestel van het kind, zonder account of server: alles blijft bij u thuis.
 
 Voor de ouder, achter een code:
 • Tijd per dag (eventueel per weekdag anders), per week of over meerdere dagen, voor de totale schermtijd, een groep apps (spellen, video…) of één app.
@@ -63,11 +68,16 @@ Voor het kind is alles zichtbaar:
 • Een zwevend aftellen in Time Timer-stijl en waarschuwingen voor het einde.
 • Eigen limieten die het zichzelf geeft, en vrijwillige pauzes.
 
-Binnenkort: synchronisatie tussen de toestellen van het gezin (instellen vanaf de telefoon van de ouder, tijd gedeeld over meerdere toestellen), via het lokale netwerk of een server die u zelf host, en daarna een Windows-versie. Ze blijft optioneel.
+Gekoppelde toestellen, als u dat wilt:
+• De tablet en de telefoon van een kind delen zijn regels en zijn tijd; de ouder regelt alles vanaf de eigen telefoon.
+• Rechtstreeks tussen uw toestellen, via de wifi thuis, end-to-end versleuteld, zonder server.
+• Een toestel dat op zichzelf geïnstalleerd is, kan later gekoppeld worden zonder opnieuw te beginnen; elk kind houdt zijn eigen appgroepen.
 
-Privacy: er worden geen gegevens verzameld of verstuurd. Geen reclame, geen tracking. Vrije software (MIT-licentie), broncode: https://github.com/familyscreentime/familyscreentime
+Binnenkort: synchronisatie via een server die u zelf host, en daarna een Windows-versie.
 
-Gebruik van de toegankelijkheidsdienst: Family Screen Time gebruikt die om te weten welke app op het scherm staat, een geblokkeerde app te sluiten en het aftellen, de waarschuwingen en het vergrendelscherm te tonen. Met de beveiliging tegen verwijderen sluit hij ook de instellingenpagina's waarmee de app uitgeschakeld kan worden. Deze gegevens blijven op het toestel.
+Privacy: er worden geen gegevens naar de uitgever of naar derden gestuurd. Geen reclame, geen tracking. Vrije software (MIT-licentie), broncode: https://github.com/familyscreentime/familyscreentime
+
+Gebruik van de toegankelijkheidsdienst: Family Screen Time gebruikt die om te weten welke app op het scherm staat, een geblokkeerde app te sluiten en het aftellen, de waarschuwingen en het vergrendelscherm te tonen. Met de beveiliging tegen verwijderen sluit hij ook de instellingenpagina's waarmee de app uitgeschakeld kan worden. Deze gegevens blijven op uw toestellen.
 
 ## English (en-GB / en-US)
 
@@ -77,7 +87,7 @@ Gebruik van de toegankelijkheidsdienst: Family Screen Time gebruikt die om te we
 
 **Full description**:
 
-Family Screen Time helps families manage screen time, on the child's device, with no account or server: everything stays on the device.
+Family Screen Time helps families manage screen time, on the child's device, with no account or server: everything stays at home.
 
 For the parent, behind a code:
 • Time per day (different by weekday if needed), per week or over several days, for total screen time, a group of apps (games, video…) or a single app.
@@ -93,8 +103,13 @@ For the child, everything is visible:
 • A floating Time Timer-style countdown and warnings before the end.
 • Limits they set for themselves, freely, and breaks of their own.
 
-Coming next: syncing between the family's devices (settings from the parent's phone, time shared across several devices), over the local network or through a server you host yourself, then a Windows version. It will stay optional.
+Linked devices, if you wish:
+• A child's tablet and phone share their rules and time; the parent sets everything from their own phone.
+• Directly between your devices, over the home Wi-Fi, end-to-end encrypted, with no server.
+• A device set up on its own can be linked later without starting over; each child keeps their own app groups.
 
-Privacy: no data is collected or sent. No ads, no tracking. Free software (MIT licence), source code: https://github.com/familyscreentime/familyscreentime
+Coming next: syncing through a server you host yourself, then a Windows version.
 
-Use of the accessibility service: Family Screen Time uses it to know which app is on screen, close a blocked app and show the countdown, warnings and the lock screen. With uninstall protection, it also closes the settings pages that would switch the app off. This information stays on the device.
+Privacy: no data is sent to the publisher or to third parties. No ads, no tracking. Free software (MIT licence), source code: https://github.com/familyscreentime/familyscreentime
+
+Use of the accessibility service: Family Screen Time uses it to know which app is on screen, close a blocked app and show the countdown, warnings and the lock screen. With uninstall protection, it also closes the settings pages that would switch the app off. This information stays on your devices.

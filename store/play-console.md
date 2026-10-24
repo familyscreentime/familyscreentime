@@ -23,7 +23,7 @@ Play Console › Create app:
 | Ads | No, the app has no ads. |
 | Content rating | Questionnaire below. |
 | Target audience | Decision to take: see below. |
-| Data safety | No data collected, no data shared. Details below. |
+| Data safety | No data collected or shared (exchanges between linked devices are end-to-end encrypted, hence exempt). Details below. |
 | Government apps | No. |
 | Financial features | None. |
 | Health | None. |
@@ -67,23 +67,47 @@ installed by a parent on a child's device, whichever you choose.
 
 ### Data safety
 
+From 0.20, linked devices exchange data with each other, and the form must
+account for it. What travels, only between the devices the parent linked,
+over the home Wi-Fi, end-to-end encrypted, with no server of the
+publisher:
+
+- the children's first names;
+- rules, app groups, extra time, blocks and time away from the devices;
+- time spent in each app (app, start, end, device);
+- names and icons of the apps installed on each child's device;
+- a random id, a name and a public key per device.
+
+A device linked to no other sends nothing.
+
+Google's help ("Provide information for Google Play's Data safety
+section", October 2026) defines collection as transmitting data off the
+device, but explicitly exempts end-to-end encryption: "User data that is
+sent off device, but that is unreadable by you or anyone other than the
+sender and recipient as a result of end-to-end encryption does not need to
+be disclosed." The condition: no intermediary, the developer included, can
+read the data; only sender and recipient hold the keys. That is the case
+here: each session between two devices is encrypted with ephemeral keys
+(X25519, ChaCha20-Poly1305) known to them alone, with no server or relay.
+
+Answers:
+
 - Does your app collect or share any of the required user data types?
-  **No.** (Google counts data as collected only when it leaves the device.
-  Everything Family Screen Time records stays in its private storage.)
-- Is all of the user data collected by your app encrypted in transit? Not
-  applicable (nothing is transmitted).
-- Do you provide a way for users to request that their data is deleted?
-  Not applicable; data is erased by uninstalling the app or clearing its
-  data.
-- From 0.20 (sync on the local network): the family's devices exchange
-  settings and usage directly with each other over the home network,
-  end-to-end encrypted, with no server of the publisher. Google counts as
-  "collected" what the app sends off the device to the developer or third
-  parties, so **No** remains the answer as long as no server of ours is
-  involved. To be reviewed when the self-hosted server arrives; if a
-  reviewer disagrees, declare "App activity" and "Device or other IDs" as
-  collected, encrypted in transit, not shared, required for the app's
-  functionality.
+  **No.**
+- The questions on encryption in transit and deletion no longer show. If
+  they do: not applicable.
+- Check the preview ("No data collected", "No data shared"), then
+  **Submit**.
+
+If a reviewer objects, quote the exemption above. If they hold their view,
+declare: collection **Yes**; encrypted in transit **Yes**; deletion
+**Yes** (unlink the device, uninstall the app or clear its data); types
+**Personal info › Name**, **App activity › App interactions** and
+**Installed apps**, **Device or other IDs**; for each collected yes, shared
+no, optional, purpose **App functionality**.
+
+To be reviewed with the self-hosted server: it stays outside the exemption
+if it can read the data, so it must only store end-to-end encrypted events.
 
 ### Accessibility API declaration
 
@@ -101,7 +125,9 @@ installed by a parent on a child's device, whichever you choose.
 > off (device administrator deactivation, the app's own settings pages,
 > Android's security page offering to remove its access). For this, screen
 > content is read only on Android's security and permission pages. No data
-> is stored beyond usage times, and nothing leaves the device. Before the
+> is stored beyond usage times, which stay on the device, or go only to the
+> user's other devices the parent linked (over the home Wi-Fi, end-to-end
+> encrypted, never to the developer or third parties). Before the
 > service is turned on, an in-app disclosure explains this and asks for
 > consent. The source code is public: https://github.com/familyscreentime/familyscreentime
 
@@ -136,6 +162,10 @@ installed by a parent on a child's device, whichever you choose.
   parent mode.
 - PACKAGE_USAGE_STATS: usage statistics and fallback detection of the
   foreground app; usage history stays on the device.
+- INTERNET, ACCESS_NETWORK_STATE, CHANGE_WIFI_MULTICAST_STATE: optional
+  linked devices find each other on the home Wi-Fi (DNS-SD) and exchange
+  settings and usage directly, end-to-end encrypted. No server is
+  contacted; a device linked to no other uses no network.
 
 ## 3. Upload to internal testing
 

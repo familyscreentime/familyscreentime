@@ -57,7 +57,7 @@ behind the parent code.
   back ("Your time for today is up. See you tomorrow from 9.", "in 3 days"),
   on the block notice and the child's home screen. The parent chooses what
   happens then: the apps close; the Android settings and wallpaper close
-  too (default); or the whole device is locked, like Family Link, behind a
+  too (default); or the whole device is locked, behind a
   screen that only opens the phone, messages and this app (never over the
   lock screen or a call). The settings can also be kept for the parent only
   at all times.
@@ -134,7 +134,8 @@ ForegroundAccessibilityService            overlays (notice, banner, countdown),
   Usage is append-only, one file per day. The segment in progress is saved
   every 30 seconds in `open.json`, so a crash loses at most that much.
 - Time in "always allowed" apps and in system components (home screens,
-  settings, Family Link and its lock screen, Google Play services, this
+  settings, Google's parental supervision and its lock screen, Google Play
+  services, this
   app) is never blocked and never counted; nor is the time the lock screen
   is shown (counting starts at unlock).
 

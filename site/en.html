@@ -29,14 +29,18 @@
 <li>A floating Time Timer-style countdown, warnings, a clear message when time is up.</li>
 <li>The child sees everything: time left, the rules, and can set limits for themselves.</li>
 <li>Listen only for music apps: once the time for clips is up, the app opens just long enough to pick the music, which keeps playing in the background.</li>
-<li>Linked devices, if you wish: a child's tablet and phone share their rules and time, and the parent sets everything from their own phone. Directly between your devices, over the home Wi-Fi, end-to-end encrypted. A device set up on its own can be linked later, without starting over.</li>
+<li>Statistics per app and per device, analysis over several months, export as CSV or for ActivityWatch.</li>
+<li>Split screen and video in a small window are taken into account: every app on screen counts, and closes when its time is up.</li>
+<li>Linked devices, if you wish: a child's tablet and phone share their rules and time, and the parent sets everything from their own phone. Each child's device only receives what concerns that child. Directly between your devices over the home Wi-Fi, and away from home through a server you host yourself, always end-to-end encrypted. A device set up on its own can be linked later, without starting over.</li>
 </ul>
+<h2>The relay server</h2>
+<p>Optional, so that linked devices also sync away from home. Ordinary web hosting is enough (PHP 8.2 and MySQL, MariaDB or SQLite), with no SSH. It cannot read what it passes on. One server can host other families too, by invitation.</p>
+<p><a class="button" href="familyscreentime-server.zip">Download the server (zip)</a> · <a href="https://github.com/familyscreentime/familyscreentime/blob/main/server/README.md">Installation guide</a></p>
 <h2>Coming next</h2>
 <ul class="features">
-<li>Syncing through a server you host yourself (PHP and MySQL, ordinary web hosting is enough), for devices away from home.</li>
-<li>A Windows version, after that.</li>
+<li>A Windows version.</li>
 </ul>
-<p class="muted">Linking devices stays optional. Without it, nothing leaves the device; with it, the data only goes to your own devices, and later to your own server.</p>
+<p class="muted">Linking devices stays optional. Without it, nothing leaves the device; with it, the data only goes to your own devices and, if you install one, to your own server, encrypted.</p>
 <p>Designed and tested by Olivier Berten, the app is written by Claude, an AI by Anthropic. It is free software (MIT licence): <a href="https://github.com/familyscreentime/familyscreentime">its source code is on GitHub</a>. It is in testing.</p>
 <p><a href="privacy.html">Privacy policy</a></p>
 

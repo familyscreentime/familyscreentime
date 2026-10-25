@@ -75,7 +75,7 @@ class LeaveParentModeReceiver : BroadcastReceiver() {
         if (intent.action != ParentModeNotice.ACTION_LEAVE) return
         ProtectionGuard.allowFor(0)
         ParentModeNotice.hide(context)
-        MonitorService.instance?.updateDeviceLock()
+        Enforcer.get(context).updateDeviceLock()
         // The interface closes its parent screens, if it runs.
         Handler(Looper.getMainLooper()).post {
             PlatformBridge.uiChannel?.invokeMethod("leaveParentMode", null)

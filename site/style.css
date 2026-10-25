@@ -62,3 +62,12 @@ footer { padding: 24px 16px 40px; color: var(--muted); font-size: 14px; }
 .hero img { width: 96px; height: 96px; border-radius: 22px; }
 ul.features { padding-left: 20px; }
 section[lang] { scroll-margin-top: 16px; }
+a.button {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+}

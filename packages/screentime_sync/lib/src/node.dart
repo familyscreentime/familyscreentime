@@ -19,24 +19,29 @@ class FamilyRoot {
   /// Ed25519 public key (base64) that parent events must be signed with.
   final String parentKey;
 
-  const FamilyRoot(this.familyId, this.parentKey);
+  /// The key (32 bytes, base64) the family's events are encrypted with
+  /// for a relay server, which cannot read them. Families made before it
+  /// existed have none until a parent sets a server up.
+  final String? contentKey;
+
+  const FamilyRoot(this.familyId, this.parentKey, {this.contentKey});
 
   Map<String, Object?> toJson() => {
     'familyId': familyId,
     'parentKey': parentKey,
+    'contentKey': ?contentKey,
   };
 
-  factory FamilyRoot.fromJson(Map<String, Object?> j) =>
-      FamilyRoot(j['familyId'] as String, j['parentKey'] as String);
+  factory FamilyRoot.fromJson(Map<String, Object?> j) => FamilyRoot(
+    j['familyId'] as String,
+    j['parentKey'] as String,
+    contentKey: j['contentKey'] as String?,
+  );
 }
 
-/// The device behind an origin: a device may record events under several
-/// origins (`<device>~ui` for its interface, `<device>` for its background
-/// service), each numbered on its own, all signed with the device's key.
-String deviceOfOrigin(String origin) {
-  final i = origin.indexOf(RegExp('[~#]'));
-  return i < 0 ? origin : origin.substring(0, i);
-}
+/// Where events taken in come from when it is another device, directly or
+/// through a relay (as opposed to this device's own processes).
+abstract interface class RemoteSource {}
 
 /// Keys of the entities the sync layer itself relies on.
 abstract final class SyncKeys {
@@ -45,8 +50,20 @@ abstract final class SyncKeys {
   static String device(String id) => 'device/$id';
   static const devicePrefix = 'device/';
 
-  /// Family-wide sync data: `vault`, the parent key sealed by the code.
+  /// Family-wide sync data: `vault`, the parent key sealed by the code;
+  /// `content`, the content key sealed by the code (see
+  /// [FamilyRoot.contentKey]), for families that had none.
   static const family = 'sync/family';
+
+  /// The relay server: `url`. Absent: local network only.
+  static const server = 'sync/server';
+
+  /// The devices a relay must let in, signed by the parent key (see
+  /// `signMembers`): `statement`, `sig`.
+  static const members = 'sync/members';
+
+  /// Since when the family's events are cut per child (see [epochKey]).
+  static const epoch = epochKey;
 }
 
 /// What a device may sign with its own key (anything signed by the parent
@@ -57,6 +74,16 @@ abstract class SyncPolicy {
   /// Whether [device] (its registration) may sign [e]. [replica] is the
   /// merged state before [e].
   bool deviceMay(SyncEvent e, Map<String, Object?> device, MergedState replica);
+
+  /// The child an entity ([key], with [value]) or a use of apps (key
+  /// `usage`) concerns only, or [parentsOnly]; `null` for the whole
+  /// family. Its events then go only to the devices concerned (see
+  /// [Audience]).
+  String? scopeOf(
+    String key,
+    Map<String, Object?> value,
+    MergedState replica,
+  ) => null;
 }
 
 /// Devices may only sign their own use of apps.
@@ -150,10 +177,9 @@ class SyncNode {
     if (latest != null) clock.receive(latest, now);
     final made = <SyncEvent>[];
     final next = <String, int>{};
-    for (final d in drafts) {
-      final origin = d.type == EventType.usage
-          ? usageOrigin(deviceId)
-          : deviceId;
+    for (final (d, scope) in _scoped(drafts)) {
+      final base = scopedOrigin(deviceId, scope);
+      final origin = d.type == EventType.usage ? usageOrigin(base) : base;
       final seq = next[origin] ?? store.lastSeq(origin) + 1;
       next[origin] = seq + 1;
       made.add(
@@ -180,6 +206,46 @@ class SyncNode {
     return made;
   }
 
+  /// [drafts] with the scope each goes under. An entity that changes
+  /// scope (moved to another child…) is removed from the old one and put
+  /// whole in the new one.
+  List<(EventDraft, String?)> _scoped(List<EventDraft> drafts) {
+    final out = <(EventDraft, String?)>[];
+    String? scope(String key, Map<String, Object?>? value) =>
+        value == null ? null : policy.scopeOf(key, value, replica);
+    for (final d in drafts) {
+      if (d.type != EventType.put &&
+          d.type != EventType.patch &&
+          d.type != EventType.delete) {
+        out.add((d, scope(d.key, d.data)));
+        continue;
+      }
+      final old = replica[d.key];
+      final value = switch (d.type) {
+        EventType.put => d.data,
+        EventType.patch => {
+          ...?old,
+          ...d.data,
+        }..removeWhere((_, v) => v == null),
+        _ => old,
+      };
+      final was = scope(d.key, old);
+      if (d.type == EventType.delete) {
+        out.add((d, was));
+        continue;
+      }
+      final now = scope(d.key, value);
+      if (old != null && was != now) {
+        out
+          ..add((EventDraft.delete(d.key), was))
+          ..add((EventDraft.put(d.key, value!), now));
+      } else {
+        out.add((d, now));
+      }
+    }
+    return out;
+  }
+
   /// Checks and takes in [events] from [source]; returns those accepted.
   /// Events already held are skipped, as are those after a gap (they come
   /// again once the gap is filled) and those badly signed or not allowed.
@@ -196,21 +262,33 @@ class SyncNode {
       for (final e in events)
         if (store.accepts(e)) e,
     ]);
-    for (final e in events) {
-      if (!store.accepts(e)) {
-        if (e.seq > store.lastSeq(e.origin)) gap = true;
-        continue;
+    var todo = events;
+    while (true) {
+      final later = <SyncEvent>[];
+      final before = taken.length;
+      for (final e in todo) {
+        if (!store.accepts(e)) {
+          if (e.seq > store.lastSeq(e.origin)) later.add(e);
+          continue;
+        }
+        if (!await _authorized(e, checked[e])) continue;
+        clock.receive(e.hlc);
+        final added = store.transaction(() {
+          // Another process may have added it while it was checked.
+          if (!store.accepts(e)) return null;
+          return store.add(e);
+        });
+        if (added == null) continue;
+        changed = added || changed;
+        taken.add(e);
       }
-      if (!await _authorized(e, checked[e])) continue;
-      clock.receive(e.hlc);
-      final added = store.transaction(() {
-        // Another process may have added it while it was checked.
-        if (!store.accepts(e)) return null;
-        return store.add(e);
-      });
-      if (added == null) continue;
-      changed = added || changed;
-      taken.add(e);
+      // What came before what it follows (an event after the snapshot,
+      // before the snapshot's record): tried again while it helps.
+      if (later.isEmpty || taken.length == before) {
+        gap = later.isNotEmpty;
+        break;
+      }
+      todo = later;
     }
     if (taken.isNotEmpty) {
       _accepted.add(Accepted(taken, source, replicaChanged: changed));
@@ -283,6 +361,126 @@ class SyncNode {
     return policy.deviceMay(e, device, replica);
   }
 
+  /// This device's audience: what it receives of the family's events.
+  Audience get audience =>
+      Audience.of(replica[SyncKeys.device(deviceOfOrigin(deviceId))]);
+
+  /// Cuts the family's events per child, once, for a family linked before
+  /// 0.25, from a parent's device (which holds everything): its settings
+  /// are recorded again, each under the scope it concerns, signed by the
+  /// [parentKey] (a snapshot); then what came before is dropped everywhere
+  /// ([SyncKeys.epoch]). Whether it was done now.
+  ///
+  /// The snapshot keeps each entity's date, under origins of its own: it
+  /// never wins over a change this device has not received yet.
+  Future<bool> rebase(SigningKey parentKey) => _serial(() async {
+    if (replica[SyncKeys.epoch] != null || !audience.all) return false;
+    final floors = {
+      for (final e in store.heldVector.entries)
+        if (!isUsageOrigin(e.key) && scopeOfOrigin(e.key) == null)
+          e.key: e.value,
+    };
+    final tag = [
+      for (final b in randomBytes(3)) b.toRadixString(16).padLeft(2, '0'),
+    ].join();
+    final base = '${deviceOfOrigin(deviceId)}~snap$tag';
+    final entities = [
+      for (final e in replica.entities.entries)
+        if (e.key != SyncKeys.epoch)
+          (e.key, e.value, replica.lastWrite(e.key) ?? clock.now()),
+    ]..sort((a, b) => a.$3.compareTo(b.$3));
+    final made = <SyncEvent>[];
+    final next = <String, int>{};
+    for (final (key, value, hlc) in entities) {
+      final origin = scopedOrigin(base, policy.scopeOf(key, value, replica));
+      final seq = next[origin] = (next[origin] ?? 0) + 1;
+      made.add(
+        await signEvent(
+          origin: origin,
+          seq: seq,
+          hlc: hlc,
+          draft: EventDraft.put(key, value),
+          signer: Signer.parent,
+          key: parentKey,
+        ),
+      );
+    }
+    final changed = store.transaction(() {
+      var changed = false;
+      for (final e in made) {
+        changed = store.add(e) || changed;
+      }
+      return changed;
+    });
+    if (made.isNotEmpty) {
+      _accepted.add(Accepted(made, null, replicaChanged: changed));
+    }
+    await _emit([
+      EventDraft.put(SyncKeys.epoch, {
+        'id': tag,
+        'floors': floors,
+        'snapshot': next,
+      }),
+    ], parentKey: parentKey);
+    return true;
+  });
+
+  /// Whether [origin] holds a snapshot ([rebase]).
+  static bool isSnapshotOrigin(String origin) => origin.contains('~snap');
+
+  /// Records that this new family's events are cut per child from the
+  /// start: nothing to replace.
+  Future<void> startScoped(SigningKey parentKey) => emit([
+    EventDraft.put(SyncKeys.epoch, {
+      'id': b64(randomBytes(9)),
+      'floors': const <String, int>{},
+      'snapshot': const <String, int>{},
+    }),
+  ], parentKey: parentKey);
+
+  /// The note of the last [tidy] this node saw.
+  String? _tidied;
+
+  /// Removes from this device what it needs no more: what the snapshot
+  /// replaced (once it holds the snapshot), and what concerns other
+  /// children (on a child's device). Whether this device's data changed
+  /// since this node last asked (another process may have done it).
+  Future<bool> tidy() => _serial(() async {
+    final me = deviceOfOrigin(deviceId);
+    final registration = replica[SyncKeys.device(me)];
+    // Not a member yet (joining): nothing to tell.
+    if (registration == null) return false;
+    final audience = Audience.of(registration);
+    final epoch = replica[SyncKeys.epoch];
+    final note = '${audience.key}|${epoch?['id'] ?? ''}';
+    final done = store.meta('tidy');
+    var purgedNow = false;
+    if (done != note && epoch == null && audience.all) {
+      // Everything kept: nothing to remove.
+      store.setMeta('tidy', note);
+    } else if (done != note) {
+      if (epoch != null && !_holdsSnapshot(epoch, audience)) return false;
+      store.transaction(() {
+        store.purge(audience, ownDevice: me);
+        store.setMeta('tidy', note);
+      });
+      purgedNow = true;
+    }
+    final before = _tidied;
+    _tidied = note;
+    // Or done by another process since this node last looked.
+    return purgedNow || (before != null && before != note);
+  });
+
+  bool _holdsSnapshot(Map<String, Object?> epoch, Audience audience) {
+    for (final e in (epoch['snapshot'] as Map? ?? const {}).entries) {
+      final origin = e.key as String;
+      if (!audience.allowsOrigin(origin)) continue;
+      if (store.lastSeq(origin) < (e.value as num).toInt()) return false;
+    }
+    return true;
+  }
+
   Future<void> close() async {
     await _accepted.close();
     store.close();
@@ -320,7 +518,11 @@ Future<NewFamily> createFamily({
   SyncPolicy policy = const UsageOnlyPolicy(),
 }) async {
   final parentKey = await SigningKey.generate();
-  final root = FamilyRoot(familyId, parentKey.publicKey);
+  final root = FamilyRoot(
+    familyId,
+    parentKey.publicKey,
+    contentKey: b64(randomBytes(32)),
+  );
   final node = SyncNode(me: device, root: root, store: store, policy: policy);
   await node.emit([
     EventDraft.put(SyncKeys.family, {

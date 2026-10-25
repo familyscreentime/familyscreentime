@@ -77,7 +77,7 @@ class PlatformBridge(
                 val to = call.argument<Number>("to")?.toLong() ?: System.currentTimeMillis()
                 worker.execute {
                     val segments = try {
-                        usageHistory(from, to)
+                        usageHistory(from, to, call.argument<Boolean>("closeOpen") ?: false)
                     } catch (e: SecurityException) {
                         null
                     }
@@ -90,7 +90,7 @@ class PlatformBridge(
                 result.success(null)
             }
             "reloadMonitor" -> {
-                MonitorService.instance?.reload()
+                Enforcer.get(context).reloadMonitor()
                 result.success(null)
             }
             "deviceName" -> result.success("${Build.MANUFACTURER} ${Build.MODEL}")
@@ -108,21 +108,59 @@ class PlatformBridge(
                 } else {
                     ParentModeNotice.hide(context)
                 }
-                MonitorService.instance?.updateDeviceLock()
+                val enforcer = Enforcer.get(context)
+                enforcer.updateDeviceLock()
                 if (!on) {
                     // Leaving parent mode: the volume comes back under the
                     // cap, and the app in front is checked again.
-                    MonitorService.instance?.volume?.enforce()
-                    MonitorService.instance?.reload()
+                    enforcer.volume.enforce()
+                    enforcer.reloadMonitor()
                 }
                 result.success(null)
             }
+            "shareFile" -> result.success(
+                shareFile(
+                    call.argument<String>("path") ?: "",
+                    call.argument<String>("mime") ?: "application/octet-stream",
+                    call.argument<String>("subject") ?: "",
+                ),
+            )
             "disableDeviceAdmin" -> {
                 val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
                 dpm.removeActiveAdmin(ComponentName(context, AdminReceiver::class.java))
                 result.success(null)
             }
             else -> result.notImplemented()
+        }
+    }
+
+    /**
+     * Offers a file of the app's cache (an export) to the apps that take
+     * one, through the app's FileProvider.
+     */
+    private fun shareFile(path: String, mime: String, subject: String): Boolean {
+        return try {
+            val file = java.io.File(path)
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.files",
+                file,
+            )
+            val send = Intent(Intent.ACTION_SEND)
+                .setType(mime)
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .putExtra(Intent.EXTRA_SUBJECT, subject)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val chooser = Intent.createChooser(send, subject)
+            if (activity != null) {
+                activity.startActivity(chooser)
+            } else {
+                context.startActivity(chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            true
+        } catch (e: Exception) {
+            android.util.Log.w("FamilyScreenTime", "File not shared", e)
+            false
         }
     }
 
@@ -294,7 +332,8 @@ class PlatformBridge(
      * [from] and [to] (milliseconds). Android keeps these events about ten
      * days. Returns `null` without usage access.
      */
-    private fun usageHistory(from: Long, to: Long): List<Map<String, Any>>? {
+    /** [closeOpen]: the use still going on counts up to [to]. */
+    private fun usageHistory(from: Long, to: Long, closeOpen: Boolean = false): List<Map<String, Any>>? {
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val events = usm.queryEvents(from, to) ?: return null
         val out = ArrayList<Map<String, Any>>()
@@ -333,6 +372,7 @@ class PlatformBridge(
         }
         // Use still going on: up to the last pause, or not at all.
         pausedAt?.let { close(it) }
+        if (closeOpen) close(to)
         return out
     }
 

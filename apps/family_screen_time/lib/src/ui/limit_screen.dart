@@ -10,6 +10,7 @@ import '../controller.dart';
 import '../platform.dart';
 import 'group_editor.dart';
 import 'rule_editor.dart';
+import 'usage_screen.dart' show appIcon;
 import 'widgets.dart';
 
 /// Opens the view of [target].
@@ -267,19 +268,26 @@ class _AppPicker extends StatefulWidget {
 
 class _AppPickerState extends State<_AppPicker> {
   List<InstalledApp>? _apps;
+  Map<String, AppInfo> _info = const {};
   String _query = '';
 
   @override
   void initState() {
     super.initState();
     final c = widget.controller;
-    c.familyApps().then((apps) {
+    c.familyApps().then((apps) async {
       String name(InstalledApp a) =>
           c.appName(a.package, androidLabel: a.label).toLowerCase();
-      if (mounted) {
-        setState(
-          () => _apps = [...apps]..sort((a, b) => name(a).compareTo(name(b))),
-        );
+      if (!mounted) return;
+      setState(
+        () => _apps = [...apps]..sort((a, b) => name(a).compareTo(name(b))),
+      );
+      // Then the icons, from here or the other devices.
+      try {
+        final info = await c.appInfo([for (final a in apps) a.package]);
+        if (mounted) setState(() => _info = info);
+      } on Object {
+        // Without icons.
       }
     });
   }
@@ -322,6 +330,7 @@ class _AppPickerState extends State<_AppPicker> {
                     itemBuilder: (context, i) {
                       final app = shown[i];
                       return ListTile(
+                        leading: appIcon(_info[app.package], size: 36),
                         title: Text(
                           c.appName(app.package, androidLabel: app.label),
                         ),

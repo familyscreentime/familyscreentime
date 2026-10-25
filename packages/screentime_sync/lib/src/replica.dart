@@ -25,6 +25,16 @@ class EntityState {
   Hlc? deleted;
   final Map<String, FieldState> fields = {};
 
+  /// The last time anything was written to it.
+  Hlc? get lastWrite {
+    Hlc? last = created;
+    for (final f in fields.values) {
+      if (last == null || f.hlc > last) last = f.hlc;
+    }
+    if (deleted != null && (last == null || deleted! > last)) last = deleted;
+    return last;
+  }
+
   /// Created, and not removed since.
   bool get exists =>
       created != null && (deleted == null || created! > deleted!);
@@ -107,6 +117,9 @@ abstract class MergedState {
 
   /// Merges [e]; whether anything visible changed.
   bool apply(SyncEvent e);
+
+  /// When the entity at [key] was last written to; `null` if never.
+  Hlc? lastWrite(String key);
 }
 
 /// Merged entities kept in memory.
@@ -124,6 +137,9 @@ class Replica extends MergedState {
     final s = _entities[key];
     return s != null && s.exists ? s.value : null;
   }
+
+  @override
+  Hlc? lastWrite(String key) => _entities[key]?.lastWrite;
 
   @override
   Map<String, Map<String, Object?>> withPrefix(String prefix) => {

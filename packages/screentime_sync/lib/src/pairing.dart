@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'event.dart';
 import 'keys.dart';
+import 'log.dart';
 import 'node.dart';
 import 'session.dart';
 
@@ -113,8 +114,10 @@ Future<String?> welcomeDevice({
       }),
     ], parentKey: parentKey);
     await secure.send({'t': 'welcome', 'root': node.root.toJson()});
-    // Then the log, page by page, and the end of it.
-    for (final page in node.store.pagesFor(const {})) {
+    // Then the log, page by page, and the end of it: what the device
+    // receives (the family's, and its child's).
+    final to = Audience.of(node.replica[SyncKeys.device(id)]);
+    for (final page in node.store.pagesFor(const {}, to: to)) {
       await secure.send({
         't': 'events',
         'e': [for (final e in page) e.toJson()],

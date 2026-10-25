@@ -12,6 +12,7 @@ import 'dart:math';
 import 'package:path_provider/path_provider.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
+import 'family.dart' show usageHistoryDays;
 import 'self_limits.dart';
 
 /// Warnings before time runs out, by default.
@@ -254,6 +255,10 @@ class FamilyData {
   /// The Android settings only open in parent mode, even with time left.
   final bool settingsParentOnly;
 
+  /// Days the use of apps is kept on each device, for the statistics; 0:
+  /// for good. The rules look at [usageHistoryDays] at most.
+  final int usageKeptDays;
+
   const FamilyData({
     this.children = const [],
     this.config = const FamilyConfig(),
@@ -266,6 +271,7 @@ class FamilyData {
     this.selfLimitLog = const [],
     this.outOfTime = OutOfTime.settings,
     this.settingsParentOnly = false,
+    this.usageKeptDays = defaultUsageKeptDays,
   });
 
   FamilyData copyWith({
@@ -280,6 +286,7 @@ class FamilyData {
     List<SelfLimitEvent>? selfLimitLog,
     OutOfTime? outOfTime,
     bool? settingsParentOnly,
+    int? usageKeptDays,
   }) => FamilyData(
     children: children ?? this.children,
     config: config ?? this.config,
@@ -292,6 +299,7 @@ class FamilyData {
     selfLimitLog: selfLimitLog ?? this.selfLimitLog,
     outOfTime: outOfTime ?? this.outOfTime,
     settingsParentOnly: settingsParentOnly ?? this.settingsParentOnly,
+    usageKeptDays: usageKeptDays ?? this.usageKeptDays,
   );
 
   Child? child(String? id) {
@@ -329,6 +337,7 @@ class FamilyData {
       'selfLimitLog': [for (final e in selfLimitLog) e.toJson()],
     'outOfTime': outOfTime.name,
     if (settingsParentOnly) 'settingsParentOnly': true,
+    'usageKeptDays': usageKeptDays,
   };
 
   factory FamilyData.fromJson(Json j) => FamilyData(
@@ -362,8 +371,16 @@ class FamilyData {
     outOfTime:
         OutOfTime.values.asNameMap()[j['outOfTime']] ?? OutOfTime.settings,
     settingsParentOnly: j['settingsParentOnly'] as bool? ?? false,
+    usageKeptDays:
+        (j['usageKeptDays'] as num?)?.toInt() ?? defaultUsageKeptDays,
   );
 }
+
+/// Days the use of apps is kept by default (see [FamilyData.usageKeptDays]).
+const defaultUsageKeptDays = 365;
+
+/// Choices offered for [FamilyData.usageKeptDays].
+const usageKeptChoices = [90, 180, 365, 730, 0];
 
 /// The app currently in use, saved regularly so a crash loses little.
 class OpenSegment {
@@ -513,6 +530,53 @@ class LocalStore {
         await tmp.rename(f.path);
       }
     }
+  }
+
+  /// The day [pruneUsage] last ran in this process, with what it kept.
+  static String? _pruned;
+
+  /// Forgets the use of apps older than [keptDays] days (0: keeps it all),
+  /// recorded and imported; at most once a day.
+  Future<int> pruneUsage(int keptDays, {DateTime? now}) async {
+    if (keptDays <= 0) return 0;
+    final today = dayOf(now ?? DateTime.now());
+    final note = '${dir.path}|${dayToJson(today)}|$keptDays';
+    if (_pruned == note) return 0;
+    _pruned = note;
+    // Never less than the rules look at.
+    final days = keptDays < usageHistoryDays ? usageHistoryDays : keptDays;
+    final before = '${dayToJson(addDays(today, -days))}.jsonl';
+    var removed = 0;
+    for (final d in [_usageDir, _importedDir]) {
+      if (!await d.exists()) continue;
+      await for (final f in d.list()) {
+        final name = f.uri.pathSegments.last;
+        if (f is! File || !name.endsWith('.jsonl')) continue;
+        if (name.compareTo(before) >= 0) continue;
+        try {
+          await f.delete();
+          removed++;
+        } on Object {
+          // Tried again tomorrow.
+        }
+      }
+    }
+    return removed;
+  }
+
+  /// The first day with use of apps held here, recorded or imported.
+  Future<DateTime?> firstUsageDay() async {
+    String? first;
+    for (final d in [_usageDir, _importedDir]) {
+      if (!await d.exists()) continue;
+      await for (final f in d.list()) {
+        final name = f.uri.pathSegments.last;
+        if (f is! File || !name.endsWith('.jsonl')) continue;
+        if (first == null || name.compareTo(first) < 0) first = name;
+      }
+    }
+    if (first == null) return null;
+    return DateTime.tryParse(first.substring(0, first.length - 6));
   }
 
   /// Appends a closed segment to the file of the day it starts on.

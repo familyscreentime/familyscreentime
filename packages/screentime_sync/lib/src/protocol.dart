@@ -6,18 +6,30 @@ library;
 import 'dart:async';
 
 import 'event.dart';
+import 'log.dart';
 import 'node.dart';
 import 'session.dart';
 
 /// Events sent per message.
 const eventsPerMessage = 200;
 
-class SyncSession {
+class SyncSession implements RemoteSource {
   final SyncNode node;
   final SecureChannel channel;
 
   /// The other device's vector, as last told.
   Map<String, int> peerVector = {};
+
+  /// Whether the other device understands origins cut per child (it says
+  /// so in its hello, from 0.25).
+  bool _peerScoped = false;
+
+  /// What the other device receives: the family's events, and those of
+  /// its child (all, for a parent's device).
+  Audience get audience => Audience.of(
+    node.replica[SyncKeys.device(deviceOfOrigin(peerId))],
+    scoped: _peerScoped,
+  );
 
   /// Called with each message that is not part of the sync itself
   /// (commands, acknowledgements…).
@@ -41,9 +53,17 @@ class SyncSession {
   void start() {
     // New events, made here or received from another device, are passed
     // on as they come.
+    final me = SyncKeys.device(deviceOfOrigin(node.deviceId));
     _forward = node.accepted.listen((a) {
       if (identical(a.source, this)) return;
-      _sendEvents(a.events);
+      final to = audience;
+      _sendEvents([
+        for (final e in a.events)
+          if (to.allows(e)) e,
+      ]);
+      // This device now belongs to another child, or to the parents: what
+      // it receives changes, so it says again what it has.
+      if (a.events.any((e) => e.key == me)) _sendHello();
     });
     channel.messages.listen(
       _onMessage,
@@ -53,9 +73,11 @@ class SyncSession {
     _sendHello();
   }
 
-  void _sendHello() => channel.send({'t': 'hello', 'v': node.store.vector});
+  void _sendHello() =>
+      channel.send({'t': 'hello', 'v': node.store.vector, 'c': 1});
 
   void _sendEvents(List<SyncEvent> events) {
+    if (events.isEmpty) return;
     for (var i = 0; i < events.length; i += eventsPerMessage) {
       final chunk = events.skip(i).take(eventsPerMessage);
       channel.send({
@@ -72,7 +94,8 @@ class SyncSession {
           for (final e in (m['v'] as Map).entries)
             e.key as String: (e.value as num).toInt(),
         };
-        for (final page in node.store.pagesFor(peerVector)) {
+        _peerScoped = m['c'] == 1;
+        for (final page in node.store.pagesFor(peerVector, to: audience)) {
           _sendEvents(page);
         }
         channel.send({'t': 'sent'});

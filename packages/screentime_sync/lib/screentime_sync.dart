@@ -12,6 +12,7 @@ export 'src/log.dart';
 export 'src/node.dart';
 export 'src/pairing.dart';
 export 'src/protocol.dart';
+export 'src/relay.dart';
 export 'src/replica.dart';
 export 'src/session.dart';
 export 'src/sqlite_store.dart';

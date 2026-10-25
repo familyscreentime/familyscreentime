@@ -91,8 +91,10 @@ que soit l'option choisie.
 
 Depuis la 0.20, les appareils reliés échangent des données entre eux : le
 formulaire doit en tenir compte. Ce qui circule, uniquement entre les
-appareils que le parent a reliés, sur le Wi-Fi de la maison, chiffré de
-bout en bout, sans aucun serveur de l'éditeur :
+appareils que le parent a reliés, chiffré de bout en bout, sans aucun
+serveur de l'éditeur : sur le Wi-Fi de la maison, et depuis la 0.23 par un
+serveur relais que la famille héberge elle-même (ou une personne de
+confiance), si le parent en configure un :
 
 - le prénom des enfants ;
 - les règles, groupes d'applis, bonus, blocages et le temps hors appareil ;
@@ -111,7 +113,16 @@ end-to-end encryption does not need to be disclosed. » Condition : aucun
 intermédiaire, développeur compris, ne peut lire les données ; seuls
 l'expéditeur et le destinataire ont les clés. C'est le cas ici : chaque
 session entre deux appareils est chiffrée avec des clés éphémères
-(X25519, ChaCha20-Poly1305) connues d'eux seuls, sans serveur ni relais.
+(X25519, ChaCha20-Poly1305) connues d'eux seuls. Par le serveur relais,
+chaque événement est chiffré sur l'appareil avant de partir
+(XChaCha20-Poly1305), avec une clé que seuls les appareils reliés
+détiennent : le serveur stocke et transmet des données chiffrées, que ni
+lui ni son administrateur ne peuvent lire. Ce serveur n'est pas celui du
+développeur, qui n'en exploite aucun.
+
+Les exports (CSV, ActivityWatch) sont des fichiers que le parent remet
+lui-même à l'appli de son choix par le menu de partage d'Android : une
+action de l'utilisateur, pas une collecte par l'application.
 
 Réponses :
 
@@ -131,9 +142,8 @@ les applis › Interactions avec l'appli** et **Applis installées**,
 partagées non, collecte facultative, finalité **Fonctionnalités de
 l'appli**.
 
-À revoir avec le serveur auto-hébergé : il restera hors exemption s'il
-peut lire les données ; il faudra donc qu'il ne stocke que des événements
-chiffrés de bout en bout.
+Le serveur relais ne stocke que des événements chiffrés de bout en bout :
+l'exemption s'applique.
 
 ### Déclaration relative à l'API d'accessibilité
 
@@ -143,9 +153,11 @@ chiffrés de bout en bout.
 
 > Family Screen Time is a parental control app. Its accessibility service
 > detects which app is in the foreground (package and activity names of
-> window changes), so that screen time is counted and the limits set by the
-> parent are applied; it sends the user to the home screen when an app is
-> blocked; and it shows the countdown, warnings, block notices and the
+> window changes) and which apps have windows on screen (package names of
+> the window list: split screen, picture in picture), so that screen time
+> is counted and the limits set by the parent are applied; it sends the
+> user to the home screen when an app is blocked, and dismisses the
+> picture-in-picture window of a blocked app; and it shows the countdown, warnings, block notices and the
 > optional device lock as accessibility overlays, which stay visible over
 > full-screen apps. When the parent turns on uninstall protection, the
 > service also closes the Android settings pages that would switch the app
@@ -153,8 +165,9 @@ chiffrés de bout en bout.
 > Android's security page offering to remove its access). For this, screen
 > content is read only on Android's security and permission pages. No data
 > is stored beyond usage times, which stay on the device, or go only to the
-> user's other devices the parent linked (over the home Wi-Fi, end-to-end
-> encrypted, never to the developer or third parties). Before the
+> user's other devices the parent linked (over the home Wi-Fi, or through a
+> relay server the family hosts itself, always end-to-end encrypted, never
+> to the developer or third parties). Before the
 > service is turned on, an in-app disclosure explains this and asks for
 > consent. The source code is public: https://github.com/familyscreentime/familyscreentime
 
@@ -196,8 +209,9 @@ chiffrés de bout en bout.
 - INTERNET, ACCESS_NETWORK_STATE, CHANGE_WIFI_MULTICAST_STATE : les
   appareils reliés, facultatifs, se trouvent sur le Wi-Fi de la maison
   (DNS-SD) et échangent réglages et usage directement, chiffrés de bout en
-  bout. Aucun serveur n'est contacté ; un appareil relié à aucun autre
-  n'utilise pas le réseau.
+  bout, et avec le serveur relais configuré par le parent, s'il y en a un
+  (celui de la famille, jamais celui du développeur). Un appareil relié à
+  aucun autre n'utilise pas le réseau.
 
 ## 3. Fiche du Play Store
 

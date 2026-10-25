@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 
 import 'keys.dart';
+import 'log.dart';
 import 'node.dart';
 import 'pairing.dart';
 import 'protocol.dart';

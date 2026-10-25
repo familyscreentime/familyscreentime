@@ -91,13 +91,20 @@ class PlatformApi {
   /// Foreground sessions rebuilt from Android's own usage history, between
   /// [from] and [to]. Android keeps about ten days of it. `null` without
   /// usage access.
+  ///
+  /// [closeOpen]: the use still going on counts up to [to].
   Future<List<({String package, DateTime start, DateTime end})>?> usageHistory(
     DateTime from,
-    DateTime to,
-  ) async {
+    DateTime to, {
+    bool closeOpen = false,
+  }) async {
     final list = await _channel.invokeListMethod<Map<Object?, Object?>>(
       'usageHistory',
-      {'from': from.millisecondsSinceEpoch, 'to': to.millisecondsSinceEpoch},
+      {
+        'from': from.millisecondsSinceEpoch,
+        'to': to.millisecondsSinceEpoch,
+        if (closeOpen) 'closeOpen': true,
+      },
     );
     if (list == null) return null;
     return [
@@ -136,6 +143,21 @@ class PlatformApi {
   }
 
   Future<void> reloadMonitor() => _channel.invokeMethod('reloadMonitor');
+
+  /// Offers the file at [path] to the apps that take one (Drive, mail…).
+  /// Whether it could be offered.
+  Future<bool> shareFile(String path, String mime, String subject) async {
+    try {
+      return await _channel.invokeMethod<bool>('shareFile', {
+            'path': path,
+            'mime': mime,
+            'subject': subject,
+          }) ??
+          false;
+    } on Object {
+      return false;
+    }
+  }
 
   /// While parent mode is on (for [duration] at most), the Android settings
   /// pages that could switch the app off may be opened, and a notification

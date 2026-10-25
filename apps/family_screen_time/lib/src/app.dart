@@ -18,12 +18,14 @@ class FamilyScreenTimeApp extends StatefulWidget {
   State<FamilyScreenTimeApp> createState() => _FamilyScreenTimeAppState();
 }
 
-class _FamilyScreenTimeAppState extends State<FamilyScreenTimeApp> {
+class _FamilyScreenTimeAppState extends State<FamilyScreenTimeApp>
+    with WidgetsBindingObserver {
   AppController? _controller;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     AppController.load().then((c) {
       // "Leave parent mode" from the notification.
       PlatformApi.listen(
@@ -34,8 +36,16 @@ class _FamilyScreenTimeAppState extends State<FamilyScreenTimeApp> {
     });
   }
 
+  /// Back on screen: the relay is asked at once (the app may have slept
+  /// for hours).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _controller?.resumed();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     super.dispose();
   }

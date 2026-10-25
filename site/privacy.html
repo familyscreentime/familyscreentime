@@ -18,8 +18,8 @@
 <main class="wrap">
 
 <h1>Privacy policy</h1>
-<p class="muted">Family Screen Time Android app (org.familyscreentime). Last updated: 23 October 2026.</p>
-<div class="card"><p><strong>In short:</strong> Family Screen Time collects no data. Everything the app records stays on the device it is installed on. Nothing is sent to the publisher or to third parties: no account, no ads, no analytics, no third-party services. If the parent links several devices, they exchange this data with each other, directly over the home Wi-Fi network, end-to-end encrypted.</p></div>
+<p class="muted">Family Screen Time Android app (org.familyscreentime). Last updated: 25 October 2026.</p>
+<div class="card"><p><strong>In short:</strong> Family Screen Time collects no data. Everything the app records stays on the device it is installed on. Nothing is sent to the publisher or to third parties: no account, no ads, no analytics, no third-party services. If the parent links several devices, they exchange this data with each other, end-to-end encrypted: directly over the home Wi-Fi, or through a relay server the family hosts itself, which cannot read it.</p></div>
 
 <h2>Who we are</h2>
 <p>Family Screen Time is free software (MIT licence) published at familyscreentime.org. Questions: <a href="mailto:contact@familyscreentime.org">contact@familyscreentime.org</a>.</p>
@@ -34,13 +34,19 @@
 <tr><td>The parent code, stored as a hash (PBKDF2), never in clear; the linked devices' key, encrypted with that code (Argon2id)</td><td>To protect the settings, and to sign the parent's decisions for the other linked devices.</td></tr>
 <tr><td>The limits the child sets for themselves and their history</td><td>To apply them, and show the parent how they are kept. The child is told.</td></tr>
 </table>
-<p>This data is stored in the app's private storage and erased when the app is uninstalled.</p>
+<p>This data is stored in the app's private storage. The use of apps is kept as long as the parent chooses (a year by default, at least 40 days for the rules); everything is erased when the app is uninstalled.</p>
 
 <h2>Linked devices</h2>
-<p>This is optional: a device set up on its own talks to no other device. The parent can link devices (a child's tablet and phone, a parent's phone, for example), in parent mode and by comparing a code shown on both screens. They then share the settings, the time used, the list of linked devices (name, role, child) and, for each child's device, the names and icons of the apps installed, so the parent can limit them from another device. This happens directly between the devices, on the home's local network: end-to-end encrypted, and each device checks that the parent's decisions are signed with the linked devices' key. No server of the publisher is involved. A device unlinked or removed is no longer synced; an unlinked device keeps only its child's data and the time used on it.</p>
+<p>This is optional: a device set up on its own talks to no other device. The parent can link devices (a child's tablet and phone, a parent's phone, for example), in parent mode and by comparing a code shown on both screens. They then share the settings, the time used, the list of linked devices (name, role, child) and, for each child's device, the names and icons of the apps installed, so the parent can limit them from another device. This happens directly between the devices, on the home's local network: end-to-end encrypted, and each device checks that the parent's decisions are signed with the linked devices' key. No server of the publisher is involved. A child's device only receives what concerns the whole family and its own child; the parents' devices receive everything. A device unlinked or removed is no longer synced; an unlinked device keeps only its child's data and the time used on it.</p>
+
+<h2>Relay server (optional)</h2>
+<p>So that linked devices also sync away from home, the parent can set up a relay server: software the family installs on its own web hosting, or that someone it trusts makes available by invitation. The publisher runs none. Every piece of data is encrypted on the devices before it is sent (XChaCha20-Poly1305), with a key only the linked devices know: neither the server nor its administrator can read it. The server only sees random device ids, their public keys, what each device receives (as children's ids, with no first names), numbers, times and the size of the data. It deletes the use of apps after 47 days; the rest is kept while the family uses it. Its administrator can delete a family and all its data; the family can stop using it at any time.</p>
+
+<h2>Export</h2>
+<p>The parent can export the use of apps (child, device, app, times), as CSV or for the ActivityWatch software. The file is handed to Android's share menu: the parent chooses where it goes (Drive, email…), and what then becomes of it is up to the app chosen.</p>
 
 <h2>The accessibility service</h2>
-<p>The app uses Android's accessibility service to know which app is on screen, to close a blocked app, and to show warnings, the countdown and the lock screen over other apps. When the parent turns on uninstall protection, it also closes the settings pages that would switch the app off. To recognise them, it reads screen content only on Android's security and permission pages, and stores nothing. The user is informed and agrees before this service is turned on.</p>
+<p>The app uses Android's accessibility service to know which app is on screen, to close a blocked app, and to show warnings, the countdown and the lock screen over other apps. When the parent turns on uninstall protection, it also closes the settings pages that would switch the app off. To recognise them, it reads screen content only on Android's security and permission pages, and stores nothing. It also lists the app windows on screen, reading only their names, to count apps shown side by side and to close the small video window of a blocked app. The user is informed and agrees before this service is turned on.</p>
 
 <h2>Permissions</h2>
 <ul>
@@ -48,22 +54,22 @@
 <li><b>Usage access</b>: usage history; knowing the app on screen when accessibility is off.</li>
 <li><b>Display over other apps</b>: block screen, countdown.</li>
 <li><b>Notifications</b>: countdown, warnings, parent mode.</li>
-<li><b>Network</b> (internet, network state, Wi-Fi multicast): find the linked devices on the home network and exchange with them.</li>
+<li><b>Network</b> (internet, network state, Wi-Fi multicast): find the linked devices on the home network and exchange with them, and with the relay server if the parent set one up.</li>
 <li><b>Device administrator</b> (optional): preventing uninstallation without the parent. No other administration policy is used.</li>
 <li><b>Start at boot, foreground service, exemption from battery optimisation</b>: keeping monitoring running.</li>
 </ul>
 
 <h2>Sharing</h2>
-<p>No data is shared with the publisher or third parties, sold or transferred, except between the devices the parent has linked. The app contains no tracking tools.</p>
+<p>No data is shared with the publisher or third parties, sold or transferred, except between the devices the parent has linked, with the relay server they chose (which cannot read it), and in exports they send themselves. The app contains no tracking tools.</p>
 
 <h2>Children</h2>
 <p>The app is designed to be installed by a parent on their child's device. It collects no personal data about the child for the publisher. The child sees their rules and time left, and knows that the parent sees the history of their own limits.</p>
 
 <h2>Changes</h2>
-<p>A future version may also sync linked devices through a server the family hosts itself. This policy will be updated before any version that sends data anywhere other than the linked devices.</p>
+<p>This policy will be updated before any version that would change what data leaves the device, or where it goes.</p>
 
 <h2>Your rights</h2>
-<p>As no data leaves your devices, the publisher holds no data about you. You can erase all data by uninstalling the app or clearing its data in Android's settings. Questions: <a href="mailto:contact@familyscreentime.org">contact@familyscreentime.org</a>.</p>
+<p>The publisher holds no data about you. You can erase all data by uninstalling the app or clearing its data in Android's settings; on a relay server, by asking its administrator to delete your family (or doing it yourself if it is yours). Questions: <a href="mailto:contact@familyscreentime.org">contact@familyscreentime.org</a>.</p>
 
 </main>
 <footer class="wrap"><a href="privacy.html">Privacy policy</a> · <a href="https://github.com/familyscreentime/familyscreentime">Free software (MIT licence)</a> · contact@familyscreentime.org</footer>

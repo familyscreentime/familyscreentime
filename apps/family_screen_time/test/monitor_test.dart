@@ -98,6 +98,53 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test(
+    'use while the monitor was stopped comes from Android\'s history',
+    () async {
+      // The monitor ran until 20 minutes ago, then Android stopped it while
+      // a game was in front.
+      final stopped = DateTime.now().subtract(const Duration(minutes: 20));
+      await store.appendUsage(
+        UsageSegment.device(
+          childId: 'emma',
+          deviceId: 'tablet',
+          appId: 'minecraft',
+          start: stopped.subtract(const Duration(minutes: 5)),
+          end: stopped,
+        ),
+      );
+      Map<Object?, Object?>? asked;
+      const platform = MethodChannel('org.familyscreentime/platform');
+      messenger.setMockMethodCallHandler(platform, (call) async {
+        if (call.method != 'usageHistory') return null;
+        asked = call.arguments as Map<Object?, Object?>;
+        return [
+          {
+            'package': 'minecraft',
+            'start': stopped
+                .subtract(const Duration(minutes: 30))
+                .millisecondsSinceEpoch,
+            'end': DateTime.now().millisecondsSinceEpoch,
+          },
+        ];
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(platform, null));
+      final other = Monitor(store);
+      await other.start();
+      expect(asked?['closeOpen'], isTrue);
+      expect(asked?['from'], stopped.millisecondsSinceEpoch);
+      final usage = await store.loadUsage(
+        since: DateTime.now().subtract(const Duration(days: 1)),
+      );
+      final total = usage
+          .where((u) => u.deviceId == 'tablet')
+          .fold(Duration.zero, (t, u) => t + u.end.difference(u.start));
+      // 5 minutes recorded, 20 filled in, nothing twice.
+      expect(total.inMinutes, inInclusiveRange(24, 25));
+      other.dispose();
+    },
+  );
+
   test('on a parent\'s device, the monitor stops at once', () async {
     await store.saveSettings(
       const AppSettings(
@@ -120,6 +167,39 @@ void main() {
     expect(block, hasLength(1));
     final args = block.single.arguments as Map<Object?, Object?>;
     expect(args['message'], contains('horaires'));
+  });
+
+  test('a blocked app beside the one in front is closed too', () async {
+    await send('foreground', {'package': 'youtube'});
+    expect(calls.where((c) => c.method == 'block'), isEmpty);
+    // Split screen: Minecraft, never allowed, in the other half.
+    await send('visible', {
+      'packages': ['minecraft', 'youtube'],
+    });
+    final block = calls.where((c) => c.method == 'block').toList();
+    expect(block, hasLength(1));
+    expect((block.single.arguments as Map)['package'], 'minecraft');
+    // Not again at once.
+    await send('visible', {
+      'packages': ['minecraft', 'youtube'],
+    });
+    expect(calls.where((c) => c.method == 'block'), hasLength(1));
+  });
+
+  test('an app beside the one in front is recorded too', () async {
+    await send('foreground', {'package': 'youtube'});
+    await send('visible', {
+      'packages': ['notes', 'youtube'],
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    // The other half comes in front: both still on screen.
+    await send('foreground', {'package': 'notes'});
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    await send('screen', {'on': false});
+    final today = await store.loadUsage(since: DateTime.now());
+    final apps = [for (final u in today) u.appId];
+    expect(apps.where((a) => a == 'youtube'), hasLength(2));
+    expect(apps.where((a) => a == 'notes'), hasLength(2));
   });
 
   test('an app without rules gets the "no limit" countdown', () async {
@@ -201,7 +281,7 @@ void main() {
     await send('screen', {'on': false});
     final live = await ui.readOthers();
     expect(live.single.data['appId'], 'youtube');
-    expect(live.single.origin, 'tablet#usage');
+    expect(live.single.origin, 'tablet@emma#usage');
   });
 
   test('a reload picks up new rules', () async {

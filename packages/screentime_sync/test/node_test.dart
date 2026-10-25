@@ -129,7 +129,7 @@ void main() {
       }),
     ]);
     await settle();
-    expect(phone.store.lastSeq('laptop#usage'), 1);
+    expect(phone.store.lastSeq('laptop@#usage'), 1);
   });
 
   test('a child device cannot pass itself off as the parent', () async {
@@ -287,7 +287,7 @@ void main() {
         'deviceId': 'tablet',
       }),
     ]);
-    expect(usage.origin, 'tablet#usage');
+    expect(usage.origin, 'tablet@#usage');
     expect((await ui.readOthers()).single.id, usage.id);
     expect(await service.readOthers(), isEmpty);
     await ui.close();

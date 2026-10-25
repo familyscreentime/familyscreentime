@@ -56,9 +56,12 @@
             android:taskAffinity="org.familyscreentime.block"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
 
+        <!-- The rule engine, in its own process: Android may stop it when
+             memory runs short, while the main one keeps blocking. -->
         <service
             android:name=".MonitorService"
             android:exported="false"
+            android:process=":monitor"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
@@ -77,6 +80,10 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+
+        <service
+            android:name=".EnforcerService"
+            android:exported="false" />
 
         <service
             android:name=".Watchdog"
@@ -113,6 +120,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Exports of the use of apps, offered to other apps. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
     <queries>

@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS entities (
   key TEXT PRIMARY KEY,
   state TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 ''';
 
 class SqliteSyncStore extends SyncStore {
@@ -74,13 +78,13 @@ class SqliteSyncStore extends SyncStore {
   MergedState get merged => _merged;
 
   @override
-  Vector get vector => {
+  Vector get heldVector => {
     for (final r in db.select('SELECT origin, last FROM heads'))
       r['origin'] as String: r['last'] as int,
   };
 
   @override
-  int lastSeq(String origin) {
+  int heldSeq(String origin) {
     final rows = db.select('SELECT last FROM heads WHERE origin = ?', [origin]);
     return rows.isEmpty ? 0 : rows.first['last'] as int;
   }
@@ -134,7 +138,9 @@ class SqliteSyncStore extends SyncStore {
       'ON CONFLICT (origin) DO UPDATE SET last = excluded.last',
       [e.origin, e.seq],
     );
-    return _merged.apply(e);
+    final changed = _merged.apply(e);
+    if (e.key == epochKey) forgetFloors();
+    return changed;
   });
 
   static SyncEvent _event(Row r) => SyncEvent.fromJson(
@@ -146,20 +152,41 @@ class SqliteSyncStore extends SyncStore {
     Vector peer, {
     Hlc? after,
     int limit = defaultPage,
+    Audience to = Audience.everything,
   }) {
-    // Per origin held: what comes after the peer's last.
-    final origins = vector.keys.toList();
-    if (origins.isEmpty) return const [];
-    final conditions = [
-      for (final _ in origins) '(origin = ? AND seq > ?)',
-    ].join(' OR ');
-    final args = <Object?>[
-      for (final o in origins) ...[o, peer[o] ?? 0],
-    ];
+    // Per origin held and received there: what comes after the peer's
+    // last (and after what the snapshot replaced).
+    final conditions = <String>[];
+    final args = <Object?>[];
+    for (final o in heldVector.keys) {
+      if (!to.allowsOrigin(o)) continue;
+      final from = fromFor(peer, o);
+      if (!to.all && isUsageOrigin(o) && scopeOfOrigin(o) == null) {
+        // Use recorded before 0.25: only the child's.
+        conditions.add(
+          "(origin = ? AND seq > ? AND json_extract(body, '\$.d.childId') = ?)",
+        );
+        args.addAll([o, from, to.child]);
+      } else {
+        conditions.add('(origin = ? AND seq > ?)');
+        args.addAll([o, from]);
+      }
+    }
+    if (conditions.isEmpty) return const [];
     final rows = db.select(
-      'SELECT body FROM events WHERE ($conditions)'
+      'SELECT body FROM events WHERE (${conditions.join(' OR ')})'
       '${after == null ? '' : ' AND hlc > ?'} ORDER BY hlc LIMIT ?',
       [...args, if (after != null) after.pack(), limit],
+    );
+    return [for (final r in rows) _event(r)];
+  }
+
+  @override
+  List<SyncEvent> lastEvents(String origin, {int limit = 100, int? before}) {
+    final rows = db.select(
+      'SELECT body FROM events WHERE origin = ?'
+      '${before == null ? '' : ' AND seq < ?'} ORDER BY seq DESC LIMIT ?',
+      [origin, ?before, limit],
     );
     return [for (final r in rows) _event(r)];
   }
@@ -177,6 +204,7 @@ class SqliteSyncStore extends SyncStore {
       if (!_own.remove(n)) found.add(_event(r));
     }
     _own.clear();
+    if (found.any((e) => e.key == epochKey)) forgetFloors();
     return found;
   }
 
@@ -188,6 +216,57 @@ class SqliteSyncStore extends SyncStore {
     );
     return db.updatedRows;
   }
+
+  @override
+  void purge(Audience keep, {required String ownDevice}) => transaction(() {
+    final floors = this.floors;
+    for (final o in heldVector.keys) {
+      final scope = scopeOfOrigin(o);
+      if (!isUsageOrigin(o) && scope == null) {
+        final floor = floors[o] ?? 0;
+        if (floor > 0) {
+          db.execute('DELETE FROM events WHERE origin = ? AND seq <= ?', [
+            o,
+            floor,
+          ]);
+        }
+      } else if (scope != null && deviceOfOrigin(o) == ownDevice) {
+        continue;
+      } else if (!keep.allowsOrigin(o)) {
+        db.execute('DELETE FROM events WHERE origin = ?', [o]);
+        db.execute('DELETE FROM heads WHERE origin = ?', [o]);
+      } else if (!keep.all && scope == null) {
+        // Use recorded before 0.25: only the child's is kept.
+        db.execute(
+          "DELETE FROM events WHERE origin = ? AND "
+          "json_extract(body, '\$.d.childId') IS NOT ?",
+          [o, keep.child],
+        );
+      }
+    }
+    // Merged again from what is left.
+    db.execute('DELETE FROM entities');
+    final rows = db.select(
+      'SELECT body FROM events WHERE usage_end IS NULL ORDER BY hlc',
+    );
+    for (final r in rows) {
+      _merged.apply(_event(r));
+    }
+    forgetFloors();
+  });
+
+  @override
+  String? meta(String key) {
+    final rows = db.select('SELECT value FROM meta WHERE key = ?', [key]);
+    return rows.isEmpty ? null : rows.first['value'] as String;
+  }
+
+  @override
+  void setMeta(String key, String value) => db.execute(
+    'INSERT INTO meta (key, value) VALUES (?, ?) '
+    'ON CONFLICT (key) DO UPDATE SET value = excluded.value',
+    [key, value],
+  );
 
   @override
   void close() => db.close();
@@ -222,6 +301,9 @@ class _SqliteMerged extends MergedState {
     }
     return changed;
   }
+
+  @override
+  Hlc? lastWrite(String key) => _state(key)?.lastWrite;
 
   @override
   Map<String, Object?>? operator [](String key) {

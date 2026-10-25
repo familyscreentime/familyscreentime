@@ -27,11 +27,73 @@ class UsageScreen extends StatefulWidget {
   State<UsageScreen> createState() => _UsageScreenState();
 }
 
+/// The devices [childId] used in [history], by name.
+List<String> devicesOf(
+  List<UsageSegment> history,
+  String childId,
+  Map<String, String> names,
+) {
+  final ids = {
+    for (final s in history)
+      if (s.childId == childId && !s.isInjected && s.deviceId != null)
+        s.deviceId!,
+  }.toList();
+  String name(String id) => (names[id] ?? id).toLowerCase();
+  return ids..sort((a, b) => name(a).compareTo(name(b)));
+}
+
+/// Name of device [id], or the start of its id.
+String deviceLabel(Map<String, String> names, String id) =>
+    names[id] ?? (id.length > 8 ? id.substring(0, 8) : id);
+
+/// One chip per device, and one for all of them ([selected] `null`);
+/// [totals], when given, after each name.
+Widget deviceChips(
+  S s, {
+  required List<String> devices,
+  required Map<String, String> names,
+  required String? selected,
+  required void Function(String?) onSelected,
+  Map<String?, Duration> totals = const {},
+}) {
+  String label(String? id, String name) =>
+      totals[id] == null ? name : '$name · ${s.duration(totals[id]!)}';
+  return SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: Row(
+      children: [
+        for (final id in <String?>[null, ...devices])
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(
+                label(
+                  id,
+                  id == null ? s.t('allDevices') : deviceLabel(names, id),
+                ),
+              ),
+              selected: selected == id,
+              onSelected: (_) => onSelected(id),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
 class _UsageScreenState extends State<UsageScreen> {
   int _days = 1;
+
+  /// The device shown; `null`: all of them.
+  String? _device;
+  Map<String, String> _names = const {};
   List<UsageSegment>? _history;
   DateTime? _importedUntil;
   Map<String, AppInfo> _info = const {};
+
+  /// Apps not counted: system components, home screens.
+  Set<String>? _excluded;
 
   @override
   void initState() {
@@ -41,6 +103,8 @@ class _UsageScreenState extends State<UsageScreen> {
 
   Future<void> _load() async {
     final c = widget.controller;
+    _excluded = await c.usageExcluded();
+    _names = await c.deviceNames();
     await c.importHistoryIfNeeded();
     final since = addDays(dayOf(DateTime.now()), -usageHistoryDays);
     final imported = await c.store.loadImported(since: since);
@@ -82,13 +146,26 @@ class _UsageScreenState extends State<UsageScreen> {
           : ListenableBuilder(
               listenable: c,
               builder: (context, _) {
-                final report = buildUsageReport(
-                  history,
-                  childId: c.childId ?? '',
-                  now: DateTime.now(),
+                final child = c.childId ?? '';
+                final now = DateTime.now();
+                final exclude = _excluded ?? c.family.config.neverBlocked;
+                UsageReport reportOf(String? device) => buildUsageReport(
+                  device == null
+                      ? history
+                      : [
+                          for (final u in history)
+                            if (u.deviceId == device) u,
+                        ],
+                  childId: child,
+                  now: now,
                   days: _days,
-                  exclude: c.family.config.neverBlocked,
+                  exclude: exclude,
+                  together:
+                      c.family.config.counting == SimultaneousCounting.elapsed,
                 );
+                final devices = devicesOf(history, child, _names);
+                final device = devices.contains(_device) ? _device : null;
+                final report = reportOf(device);
                 return RefreshIndicator(
                   onRefresh: _load,
                   child: ListView(
@@ -111,6 +188,21 @@ class _UsageScreenState extends State<UsageScreen> {
                               setState(() => _days = v.first),
                         ),
                       ),
+                      // Several devices: each one's time, and its apps.
+                      if (devices.length > 1) ...[
+                        const SizedBox(height: 12),
+                        deviceChips(
+                          s,
+                          devices: devices,
+                          names: _names,
+                          selected: device,
+                          onSelected: (d) => setState(() => _device = d),
+                          totals: {
+                            for (final d in <String?>[null, ...devices])
+                              d: d == device ? report.total : reportOf(d).total,
+                          },
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -554,6 +646,14 @@ Widget dayChart(
           : null,
   ],
   highlight: [for (final d in days) d.weekday >= DateTime.saturday],
+  s: s,
+);
+
+/// Bars for [values], with [labels] under some of them.
+Widget barChart(S s, List<Duration> values, List<String?> labels) => _Bars(
+  values: values,
+  labels: labels,
+  highlight: List.filled(values.length, false),
   s: s,
 );
 

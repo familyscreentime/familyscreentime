@@ -91,7 +91,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(
-      find.textContaining('rien n\'est envoyé ni partagé'),
+      find.textContaining('jamais à l\'éditeur ni à des tiers'),
       findsOneWidget,
     );
     await tester.tap(find.text('Refuser'));

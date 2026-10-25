@@ -7,7 +7,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 import 'package:screentime_sync/screentime_sync.dart'
-    show LanDirectory, LanSync, PeerState, SigningKey, SyncSession;
+    show
+        HttpRelayApi,
+        LanDirectory,
+        LanSync,
+        PeerState,
+        RelayError,
+        RelayState,
+        RemoteSource,
+        SigningKey;
 
 import 'family.dart';
 import 'pin.dart';
@@ -19,6 +27,8 @@ import 'sync/bonsoir_directory.dart';
 import 'sync/family_entities.dart';
 import 'sync/family_sync.dart';
 import 'sync/link_merge.dart';
+import 'sync/receipts.dart';
+import 'sync/relay_runner.dart';
 
 /// How far back Android's history is asked for; it keeps about ten days.
 const historyImportSpan = Duration(days: 30);
@@ -61,6 +71,7 @@ class AppController extends ChangeNotifier {
     final family = withKnownSystem(await store.loadFamily());
     final c = AppController(store, settings, family);
     await c.openSync();
+    unawaited(_prune(store, family));
     // A parent's device has no monitor: it syncs while the app runs.
     if (settings.parentDevice) {
       unawaited(c.startLanSync());
@@ -101,9 +112,21 @@ class AppController extends ChangeNotifier {
     await _reloadMonitor();
   }
 
+  /// Forgets the use of apps older than the family keeps it.
+  static Future<void> _prune(LocalStore store, FamilyData family) async {
+    try {
+      await store.pruneUsage(family.usageKeptDays);
+    } on Object catch (e) {
+      debugPrint('Old usage not removed: $e');
+    }
+  }
+
   Future<void> updateFamily(FamilyData next) async {
     next = ownGroups(next);
     final before = family;
+    if (next.usageKeptDays != before.usageKeptDays) {
+      unawaited(_prune(store, next));
+    }
     family = next;
     await store.saveFamily(next);
     notifyListeners();
@@ -132,7 +155,10 @@ class AppController extends ChangeNotifier {
       final log = await sync;
       if (log == null) return;
       await log.readOthers();
-      if (key != null) await log.recordGroupOwners(key);
+      if (key != null) {
+        await log.recordGroupOwners(key);
+        await log.recordMembers(key);
+      }
       await log.recordChange(before, after, parentKey: key);
     } on Object catch (e) {
       debugPrint('Change not recorded in the family log: $e');
@@ -150,12 +176,31 @@ class AppController extends ChangeNotifier {
     _parentKey = () async {
       try {
         final log = await sync;
-        return log == null ? null : await log.unlock(code);
+        if (log == null) return null;
+        final key = await log.unlock(code);
+        // The relay's key may just have come with it.
+        if (key != null && log.relayUrl != null) {
+          unawaited(_afterRelayChange());
+        }
+        if (key != null) unawaited(_rebase(log, key));
+        return key;
       } on Object catch (e) {
         debugPrint('Parent key not unlocked: $e');
         return null;
       }
     }();
+  }
+
+  /// Devices linked before 0.25: each child's are given only what
+  /// concerns them, once, from a parent's device (see [FamilySync.rebase]).
+  Future<void> _rebase(FamilySync log, SigningKey key) async {
+    try {
+      if (!await log.rebase(key)) return;
+      if (await log.tidy(store) != null) await reloadFamily();
+      await _relay?.update();
+    } on Object catch (e) {
+      debugPrint('Family log not cut per child: $e');
+    }
   }
 
   /// The log to welcome another device with, and the parent key (parent
@@ -359,9 +404,11 @@ class AppController extends ChangeNotifier {
       },
     );
     log.node.accepted.listen((a) {
-      if (a.source is! SyncSession) return;
+      if (a.source is! RemoteSource) return;
       _remoteQueue = _remoteQueue.then((_) async {
         try {
+          await _relay?.update();
+          _receiptsSoon(log);
           if (await log.applyRemote(a, store) != null) await reloadFamily();
         } on Object catch (e) {
           debugPrint('Change from another device not applied: $e');
@@ -373,6 +420,42 @@ class AppController extends ChangeNotifier {
     } on Object catch (e) {
       debugPrint('Local network sync not started: $e');
     }
+    // And through the relay server, if there is one.
+    await (_relay = RelayRunner(log)).update();
+    _receiptsSoon(log);
+    try {
+      if (await log.tidy(store) != null) await reloadFamily();
+    } on Object catch (e) {
+      debugPrint('Family log not tidied: $e');
+    }
+  }
+
+  RelayRunner? _relay;
+  Timer? _receipts;
+
+  /// On a parent's device: says in the log what it now holds.
+  void _receiptsSoon(FamilySync log) {
+    _receipts?.cancel();
+    _receipts = Timer(const Duration(seconds: 3), () async {
+      try {
+        await recordReceipts(log);
+        notifyListeners();
+      } on Object catch (e) {
+        debugPrint('Receipts not recorded: $e');
+      }
+    });
+  }
+
+  /// The changes made in parent mode lately, and who received them.
+  Future<List<Change>> recentChangesLog() async {
+    final log = await sync;
+    return log == null ? const [] : recentChanges(log);
+  }
+
+  /// How many recent changes each device has not received yet.
+  Future<Map<String, int>> pendingChanges() async {
+    final log = await sync;
+    return log == null ? const {} : pendingByDevice(log);
   }
 
   /// The family's devices seen on the network from this one.
@@ -384,14 +467,115 @@ class AppController extends ChangeNotifier {
     final key = await parentKey;
     if (log == null || key == null) return;
     await log.removeDevice(id, key);
+    await log.recordMembers(key);
     notifyListeners();
     await _reloadMonitor();
   }
 
-  /// A device was welcomed from this one: the monitor passes it on.
+  /// A device was welcomed from this one: the monitor passes it on, and
+  /// the relay server lets it in.
   Future<void> deviceWelcomed() async {
+    final log = await sync;
+    final key = await parentKey;
+    if (log != null && key != null) await log.recordMembers(key);
     notifyListeners();
     await _reloadMonitor();
+  }
+
+  // --- Relay server ---------------------------------------------------------
+
+  /// Sets up the relay server at [address] for every linked device (parent
+  /// mode): registers these devices there with an [invitation] from its
+  /// administrator (not needed when another device registered them). A
+  /// device on its own starts linking now. Returns the server's error
+  /// code (`unreachable`, `bad_invitation`…), or `null` once set up.
+  Future<String?> setUpRelay(String address, String invitation) async {
+    final uri = relayEndpoint(address);
+    if (uri == null) return 'bad_address';
+    final linking = await startLinking();
+    final code = _enteredCode;
+    if (linking == null || code == null) return 'no_key';
+    final (log, key) = linking;
+    await log.ensureContentKey(key, code);
+    await log.recordMembers(key);
+    final api = HttpRelayApi(uri, log.node.root.familyId, log.node.me);
+    try {
+      final members = log.members!;
+      if (invitation.trim().isEmpty) {
+        // Registered from another device already: this one is let in once
+        // the list of devices is there.
+        await api.postMembers(members);
+      } else {
+        final created = await api.createFamily(
+          invitation: invitation.trim(),
+          parentKey: key.publicKey,
+          members: members,
+        );
+        if (!created) await api.postMembers(members);
+      }
+      await api.heads();
+    } on RelayError catch (e) {
+      return e.code == 'unknown_device' && invitation.trim().isEmpty
+          ? 'invitation_needed'
+          : e.code;
+    } finally {
+      api.close();
+    }
+    await log.setRelay(uri.toString(), key);
+    await _afterRelayChange();
+    return null;
+  }
+
+  /// No relay server any more, for every linked device (parent mode).
+  Future<void> removeRelay() async {
+    final log = await sync;
+    final key = await parentKey;
+    if (log == null || key == null) return;
+    await log.setRelay(null, key);
+    await _afterRelayChange();
+  }
+
+  Future<void> _afterRelayChange() async {
+    notifyListeners();
+    if (settings.parentDevice) {
+      await (_relay ??= RelayRunner((await sync)!)).update();
+    } else {
+      await _reloadMonitor();
+    }
+  }
+
+  /// The relay server's address, if set up, and this device's last
+  /// exchange with it.
+  Future<(String, RelayState)?> relayStatus() async {
+    final log = await sync;
+    final url = log?.relayUrl;
+    if (log == null || url == null) return null;
+    return (url, await log.loadRelayState(url));
+  }
+
+  /// Whether this device holds the key to use the relay server (devices
+  /// linked before 0.23 take it when the parent code is entered there).
+  Future<bool> get hasRelayKey async =>
+      await (await sync)?.contentKey() != null;
+
+  /// The app is back on screen: on a parent's device, which syncs only
+  /// while the app runs, a pass with the relay server soon.
+  void resumed() {
+    if (settings.parentDevice) unawaited(_relay?.update());
+  }
+
+  /// A pass with the relay server now.
+  Future<void> syncRelayNow() async {
+    if (settings.parentDevice) {
+      try {
+        await _relay?.sync?.syncOnce();
+      } on Object {
+        // Shown from the saved state.
+      }
+      notifyListeners();
+    } else {
+      await _reloadMonitor();
+    }
   }
 
   /// Saves a new parent code, here and, sealed with the parent key, for
@@ -970,15 +1154,25 @@ class AppController extends ChangeNotifier {
   /// The apps of this device, and those installed only on the family's
   /// other devices (to limit them from here).
   Future<List<InstalledApp>> familyApps() async {
-    final here = await platform.launcherApps();
+    // A parent's own apps are not the child's: on a parent's device, only
+    // those the child's devices shared.
+    final parent = settings.parentDevice;
+    final here = parent ? <InstalledApp>[] : await platform.launcherApps();
     final known = {for (final a in here) a.package};
     try {
       final log = await sync;
-      if (log == null) return here;
+      final child = childId;
+      if (log == null) return parent ? await platform.launcherApps() : here;
+      var shared = child == null
+          ? <String, String>{}
+          : log.childAppNames(child);
+      // None shared yet (devices from before 0.21): every device's.
+      if (shared.isEmpty && parent) shared = log.sharedAppNames();
+      if (shared.isEmpty && parent) return await platform.launcherApps();
       return [
         ...here,
-        for (final e in log.sharedAppNames().entries)
-          if (!known.contains(e.key)) InstalledApp(e.key, e.value),
+        for (final e in shared.entries)
+          if (known.add(e.key)) InstalledApp(e.key, e.value),
       ];
     } on Object {
       return here;
@@ -1001,6 +1195,39 @@ class AppController extends ChangeNotifier {
     } on Object {
       // Package names are shown instead.
     }
+  }
+
+  /// Names of the family's devices, by id, this one included.
+  Future<Map<String, String>> deviceNames() async {
+    final names = <String, String>{};
+    try {
+      final log = await sync;
+      if (log != null) {
+        for (final e in log.devices.entries) {
+          final name = e.value['name'];
+          if (name is String && name.isNotEmpty) names[e.key] = name;
+        }
+      }
+    } on Object {
+      // Ids are shown instead.
+    }
+    if (!names.containsKey(settings.deviceId)) {
+      names[settings.deviceId] = await platform.deviceName();
+    }
+    return names;
+  }
+
+  /// Apps left out of the statistics: this device's system components,
+  /// those the family's devices shared, and the usual home screens.
+  Future<Set<String>> usageExcluded() async {
+    final excluded = {...family.config.neverBlocked, ...knownLaunchers};
+    try {
+      final log = await sync;
+      if (log != null) excluded.addAll(log.sharedSystem());
+    } on Object {
+      // This device's only.
+    }
+    return excluded;
   }
 
   /// Name shown for [r].
@@ -1213,7 +1440,9 @@ class AppController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _receipts?.cancel();
     _lan?.stop();
+    _relay?.stop();
     _parentTimer?.cancel();
     super.dispose();
   }

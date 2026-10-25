@@ -145,21 +145,28 @@ void main() {
         ),
       ),
     );
-    Future<void> add(String app, int minutes) => store.appendUsage(
-      UsageSegment.device(
-        childId: 'emma',
-        deviceId: 'd',
-        appId: app,
-        start: today,
-        end: today.add(Duration(minutes: minutes)),
-      ),
-    );
+    // One after the other, as on one screen (seconds: whatever the time).
+    var at = today;
+    Future<void> add(String app, int seconds) {
+      final start = at;
+      at = at.add(Duration(seconds: seconds));
+      return store.appendUsage(
+        UsageSegment.device(
+          childId: 'emma',
+          deviceId: 'd',
+          appId: app,
+          start: start,
+          end: at,
+        ),
+      );
+    }
+
     await add('minecraft', 20);
     await add('roblox', 15);
     await add('youtube', 5);
     final times = await controller.groupTimesToday();
-    expect(times['games'], const Duration(minutes: 35));
-    expect(times['video'], const Duration(minutes: 5));
+    expect(times['games'], const Duration(seconds: 35));
+    expect(times['video'], const Duration(seconds: 5));
     expect(times['empty'], Duration.zero);
     expect(controller.groupsOf('minecraft'), ['games']);
   });

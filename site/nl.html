@@ -29,14 +29,18 @@
 <li>Zwevend aftellen in Time Timer-stijl, waarschuwingen, een duidelijke melding als de tijd om is.</li>
 <li>Het kind ziet alles: de resterende tijd, de regels, en het kan zichzelf limieten geven.</li>
 <li>Alleen luisteren voor muziekapps: als de tijd voor clips op is, gaat de app nog even open om muziek te kiezen, die op de achtergrond verder speelt.</li>
-<li>Gekoppelde toestellen, als u dat wilt: de tablet en de telefoon van een kind delen zijn regels en zijn tijd, en de ouder regelt alles vanaf de eigen telefoon. Rechtstreeks tussen uw toestellen, via de wifi thuis, end-to-end versleuteld. Een toestel dat op zichzelf geïnstalleerd is, kan later gekoppeld worden, zonder opnieuw te beginnen.</li>
+<li>Statistieken per app en per toestel, analyse over meerdere maanden, export als CSV of voor ActivityWatch.</li>
+<li>Gesplitst scherm en video in een klein venster worden meegeteld: elke zichtbare app telt mee en wordt gesloten als haar tijd op is.</li>
+<li>Gekoppelde toestellen, als u dat wilt: de tablet en de telefoon van een kind delen zijn regels en zijn tijd, en de ouder regelt alles vanaf de eigen telefoon. Elk toestel van een kind krijgt alleen wat dat kind aangaat. Rechtstreeks tussen uw toestellen via de wifi thuis, en buitenshuis via een server die u zelf host, altijd end-to-end versleuteld. Een toestel dat op zichzelf geïnstalleerd is, kan later gekoppeld worden, zonder opnieuw te beginnen.</li>
 </ul>
+<h2>De relayserver</h2>
+<p>Optioneel, zodat gekoppelde toestellen ook buitenshuis synchroniseren. Gewone webhosting volstaat (PHP 8.2 en MySQL, MariaDB of SQLite), zonder SSH. Hij kan niet lezen wat hij doorgeeft. Eén server kan ook andere gezinnen ontvangen, op uitnodiging.</p>
+<p><a class="button" href="familyscreentime-server.zip">De server downloaden (zip)</a> · <a href="https://github.com/familyscreentime/familyscreentime/blob/main/server/README.md">Installatiegids (Engels)</a></p>
 <h2>Binnenkort</h2>
 <ul class="features">
-<li>Synchronisatie via een server die u zelf host (PHP en MySQL, gewone webhosting volstaat), voor toestellen die niet thuis zijn.</li>
-<li>Daarna een Windows-versie.</li>
+<li>Een Windows-versie.</li>
 </ul>
-<p class="muted">Toestellen koppelen blijft optioneel. Zonder koppeling verlaat niets het toestel; met koppeling gaan de gegevens alleen naar uw eigen toestellen, en later naar uw eigen server.</p>
+<p class="muted">Toestellen koppelen blijft optioneel. Zonder koppeling verlaat niets het toestel; met koppeling gaan de gegevens alleen naar uw eigen toestellen en, als u er een installeert, naar uw eigen server, versleuteld.</p>
 <p>De app is ontworpen en getest door Olivier Berten en geschreven door Claude, een AI van Anthropic. Het is vrije software (MIT-licentie): <a href="https://github.com/familyscreentime/familyscreentime">de broncode staat op GitHub</a>. Ze is in testfase.</p>
 <p><a href="privacybeleid.html">Privacybeleid</a></p>
 

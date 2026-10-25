@@ -109,6 +109,30 @@ void main() {
     expect(find.textContaining('Pas de limite (Désactivée)'), findsOneWidget);
   });
 
+  testWidgets('a new group opens on its own page', (tester) async {
+    tester.view.physicalSize = const Size(1080, 5000);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final c = controller();
+    await tester.pumpWidget(MaterialApp(home: ParentHome(controller: c)));
+    await tester.pump();
+    await tester.tap(find.text('Ajouter un groupe'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Vidéo');
+    await tester.tap(find.text('Zoo'));
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Enregistrer'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    // Its page, ready for a limit.
+    expect(find.text('Applis du groupe'), findsOneWidget);
+    expect(find.text('zoo'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Vidéo'), findsOneWidget);
+  });
+
   testWidgets('the group\'s apps come first in its editor', (tester) async {
     final c = controller();
     await tester.pumpWidget(

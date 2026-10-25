@@ -249,15 +249,23 @@ void main() {
       );
       expect(await sync.unlock('123456'), isNotNull);
       expect(await sync.unlock('000000'), isNull);
+      // Emma's tablet: her data and the family's, not her brother's.
+      final emmas = familyFromEntities({
+        for (final e in familyEntities(ownGroups(family)).entries)
+          if (e.key != '${FamilyKeys.child}lucas' &&
+              e.value['childId'] != 'lucas')
+            e.key: e.value,
+      }, family);
+      expect(emmas.children.map((c) => c.id), ['emma']);
       expect(
         canonicalJson(sync.compose(family).toJson()),
-        canonicalJson(ownGroups(family).toJson()),
+        canonicalJson(emmas.toJson()),
       );
 
       final monitor = (await FamilySync.open(store, background: true))!;
       expect(
         canonicalJson(monitor.compose(family).toJson()),
-        canonicalJson(ownGroups(family).toJson()),
+        canonicalJson(emmas.toJson()),
       );
       // The interface changes a rule in parent mode; the monitor reads it.
       final changed = family.copyWith(

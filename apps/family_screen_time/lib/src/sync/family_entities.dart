@@ -69,6 +69,7 @@ Map<String, Map<String, Object?>> familyEntities(FamilyData f) {
       'allowedInHours': config['allowedInHours'] ?? const <String>[],
       'weekStart': config['weekStart'],
       'counting': config['counting'],
+      'usageKeptDays': j['usageKeptDays'],
     },
     for (final (i, c) in children.indexed)
       '${FamilyKeys.child}${c['id']}': {...c, 'order': i},
@@ -162,6 +163,7 @@ FamilyData familyFromEntities(
       ..sort((a, b) => '${a['at']}'.compareTo('${b['at']}')),
     'outOfTime': family['outOfTime'] ?? defaults['outOfTime'],
     'settingsParentOnly': family['settingsParentOnly'] ?? false,
+    'usageKeptDays': family['usageKeptDays'] ?? defaults['usageKeptDays'],
   };
   return FamilyData.fromJson(json);
 }

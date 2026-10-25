@@ -7,6 +7,7 @@ import '../controller.dart';
 import '../platform.dart';
 import '../store.dart';
 import 'group_chips.dart';
+import 'usage_screen.dart' show appIcon;
 
 class GroupEditor extends StatefulWidget {
   final AppController controller;
@@ -24,6 +25,7 @@ class _GroupEditorState extends State<GroupEditor> {
   late final TextEditingController _name;
   late Set<String> _selected;
   List<InstalledApp>? _apps;
+  Map<String, AppInfo> _info = const {};
   String _query = '';
   String? _error;
 
@@ -48,7 +50,12 @@ class _GroupEditorState extends State<GroupEditor> {
           if (ma != mb) return ma ? -1 : 1;
           return name(a).compareTo(name(b));
         });
-      if (mounted) setState(() => _apps = sorted);
+      if (!mounted) return;
+      setState(() => _apps = sorted);
+      // Then the icons, from here or the other devices.
+      c.appInfo([for (final a in apps) a.package]).then((info) {
+        if (mounted) setState(() => _info = info);
+      }, onError: (Object _) {});
     });
   }
 
@@ -76,7 +83,8 @@ class _GroupEditorState extends State<GroupEditor> {
         groupOwners: {...c.family.groupOwners, id: ?c.childId},
       ),
     );
-    if (mounted) Navigator.of(context).pop();
+    // The new group's id: its page opens next, to give it a limit.
+    if (mounted) Navigator.of(context).pop(id);
   }
 
   @override
@@ -131,6 +139,7 @@ class _GroupEditorState extends State<GroupEditor> {
                     itemBuilder: (context, i) {
                       final app = shown[i];
                       return CheckboxListTile(
+                        secondary: appIcon(_info[app.package], size: 36),
                         value: _selected.contains(app.package),
                         title: Text(name(app)),
                         subtitle: Column(

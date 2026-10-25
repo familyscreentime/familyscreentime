@@ -30,6 +30,11 @@ class FamilySyncPolicy extends SyncPolicy {
     Map<String, Object?> device,
     MergedState replica,
   ) {
+    // What it has received from the others: its own receipts only.
+    if (e.key.startsWith('seen/')) {
+      return e.key == 'seen/${deviceOfOrigin(e.origin)}' &&
+          (e.type == EventType.put || e.type == EventType.patch);
+    }
     final child = device['childId'];
     if (child == null) return false;
     if (e.type == EventType.usage) {
@@ -62,13 +67,62 @@ class FamilySyncPolicy extends SyncPolicy {
     }
     // Its own installed apps: names and icons, for the other devices.
     if (e.key.startsWith(appsOf(deviceOfOrigin(e.origin)))) return true;
+    // Its own system components (home screen…).
+    if (e.key == systemOf(deviceOfOrigin(e.origin))) {
+      return e.type == EventType.put || e.type == EventType.patch;
+    }
     return false;
   }
+
+  /// What concerns one child only, from 0.25, goes only to that child's
+  /// devices and the parents': their rules, groups of apps, bonuses,
+  /// blocks, unlocks, time away, own limits and use of apps, and the apps
+  /// of their devices. A device's receipts go to the parents only. The
+  /// rest (the children's names, the devices, periods, family settings…)
+  /// goes to every device.
+  @override
+  String? scopeOf(String key, Map<String, Object?> value, MergedState replica) {
+    String? child() => switch (value['childId']) {
+      final String id => id,
+      _ => null,
+    };
+    if (key == 'usage') return child();
+    if (key.startsWith('seen/')) return parentsOnly;
+    if (key.startsWith('app/') || key.startsWith('system/')) {
+      final at = key.indexOf('/') + 1;
+      final slash = key.indexOf('/', at);
+      final id = key.substring(at, slash < 0 ? key.length : slash);
+      final device = replica[SyncKeys.device(id)];
+      if (device == null) return null;
+      final audience = Audience.of(device);
+      return audience.all ? parentsOnly : audience.child;
+    }
+    for (final prefix in childKeys) {
+      if (key.startsWith(prefix)) return child();
+    }
+    return null;
+  }
+
+  /// Entities that concern one child (their `childId`).
+  static const childKeys = [
+    FamilyKeys.rule,
+    FamilyKeys.group,
+    FamilyKeys.bonus,
+    FamilyKeys.temporaryBlock,
+    FamilyKeys.dayUnlock,
+    FamilyKeys.hoursUnlock,
+    FamilyKeys.injected,
+    FamilyKeys.selfLimitLog,
+  ];
 }
 
 /// Keys of a device's installed apps in the log: `app/<device>/<package>`,
 /// with `label` and `icon` (PNG, base64). Each device writes its own.
 String appsOf(String deviceId) => 'app/$deviceId/';
+
+/// Key of a device's system components in the log (`packages`): its home
+/// screen and the like, never counted in the statistics.
+String systemOf(String deviceId) => 'system/$deviceId';
 
 /// Width of the icons shared with the family's devices, in pixels.
 const sharedIconSize = 48;
@@ -111,6 +165,7 @@ class SyncFiles {
     appsPublished,
     othersUsage,
     usageHistory,
+    relayState,
   ];
 
   /// Deletes the logs other than [keep] (left by an earlier link). Another
@@ -145,6 +200,10 @@ class SyncFiles {
   /// family existed into the log.
   File get usageHistory => File('${dir.path}/usage-history.done');
 
+  /// Where this device is with the relay server (see [RelayState]),
+  /// written by the process that syncs with it.
+  File get relayState => File('${dir.path}/relay-state.json');
+
   Future<bool> get exist async =>
       await identity.exists() && await root.exists();
 
@@ -171,6 +230,10 @@ class FamilySync {
 
   /// Until [commit]: the identity of a device joining others.
   DeviceIdentity? _pending;
+
+  /// Until [commit]: the content key opened with the parent code, when the
+  /// welcome came without it.
+  List<int>? _pendingContentKey;
 
   FamilySync._(this.node, this.files, this.deviceId, this.dbName);
 
@@ -239,6 +302,8 @@ class FamilySync {
     );
     final sync = FamilySync._(created.node, files, identity.deviceId, db);
     await sync.recordChange(null, family, parentKey: created.parentKey);
+    // Cut per child from the start.
+    await created.node.startScoped(created.parentKey);
     await sync._writeLink(identity, created.root);
     return (sync, created.parentKey);
   }
@@ -279,8 +344,15 @@ class FamilySync {
   /// Written last, the root names the log: the link exists on this device
   /// once both files are there.
   Future<void> _writeLink(DeviceIdentity identity, FamilyRoot root) async {
+    final content = _pendingContentKey;
     await SyncFiles._write(files.identity, identity.toJson());
-    await SyncFiles._write(files.root, {...root.toJson(), 'db': dbName});
+    await SyncFiles._write(files.root, {
+      ...root.toJson(),
+      if (root.contentKey == null && content != null)
+        'contentKey': b64(content),
+      'db': dbName,
+    });
+    _pendingContentKey = null;
   }
 
   /// Unlinks this device: it keeps working on its own, the log is
@@ -302,6 +374,13 @@ class FamilySync {
   /// This device's registration (name, role, child…).
   Map<String, Object?>? get registration =>
       node.replica[SyncKeys.device(deviceId)];
+
+  /// Every child of the family, even on a child's device (which shows
+  /// only its own): to link a device to another child from there.
+  List<Child> allChildren() => familyFromEntities(
+    node.replica.withPrefix(FamilyKeys.child),
+    const FamilyData(),
+  ).children;
 
   /// The family's devices, by id, removed ones left out.
   Map<String, Map<String, Object?>> get devices => {
@@ -349,6 +428,9 @@ class FamilySync {
       if (deviceOfOrigin(e.origin) == deviceId) continue;
       await store.appendUsage(usageSegmentFromJson(e.data));
     }
+    // The snapshot came, or this device belongs to another child now.
+    final tidied = await tidy(store);
+    if (tidied != null) return tidied;
     // The family file is written again only if the family's data changed
     // (not for a device's apps or registration).
     if (!a.replicaChanged || !a.events.any((e) => isFamilyKey(e.key))) {
@@ -357,6 +439,44 @@ class FamilySync {
     final family = compose(await store.loadFamily());
     await store.saveFamily(family);
     return family;
+  }
+
+  /// Removes from this device what it needs no more (see [SyncNode.tidy]):
+  /// on a child's device, what concerns the other children, the use of
+  /// apps included. Returns the family when it changed.
+  Future<FamilyData?> tidy(LocalStore store) async {
+    if (!await node.tidy()) return null;
+    final audience = node.audience;
+    if (!audience.all) {
+      await store.rewriteUsage((u) => u.childId == audience.child ? u : null);
+    }
+    final family = compose(await store.loadFamily());
+    await store.saveFamily(family);
+    return family;
+  }
+
+  /// Cuts the family's events per child, once, for devices linked before
+  /// 0.25 (see [SyncNode.rebase]): from a parent's device only, which
+  /// holds everything. Whether it was done now.
+  Future<bool> rebase(SigningKey parentKey) async {
+    if (!await node.rebase(parentKey)) return false;
+    await recordMembers(parentKey);
+    return true;
+  }
+
+  /// Whether [key] (with [value]) is another child's, on this device: a
+  /// child's device keeps only the family's and its child's (and does not
+  /// show the other children).
+  bool _hidden(String key, Map<String, Object?> value) {
+    final reg = registration;
+    if (reg == null) return false;
+    final audience = Audience.of(reg);
+    if (audience.all) return false;
+    if (key.startsWith(FamilyKeys.child)) {
+      return key.substring(FamilyKeys.child.length) != audience.child;
+    }
+    final scope = policy.scopeOf(key, value, node.replica);
+    return scope != null && scope.isNotEmpty && scope != audience.child;
   }
 
   /// Adds to this device's use what the other devices recorded and the log
@@ -420,6 +540,24 @@ class FamilySync {
     return drafts.length;
   }
 
+  /// Shares this device's system components (home screen…), so that no
+  /// device counts them in the statistics. Whether they changed.
+  Future<bool> publishSystem(Set<String> packages) async {
+    final sorted = packages.toList()..sort();
+    final held = node.replica[systemOf(deviceId)]?['packages'];
+    if (held is List && sameJson(held, sorted)) return false;
+    await node.emit([
+      EventDraft.put(systemOf(deviceId), {'packages': sorted}),
+    ]);
+    return true;
+  }
+
+  /// The system components the family's devices shared.
+  Set<String> sharedSystem() => {
+    for (final e in node.replica.withPrefix('system/').values)
+      for (final p in e['packages'] as List? ?? const []) p as String,
+  };
+
   /// Names and icons of [packages] as the family's devices shared them.
   Map<String, AppInfo> sharedApps(Iterable<String> packages) {
     final found = <String, AppInfo>{};
@@ -442,13 +580,168 @@ class FamilySync {
   /// Every app the family's devices shared, by package, with its name.
   Map<String, String> sharedAppNames() => _labels('app/');
 
-  /// The parent key, unlocked by [parentCode]; `null` if it does not open.
-  Future<SigningKey?> unlock(String parentCode) =>
-      unlockParentKey(node, parentCode);
+  /// The apps the devices of [childId] shared (this one left out), by
+  /// package, with their names.
+  Map<String, String> childAppNames(String childId) => {
+    for (final e in devices.entries)
+      if (e.key != deviceId && e.value['childId'] == childId)
+        ..._labels(appsOf(e.key)),
+  };
 
-  /// Seals the parent key with a new code, for every device.
-  Future<void> changeCode(SigningKey parentKey, String parentCode) =>
-      changeParentCode(node, parentKey, parentCode);
+  /// The parent key, unlocked by [parentCode]; `null` if it does not open.
+  /// The content key comes with it, on a device that lacked it.
+  Future<SigningKey?> unlock(String parentCode) async {
+    final key = await unlockParentKey(node, parentCode);
+    if (key != null) await adoptContentKey(parentCode);
+    return key;
+  }
+
+  /// Seals the parent key with a new code, for every device, and the
+  /// content key if it is kept sealed in the log.
+  Future<void> changeCode(SigningKey parentKey, String parentCode) async {
+    await changeParentCode(node, parentKey, parentCode);
+    final content = await contentKey();
+    if (content != null && node.replica[SyncKeys.family]?['content'] != null) {
+      await node.emit([
+        EventDraft.patch(SyncKeys.family, {
+          'content': await ParentVault.seal(content, parentCode),
+        }),
+      ], parentKey: parentKey);
+    }
+  }
+
+  // --- Relay server ---------------------------------------------------------
+
+  /// The key events are encrypted with for the relay (see
+  /// [FamilyRoot.contentKey]), as this device holds it; `null` if not yet.
+  Future<List<int>?> contentKey() async {
+    try {
+      final k = (await SyncFiles._read(files.root))['contentKey'];
+      return k is String ? unb64(k) : null;
+    } on Object {
+      return null;
+    }
+  }
+
+  Future<void> _saveContentKey(List<int> key) async {
+    final root = await SyncFiles._read(files.root);
+    await SyncFiles._write(files.root, {...root, 'contentKey': b64(key)});
+  }
+
+  /// The content key, made now if these devices had none (linked before
+  /// 0.23): sealed by [parentCode] in the log, so that each device takes
+  /// it when the code is next entered there.
+  Future<List<int>> ensureContentKey(
+    SigningKey parentKey,
+    String parentCode,
+  ) async {
+    final held = await contentKey();
+    if (held != null) return held;
+    final sealed = node.replica[SyncKeys.family]?['content'];
+    if (sealed is Map) {
+      final opened = await ParentVault.openBytes(
+        Map<String, Object?>.from(sealed),
+        parentCode,
+      );
+      if (opened != null) {
+        await _saveContentKey(opened);
+        return opened;
+      }
+    }
+    final key = randomBytes(32);
+    await _saveContentKey(key);
+    await node.emit([
+      EventDraft.patch(SyncKeys.family, {
+        'content': await ParentVault.seal(key, parentCode),
+      }),
+    ], parentKey: parentKey);
+    return key;
+  }
+
+  /// Takes the content key sealed in the log, on a device that lacks it.
+  /// Whether it was taken now.
+  Future<bool> adoptContentKey(String parentCode) async {
+    // Joining: kept for [commit] (the files are another link's still).
+    if (_pending != null) {
+      if (node.root.contentKey != null) return false;
+      final sealed = node.replica[SyncKeys.family]?['content'];
+      if (sealed is! Map) return false;
+      _pendingContentKey = await ParentVault.openBytes(
+        Map<String, Object?>.from(sealed),
+        parentCode,
+      );
+      return _pendingContentKey != null;
+    }
+    if (await contentKey() != null) return false;
+    final sealed = node.replica[SyncKeys.family]?['content'];
+    if (sealed is! Map) return false;
+    final key = await ParentVault.openBytes(
+      Map<String, Object?>.from(sealed),
+      parentCode,
+    );
+    if (key == null) return false;
+    await _saveContentKey(key);
+    return true;
+  }
+
+  /// The relay server's address, if the parent set one up.
+  String? get relayUrl => node.replica[SyncKeys.server]?['url'] as String?;
+
+  /// Sets the relay server up for every device (`null`: none any more).
+  Future<void> setRelay(String? url, SigningKey parentKey) => node.emit([
+    url == null
+        ? EventDraft.delete(SyncKeys.server)
+        : EventDraft.put(SyncKeys.server, {'url': url}),
+  ], parentKey: parentKey);
+
+  /// The devices the relay lets in, signed by the parent key.
+  Map<String, Object?>? get members => node.replica[SyncKeys.members];
+
+  /// Signs the list of devices again when it changed (a device linked,
+  /// removed…), so the relay lets in the right ones. Whether it changed.
+  Future<bool> recordMembers(SigningKey parentKey) async {
+    final devices = memberKeys(node);
+    final scopes = memberScopes(node);
+    final floors = node.store.floors;
+    final current = readMembers(members);
+    if (current != null &&
+        sameJson(current.devices, devices) &&
+        sameJson(current.scopes, scopes) &&
+        sameJson(current.floors, floors)) {
+      return false;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final version = current == null || now > current.version
+        ? now
+        : current.version + 1;
+    await node.emit([
+      EventDraft.put(
+        SyncKeys.members,
+        await signMembers(
+          familyId: node.root.familyId,
+          version: version,
+          devices: devices,
+          scopes: scopes,
+          floors: floors,
+          parentKey: parentKey,
+        ),
+      ),
+    ], parentKey: parentKey);
+    return true;
+  }
+
+  Future<RelayState> loadRelayState(String url) async {
+    try {
+      final j = await SyncFiles._read(files.relayState);
+      if (j['url'] != url) return const RelayState();
+      return RelayState.fromJson(j);
+    } on Object {
+      return const RelayState();
+    }
+  }
+
+  Future<void> saveRelayState(String url, RelayState state) =>
+      SyncFiles._write(files.relayState, {...state.toJson(), 'url': url});
 
   /// Records what changed from [before] (`null`: nothing yet) to [after].
   /// Without the [parentKey], only what the device may sign itself is
@@ -458,10 +751,14 @@ class FamilySync {
     FamilyData after, {
     SigningKey? parentKey,
   }) async {
-    var drafts = diffEntities(
-      before == null ? const {} : familyEntities(before),
-      familyEntities(after),
-    );
+    final old = before == null
+        ? const <String, Map<String, Object?>>{}
+        : familyEntities(before);
+    var drafts = [
+      for (final d in diffEntities(old, familyEntities(after)))
+        // Another child's, not shown here: left as it is.
+        if (old[d.key] == null || !_hidden(d.key, old[d.key]!)) d,
+    ];
     if (parentKey == null) {
       final device = node.replica[SyncKeys.device(deviceId)];
       if (device == null) return const [];
@@ -511,7 +808,18 @@ class FamilySync {
 
   /// The family as merged from the log; what belongs to this device only
   /// comes from [local].
-  FamilyData compose(FamilyData local) => ownGroups(_composed(local));
+  /// On a child's device, only the family's and that child's: the other
+  /// children are not shown.
+  FamilyData compose(FamilyData local) {
+    // Groups given to each child as on every device, with every child.
+    final all = ownGroups(_composed(local));
+    final reg = registration;
+    if (reg == null || Audience.of(reg).all) return all;
+    return familyFromEntities({
+      for (final e in familyEntities(all).entries)
+        if (!_hidden(e.key, e.value)) e.key: e.value,
+    }, local);
+  }
 
   FamilyData _composed(FamilyData local) => familyFromEntities({
     // Only the family's own entities: not the devices nor their apps.

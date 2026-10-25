@@ -97,7 +97,27 @@ void _byHour(
   }
 }
 
-/// Builds the report of [childId]'s device usage over the [days] days
+/// The time each device's screen was in use within [from, to), by device:
+/// [segments] merged, so that apps on screen together count once.
+/// [together]: the devices' time at once counts once too (the family's
+/// choice, see [SimultaneousCounting.elapsed]): one list for all.
+Map<String, List<Interval>> screenTime(
+  Iterable<UsageSegment> segments,
+  DateTime from,
+  DateTime to, {
+  bool together = false,
+}) {
+  final byDevice = <String, List<Interval>>{};
+  for (final s in segments) {
+    final part = s.clip(from, to);
+    if (part == null) continue;
+    byDevice.putIfAbsent(together ? '' : s.deviceId ?? '', () => []).add(part);
+  }
+  return {for (final e in byDevice.entries) e.key: mergeIntervals(e.value)};
+}
+
+/// Builds the report of [childId]'s device usage ([together]: time on
+/// several devices at once counted once in the totals) over the [days] days
 /// ending on the day of [now]. Injected time and apps in [exclude] (system
 /// components) are left out.
 UsageReport buildUsageReport(
@@ -106,6 +126,7 @@ UsageReport buildUsageReport(
   required DateTime now,
   required int days,
   Set<String> exclude = const {},
+  bool together = false,
 }) {
   final today = dayOf(now);
   final from = addDays(today, -(days - 1));
@@ -166,9 +187,26 @@ UsageReport buildUsageReport(
       final day = dayOf(t);
       appDays[day] = (appDays[day] ?? Duration.zero) + d;
       appHours[t.hour] += d;
-      totalByDay[day] = (totalByDay[day] ?? Duration.zero) + d;
-      totalByHour[t.hour] += d;
     });
+  }
+
+  // The device's time: apps on screen together (split screen, floating
+  // video) count once.
+  var total = Duration.zero;
+  for (final device in screenTime(
+    segments,
+    from,
+    to,
+    together: together,
+  ).values) {
+    for (final i in device) {
+      total += i.length;
+      _byHour(i.start, i.end, (t, d) {
+        final day = dayOf(t);
+        totalByDay[day] = (totalByDay[day] ?? Duration.zero) + d;
+        totalByHour[t.hour] += d;
+      });
+    }
   }
 
   final apps =
@@ -195,7 +233,7 @@ UsageReport buildUsageReport(
     days: periodDays,
     totalByDay: totalByDay,
     totalByHour: totalByHour,
-    total: totals.values.fold(Duration.zero, (a, b) => a + b),
+    total: total,
     apps: apps,
     historyStart: historyStart,
   );

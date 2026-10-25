@@ -9,7 +9,8 @@ import 'usage.dart';
 
 /// How simultaneous use on several devices is counted.
 enum SimultaneousCounting {
-  /// Every device counts: 10 min on two devices at once = 20 min.
+  /// Every device counts: 10 min on two devices at once = 20 min (two
+  /// apps on one screen at once count once).
   sum,
 
   /// Only elapsed time counts: overlapping minutes are counted once.
@@ -639,14 +640,29 @@ class RuleEngine {
     required DateTime to,
   }) {
     final parts = <Interval>[];
+    // Sum: each device counts on its own, but on one device, apps on
+    // screen together (split screen, floating video) count once. Time
+    // entered by hand adds up as it is.
+    final byDevice = <String, List<Interval>>{};
     for (final s in state.usage) {
       if (s.childId != childId || !segmentCounts(r, s)) continue;
       final part = s.clip(from, to);
-      if (part != null) parts.add(part);
+      if (part == null) continue;
+      final device = s.deviceId;
+      if (config.counting == SimultaneousCounting.sum && device != null) {
+        byDevice.putIfAbsent(device, () => []).add(part);
+      } else {
+        parts.add(part);
+      }
     }
-    return config.counting == SimultaneousCounting.sum
-        ? totalLength(parts)
-        : totalLength(mergeIntervals(parts));
+    if (config.counting == SimultaneousCounting.elapsed) {
+      return totalLength(mergeIntervals(parts));
+    }
+    var total = totalLength(parts);
+    for (final l in byDevice.values) {
+      total += totalLength(mergeIntervals(l));
+    }
+    return total;
   }
 
   /// The rule's bonuses granted within [from, to], valued at [asOf].

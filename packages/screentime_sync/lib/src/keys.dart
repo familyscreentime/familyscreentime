@@ -197,6 +197,15 @@ abstract final class ParentVault {
     Map<String, Object?> sealed,
     String code,
   ) async {
+    final seed = await openBytes(sealed, code);
+    return seed == null ? null : SigningKey.fromSeed(seed);
+  }
+
+  /// The bytes [seal]ed, or `null` when [code] is wrong.
+  static Future<List<int>?> openBytes(
+    Map<String, Object?> sealed,
+    String code,
+  ) async {
     final key = await _derive(
       code,
       unb64(sealed['salt'] as String),
@@ -213,7 +222,7 @@ abstract final class ParentVault {
         ),
         secretKey: key,
       );
-      return await SigningKey.fromSeed(seed);
+      return seed;
     } on SecretBoxAuthenticationError {
       return null;
     }

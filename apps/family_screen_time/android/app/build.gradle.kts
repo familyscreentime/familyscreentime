@@ -69,3 +69,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // FileProvider, to share exports.
+    implementation("androidx.core:core:1.13.1")
+}

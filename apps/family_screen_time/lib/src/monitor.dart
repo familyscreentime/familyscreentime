@@ -12,10 +12,12 @@ import 'package:screentime_engine/screentime_engine.dart';
 import 'availability.dart';
 
 import 'package:screentime_sync/screentime_sync.dart'
-    show Accepted, LanDirectory, LanSync, SyncSession;
+    show Accepted, LanDirectory, LanSync, RemoteSource;
 
 import 'sync/bonsoir_directory.dart';
 import 'sync/family_sync.dart';
+import 'sync/receipts.dart';
+import 'sync/relay_runner.dart';
 import 'family.dart';
 import 'platform.dart';
 import 'store.dart';
@@ -60,6 +62,21 @@ class Monitor {
   final _warned = <String>{};
   String? _blockedApp;
   DateTime? _blockedAt;
+
+  /// Apps on screen, from Android (with the accessibility service): the
+  /// one in front and those beside it (split screen, floating video,
+  /// free windows).
+  Set<String> _visible = {};
+
+  /// The apps on screen besides the one in front, with when the stretch
+  /// of their use not recorded yet began.
+  final Map<String, DateTime> _alsoOpen = {};
+
+  /// When each of them was last blocked.
+  final Map<String, DateTime> _alsoBlocked = {};
+
+  /// Time until one of them runs out, set by the last evaluation.
+  Duration? _alsoSoonest;
   bool _busy = false;
   bool _again = false;
 
@@ -77,7 +94,9 @@ class Monitor {
     }
     _channel.setMethodCallHandler(_onCall);
     await _load();
+    await _prune();
     await _recoverOpenSegment();
+    await _fillGap();
     final state =
         await _channel.invokeMapMethod<String, Object?>('state') ?? {};
     _screenOn = state['screenOn'] as bool? ?? true;
@@ -103,6 +122,15 @@ class Monitor {
     await _openLog();
   }
 
+  /// Forgets the use of apps older than the family keeps it (once a day).
+  Future<void> _prune() async {
+    try {
+      await store.pruneUsage(_family.usageKeptDays);
+    } on Object catch (e) {
+      debugPrint('Old usage not removed: $e');
+    }
+  }
+
   /// The family log, once the family exists on this device.
   FamilySync? _log;
 
@@ -117,6 +145,17 @@ class Monitor {
       final log = _log ??= await FamilySync.open(store, background: true);
       if (log == null) return;
       await log.readOthers();
+      // What concerns the other children goes (see FamilySync.tidy).
+      if (await log.tidy(store) != null) {
+        _family = withKnownSystem(await store.loadFamily());
+        final since = addDays(dayOf(DateTime.now()), -usageHistoryDays);
+        _usage = [...await store.loadUsage(since: since), ..._family.injected];
+        try {
+          await _channel.invokeMethod('familyChanged');
+        } on Object {
+          // The interface reads it when next opened.
+        }
+      }
       await _logUsageHistory(log);
       // Joined a family: the use of the other devices before counts too.
       if (await log.importOthersUsage(store) > 0) {
@@ -125,6 +164,9 @@ class Monitor {
       }
       log.pruneUsage();
       await _startLan(log);
+      _receiptsSoon(log);
+      final relay = _relay ??= RelayRunner(log)..screenOn = _screenOn;
+      await relay.update();
       await _publishApps(log);
     } on Object catch (e) {
       debugPrint('Family log: $e');
@@ -157,6 +199,8 @@ class Monitor {
         'Apps shared: ${apps.length} apps, $changes changes, '
         '${watch.elapsedMilliseconds} ms',
       );
+      final system = await platform.systemPackages();
+      await log.publishSystem({system.self, ...system.launchers});
       await done.writeAsString(today);
     } on Object catch (e) {
       debugPrint('Apps not shared: $e');
@@ -166,12 +210,33 @@ class Monitor {
   LanSync? _lan;
   Future<void> _remoteQueue = Future.value();
 
+  /// The relay server, when the parent set one up.
+  RelayRunner? _relay;
+
+  Timer? _receipts;
+
+  /// Says in the log, a few seconds after things came in, what this
+  /// device now holds (the parent sees what reached it).
+  void _receiptsSoon(FamilySync log) {
+    _receipts?.cancel();
+    _receipts = Timer(const Duration(seconds: 3), () async {
+      try {
+        if (identical(_log, log)) await recordReceipts(log);
+      } on Object catch (e) {
+        debugPrint('Receipts not recorded: $e');
+      }
+    });
+  }
+
   Future<void> _closeLog() async {
     final lan = _lan;
     _lan = null;
+    final relay = _relay;
+    _relay = null;
     final log = _log;
     _log = null;
     await lan?.stop();
+    await relay?.stop();
     await log?.close();
   }
 
@@ -185,7 +250,7 @@ class Monitor {
       onPeersChanged: () => _savePeers(log),
     );
     log.node.accepted.listen((a) {
-      if (a.source is! SyncSession) return;
+      if (a.source is! RemoteSource) return;
       // One at a time: each may rewrite the family file and reload.
       _remoteQueue = _remoteQueue.then((_) => _onRemote(log, a));
     });
@@ -210,6 +275,7 @@ class Monitor {
   /// settings changed there.
   Future<void> _onRemote(FamilySync log, Accepted a) async {
     try {
+      _receiptsSoon(log);
       final family = await log.applyRemote(a, store);
       await _load();
       await _evaluate();
@@ -274,6 +340,47 @@ class Monitor {
   }
 
   /// Closes a segment left open by a crash or a kill, at its last sighting.
+  /// The use while the monitor was not running (Android stopped it for
+  /// memory, say), from Android's own usage history: the time since the
+  /// last use recorded here, up to 12 hours.
+  Future<void> _fillGap() async {
+    final settings = _settings;
+    if (settings == null || settings.childId == null) return;
+    final now = DateTime.now();
+    DateTime? last;
+    for (final u in _usage) {
+      if (u.deviceId == settings.deviceId &&
+          (last == null || u.end.isAfter(last))) {
+        last = u.end;
+      }
+    }
+    // Nothing recorded here yet: the import of Android's history covers it.
+    if (last == null || !now.isAfter(last.add(const Duration(seconds: 5)))) {
+      return;
+    }
+    final earliest = now.subtract(const Duration(hours: 12));
+    final from = last.isAfter(earliest) ? last : earliest;
+    try {
+      final raw = await const PlatformApi().usageHistory(
+        from,
+        now,
+        closeOpen: true,
+      );
+      if (raw == null) return;
+      var added = Duration.zero;
+      for (final r in raw) {
+        final start = r.start.isBefore(from) ? from : r.start;
+        final end = r.end.isAfter(now) ? now : r.end;
+        if (end.difference(start) < const Duration(seconds: 1)) continue;
+        await _record(r.package, start, end);
+        added += end.difference(start);
+      }
+      debugPrint('Use while the monitor was stopped: ${added.inSeconds} s');
+    } on Object catch (e) {
+      debugPrint('Use while stopped not read: $e');
+    }
+  }
+
   Future<void> _recoverOpenSegment() async {
     final open = await store.loadOpen();
     if (open == null) return;
@@ -286,10 +393,21 @@ class Monitor {
       case 'foreground':
         final args = call.arguments as Map<Object?, Object?>;
         await _switchTo(args['package'] as String?);
+      case 'visible':
+        final args = call.arguments as Map<Object?, Object?>;
+        _visible = {
+          for (final p in args['packages'] as List? ?? const []) p as String,
+        };
+        await _syncAlsoOpen(DateTime.now());
+        await _evaluate();
       case 'screen':
         final args = call.arguments as Map<Object?, Object?>;
         _screenOn = args['on'] as bool? ?? true;
-        if (!_screenOn) await _switchTo(null);
+        _relay?.screenOn = _screenOn;
+        if (!_screenOn) {
+          _visible = {};
+          await _switchTo(null);
+        }
       case 'reload':
         // Became a parent's device, by joining others.
         if ((await store.loadSettings()).parentDevice) {
@@ -319,7 +437,35 @@ class Monitor {
     } else {
       await store.clearOpen();
     }
+    await _syncAlsoOpen(now);
     await _evaluate();
+  }
+
+  /// Starts or ends the recording of the apps on screen besides the one in
+  /// front: an app that comes in front is recorded as such from now on,
+  /// the one it replaces as beside it, if it stays on screen.
+  Future<void> _syncAlsoOpen(DateTime now) async {
+    final want = _screenOn && _foreground != null
+        ? ({..._visible}..remove(_foreground))
+        : <String>{};
+    for (final app in _alsoOpen.keys.toList()) {
+      if (want.contains(app)) continue;
+      await _record(app, _alsoOpen.remove(app)!, now);
+      _alsoBlocked.remove(app);
+    }
+    for (final app in want) {
+      _alsoOpen.putIfAbsent(app, () => now);
+    }
+  }
+
+  /// Records the use of the apps beside the one in front so far, every
+  /// few minutes (a stopped monitor loses little).
+  Future<void> _flushAlsoOpen(DateTime now) async {
+    for (final e in _alsoOpen.entries.toList()) {
+      if (now.difference(e.value) < const Duration(minutes: 5)) continue;
+      await _record(e.key, e.value, now);
+      _alsoOpen[e.key] = now;
+    }
   }
 
   Future<void> _closeOpen(DateTime now) async {
@@ -363,6 +509,9 @@ class Monitor {
     if (app != null && start != null) {
       await store.saveOpen(OpenSegment(app, start, DateTime.now()));
     }
+    await _flushAlsoOpen(DateTime.now());
+    // Once a day, whatever the number of calls.
+    await _prune();
     await _evaluate();
   }
 
@@ -388,6 +537,7 @@ class Monitor {
 
   Future<void> _evaluateOnce() async {
     _next?.cancel();
+    _alsoSoonest = null;
     final settings = _settings;
     final now = DateTime.now();
     if (settings == null || settings.childId == null) {
@@ -412,6 +562,16 @@ class Monitor {
           start: start,
           end: now,
         ),
+      // The apps beside it count too.
+      for (final e in _alsoOpen.entries)
+        if (now.isAfter(e.value))
+          UsageSegment.device(
+            childId: settings.childId!,
+            deviceId: settings.deviceId,
+            appId: e.key,
+            start: e.value,
+            end: now,
+          ),
     ];
     final s = _family.state;
     final state = s.copyWith(usage: usage);
@@ -446,6 +606,32 @@ class Monitor {
       return;
     }
     _blockedApp = null;
+
+    // An app beside it with no time left (split screen, floating video):
+    // closed too.
+    for (final other in _alsoOpen.keys.toList()) {
+      final od = engine.evaluate(
+        state,
+        childId: settings.childId!,
+        deviceId: settings.deviceId,
+        appId: other,
+        now: now,
+      );
+      if (!od.allowed) {
+        final last = _alsoBlocked[other];
+        if (last == null ||
+            now.difference(last) > const Duration(seconds: 10)) {
+          _alsoBlocked[other] = now;
+          await _block(other, od, now, beside: true);
+        }
+        _alsoSoonest = _untilDelay(od.until, now);
+        continue;
+      }
+      final left = od.remaining;
+      if (left != null && (_alsoSoonest == null || left < _alsoSoonest!)) {
+        _alsoSoonest = left;
+      }
+    }
 
     final remaining = d.remaining;
     final label = _label(d.ruleId);
@@ -692,17 +878,26 @@ class Monitor {
     return (title, message);
   }
 
-  Future<void> _block(String app, Decision d, DateTime now) async {
+  /// Closes [app] and says why. [beside]: an app on screen beside the one
+  /// in front, which stays in the countdown's notification.
+  Future<void> _block(
+    String app,
+    Decision d,
+    DateTime now, {
+    bool beside = false,
+  }) async {
     final (title, message) = _explain(app, d, now);
-    await _countdown(message);
-    // Show the block screen once per arrival in the app; again after 10 s
-    // in case the child is still there (no accessibility service).
-    final again =
-        _blockedAt == null ||
-        now.difference(_blockedAt!) > const Duration(seconds: 10);
-    if (_blockedApp == app && !again) return;
-    _blockedApp = app;
-    _blockedAt = now;
+    if (!beside) {
+      await _countdown(message);
+      // Show the block screen once per arrival in the app; again after
+      // 10 s in case the child is still there (no accessibility service).
+      final again =
+          _blockedAt == null ||
+          now.difference(_blockedAt!) > const Duration(seconds: 10);
+      if (_blockedApp == app && !again) return;
+      _blockedApp = app;
+      _blockedAt = now;
+    }
     await _channel.invokeMethod('block', {
       'title': title,
       'message': message,
@@ -825,12 +1020,21 @@ class Monitor {
   }
 
   void _schedule(Duration delay) {
+    // Sooner when an app beside the one in front runs out first.
+    final also = _alsoSoonest;
+    if (also != null && also < delay) {
+      delay = also < const Duration(seconds: 1)
+          ? const Duration(seconds: 1)
+          : also;
+    }
     _next?.cancel();
     _next = Timer(delay, () => _evaluate());
   }
 
   void dispose() {
+    _receipts?.cancel();
     _lan?.stop();
+    _relay?.stop();
     _log?.close();
     _next?.cancel();
     _heartbeat?.cancel();

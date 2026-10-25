@@ -127,4 +127,68 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Total : 1 h 10'), findsOneWidget);
   });
+
+  testWidgets('with several devices, each one\'s time', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'deviceName') return 'Tablette';
+          return null;
+        });
+    final dir = Directory.systemTemp.createTempSync('fst');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final store = LocalStore(dir);
+    final today = dayOf(DateTime.now());
+    final controller = AppController(
+      store,
+      const AppSettings(
+        deviceId: 'd',
+        language: 'fr',
+        setupDone: true,
+        childId: 'emma',
+        historyImported: true,
+      ),
+      const FamilyData(
+        children: [Child(id: 'emma', name: 'Emma')],
+      ),
+    );
+    await tester.runAsync(() async {
+      for (final (device, app, minutes) in [
+        ('d', 'minecraft', 40),
+        ('phone1234567', 'youtube', 15),
+      ]) {
+        await store.appendUsage(
+          UsageSegment.device(
+            childId: 'emma',
+            deviceId: device,
+            appId: app,
+            start: today,
+            end: today.add(Duration(minutes: minutes)),
+          ),
+        );
+      }
+    });
+    await tester.pumpWidget(
+      MaterialApp(home: UsageScreen(controller: controller, parent: true)),
+    );
+    for (var i = 0; i < 1000 && find.text('youtube').evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+      await tester.pump();
+    }
+    expect(find.text('Total : 55 min'), findsOneWidget);
+    expect(find.text('Tous les appareils · 55 min'), findsOneWidget);
+    expect(find.text('Tablette · 40 min'), findsOneWidget);
+    expect(find.text('phone123 · 15 min'), findsOneWidget);
+    await tester.ensureVisible(find.text('phone123 · 15 min'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('phone123 · 15 min'));
+    await tester.pumpAndSettle();
+    expect(find.text('Total : 15 min'), findsOneWidget);
+    expect(find.text('minecraft'), findsNothing);
+    expect(find.text('youtube'), findsOneWidget);
+  });
 }

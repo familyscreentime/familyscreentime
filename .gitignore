@@ -9,3 +9,7 @@ pubspec.lock
 key.properties
 *.jks
 *.keystore
+
+# Relay server: settings and data of an installed copy
+server/config.php
+server/data/*.sqlite*

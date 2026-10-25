@@ -17,6 +17,7 @@ import 'self_limit_report_screen.dart';
 import 'limit_screen.dart';
 import '../family.dart';
 import 'periods_screen.dart';
+import 'trends_screen.dart';
 import 'devices_screen.dart';
 import 'usage_screen.dart';
 import 'volume_screen.dart';
@@ -233,6 +234,12 @@ class _ParentHomeState extends State<ParentHome> {
               onTap: () =>
                   _open(context, UsageScreen(controller: c, parent: true)),
             ),
+            ListTile(
+              leading: const Icon(Icons.insights),
+              title: Text(s.t('trendsTitle')),
+              subtitle: Text(s.t('trendsTileHint')),
+              onTap: () => _open(context, TrendsScreen(controller: c)),
+            ),
             const Divider(),
             QuickActions(controller: c),
             const Divider(),
@@ -269,7 +276,16 @@ class _ParentHomeState extends State<ParentHome> {
             ListTile(
               leading: const Icon(Icons.add),
               title: Text(s.t('addGroup')),
-              onTap: () => _open(context, GroupEditor(controller: c)),
+              onTap: () async {
+                final id = await Navigator.of(context).push<String>(
+                  MaterialPageRoute(builder: (_) => GroupEditor(controller: c)),
+                );
+                // Created: straight to its page, to give it a limit.
+                if (id != null && context.mounted) {
+                  await openLimit(context, c, AppTarget.group(id));
+                }
+                await _loadTimes();
+              },
             ),
             if (c.otherChildrenGroups.isNotEmpty)
               ListTile(
@@ -313,6 +329,67 @@ class _ParentHomeState extends State<ParentHome> {
               subtitle: Text(_periodsSummary()),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _open(context, PeriodsScreen(controller: c)),
+            ),
+            const Divider(),
+            ListTile(title: Text(s.t('countingTitle'), style: header)),
+            RadioGroup<SimultaneousCounting>(
+              groupValue: c.family.config.counting,
+              onChanged: (v) {
+                if (v != null) {
+                  c.updateFamily(
+                    c.family.copyWith(
+                      config: c.family.config.copyWith(counting: v),
+                    ),
+                  );
+                }
+              },
+              child: Column(
+                children: [
+                  for (final (mode, title, hint) in [
+                    (
+                      SimultaneousCounting.sum,
+                      'countingSum',
+                      'countingSumHint',
+                    ),
+                    (
+                      SimultaneousCounting.elapsed,
+                      'countingOnce',
+                      'countingOnceHint',
+                    ),
+                  ])
+                    RadioListTile<SimultaneousCounting>(
+                      value: mode,
+                      title: Text(s.t(title)),
+                      subtitle: Text(s.t(hint)),
+                    ),
+                ],
+              ),
+            ),
+            const Divider(),
+            ListTile(title: Text(s.t('historyTitle'), style: header)),
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: Text(s.t('usageKept')),
+              subtitle: DropdownButton<int>(
+                value: c.family.usageKeptDays,
+                isExpanded: true,
+                items: [
+                  for (final d in {...usageKeptChoices, c.family.usageKeptDays})
+                    DropdownMenuItem(value: d, child: Text(keptLabel(s, d))),
+                ],
+                onChanged: (d) {
+                  if (d != null) {
+                    c.updateFamily(c.family.copyWith(usageKeptDays: d));
+                  }
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(72, 0, 16, 8),
+              child: Text(
+                s.t('usageKeptHint'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
             const Divider(),
             ListTile(title: Text(s.t('remindersTitle'), style: header)),

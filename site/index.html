@@ -29,14 +29,18 @@
 <li>Décompte flottant façon Time Timer, avertissements, message clair quand le temps est écoulé.</li>
 <li>L'enfant voit tout : son temps restant, ses règles, et il peut se fixer ses propres limites.</li>
 <li>Écoute seule pour les applis de musique : une fois le temps des clips écoulé, l'appli s'ouvre juste le temps de choisir la musique, qui continue en arrière-plan.</li>
-<li>Appareils reliés, si vous le souhaitez : la tablette et le téléphone d'un enfant partagent ses règles et son temps, et le parent règle tout depuis son propre téléphone. Directement entre vos appareils, sur le Wi-Fi de la maison, chiffré de bout en bout. Un appareil installé seul peut être relié plus tard, sans repartir de zéro.</li>
+<li>Statistiques par appli et par appareil, analyse sur plusieurs mois, export en CSV ou pour ActivityWatch.</li>
+<li>Écran partagé et vidéo en petite fenêtre pris en compte : chaque appli visible est comptée et fermée si son temps est écoulé.</li>
+<li>Appareils reliés, si vous le souhaitez : la tablette et le téléphone d'un enfant partagent ses règles et son temps, et le parent règle tout depuis son propre téléphone. Chaque appareil d'enfant ne reçoit que ce qui concerne cet enfant. Directement entre vos appareils sur le Wi-Fi de la maison, et hors de la maison par un serveur que vous hébergez vous-même, toujours chiffré de bout en bout. Un appareil installé seul peut être relié plus tard, sans repartir de zéro.</li>
 </ul>
+<h2>Le serveur relais</h2>
+<p>Facultatif, pour que les appareils reliés se synchronisent aussi hors de la maison. Un hébergement web ordinaire suffit (PHP 8.2 et MySQL, MariaDB ou SQLite), sans accès SSH. Il ne peut pas lire ce qu'il transmet. Un même serveur peut accueillir d'autres familles, sur invitation.</p>
+<p><a class="button" href="familyscreentime-server.zip">Télécharger le serveur (zip)</a> · <a href="https://github.com/familyscreentime/familyscreentime/blob/main/server/INSTALL.fr.md">Guide d'installation</a></p>
 <h2>À venir</h2>
 <ul class="features">
-<li>La synchronisation par un serveur que vous hébergez vous-même (PHP et MySQL, un hébergement ordinaire suffit), pour les appareils qui ne sont pas à la maison.</li>
-<li>Une version Windows, ensuite.</li>
+<li>Une version Windows.</li>
 </ul>
-<p class="muted">Relier des appareils reste facultatif. Sans cela, rien ne quitte l'appareil ; avec, les données ne vont que sur vos appareils, et plus tard sur votre serveur.</p>
+<p class="muted">Relier des appareils reste facultatif. Sans cela, rien ne quitte l'appareil ; avec, les données ne vont que sur vos appareils et, si vous en installez un, sur votre serveur, chiffrées.</p>
 <p>Conçue et testée par Olivier Berten, l'application est écrite par Claude, une IA d'Anthropic. C'est un logiciel libre (licence MIT) : <a href="https://github.com/familyscreentime/familyscreentime">son code source est sur GitHub</a>. Elle est en phase de test.</p>
 <p><a href="confidentialite.html">Règles de confidentialité</a></p>
 

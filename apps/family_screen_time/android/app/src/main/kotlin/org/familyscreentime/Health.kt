@@ -21,7 +21,6 @@ import android.util.Log
  */
 object Health {
     private const val PREFS = "monitor"
-    private const val WANTED = "wanted"
 
     /** Ticked in Android's accessibility settings. */
     fun accessibilityEnabled(context: Context): Boolean {
@@ -79,16 +78,51 @@ object Health {
      * Whether the monitor should run on this device: not on a parent's
      * device. Devices set up before this was recorded run it.
      */
-    fun monitorWanted(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(WANTED, true)
+    fun monitorWanted(context: Context): Boolean = !unwantedFile(context).exists()
+
+    /** A file rather than preferences: both processes read it. */
+    private fun unwantedFile(context: Context) = java.io.File(context.filesDir, "monitor-unwanted")
 
     fun setMonitorWanted(context: Context, wanted: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putBoolean(WANTED, wanted).apply()
+        val file = unwantedFile(context)
+        if (wanted) file.delete() else file.createNewFile()
         if (wanted) Watchdog.schedule(context) else Watchdog.cancel(context)
     }
 
     private const val XIAOMI_AUTOSTART_OP = 10008
+
+    private const val LAST_RESTART = "lastRestart"
+
+    /**
+     * Whether this app may restart its own process now to get the
+     * accessibility service back (Android binds it again when the process
+     * starts): at most once every half hour, so a device where it does not
+     * help is not restarted over and over.
+     */
+    fun mayRestartFor(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong(LAST_RESTART, 0L) < 30 * 60 * 1000L) return false
+        prefs.edit().putLong(LAST_RESTART, now).commit()
+        return true
+    }
+
+    /** Why the app's last processes ended, for the logs (Android 11+). */
+    fun logExitReasons(context: Context) {
+        if (Build.VERSION.SDK_INT < 30) return
+        try {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            for (info in am.getHistoricalProcessExitReasons(context.packageName, 0, 5)) {
+                Log.i(
+                    "FamilyScreenTime",
+                    "Process ended ${java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.ROOT).format(java.util.Date(info.timestamp))}: " +
+                        "reason ${info.reason}, importance ${info.importance}, ${info.description ?: ""}",
+                )
+            }
+        } catch (e: Exception) {
+            Log.w("FamilyScreenTime", "Exit reasons not read", e)
+        }
+    }
 }
 
 /**
@@ -97,10 +131,8 @@ object Health {
  */
 class Watchdog : JobService() {
     override fun onStartJob(params: JobParameters?): Boolean {
-        if (Health.monitorWanted(this) && MonitorService.instance == null) {
-            Log.i("FamilyScreenTime", "Watchdog: starting the monitor again")
-            MonitorService.start(this)
-        }
+        // Started, or kept: a running monitor only shows its notification again.
+        if (Health.monitorWanted(this)) MonitorService.start(this)
         return false
     }
 
@@ -108,6 +140,7 @@ class Watchdog : JobService() {
 
     companion object {
         private const val JOB_ID = 7301
+        private const val SOON_ID = 7302
         private const val PERIOD_MS = 15 * 60 * 1000L
 
         fun schedule(context: Context) {
@@ -121,6 +154,20 @@ class Watchdog : JobService() {
                 jobs.schedule(job)
             } catch (e: Exception) {
                 Log.w("FamilyScreenTime", "Watchdog not scheduled", e)
+            }
+        }
+
+        /** Starts the monitor again in a few seconds, once. */
+        fun soon(context: Context) {
+            val jobs = context.getSystemService(Context.JOB_SCHEDULER_SERVICE) as JobScheduler
+            val job = JobInfo.Builder(SOON_ID, ComponentName(context, Watchdog::class.java))
+                .setMinimumLatency(3_000)
+                .setOverrideDeadline(15_000)
+                .build()
+            try {
+                jobs.schedule(job)
+            } catch (e: Exception) {
+                Log.w("FamilyScreenTime", "Restart not scheduled", e)
             }
         }
 

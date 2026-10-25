@@ -2,9 +2,9 @@ name: Sync
 
 on:
   push:
-    paths: ['packages/screentime_sync/**', '.github/workflows/sync.yml']
+    paths: ['packages/screentime_sync/**', 'server/**', '.github/workflows/sync.yml']
   pull_request:
-    paths: ['packages/screentime_sync/**', '.github/workflows/sync.yml']
+    paths: ['packages/screentime_sync/**', 'server/**', '.github/workflows/sync.yml']
 
 jobs:
   test:
@@ -15,7 +15,44 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dart-lang/setup-dart@v1
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: sodium, pdo_sqlite, pdo_mysql
+      - name: PHP syntax
+        working-directory: server
+        run: for f in *.php lib/*.php; do php -l "$f"; done
       - run: dart pub get
       - run: dart format --output=none --set-exit-if-changed .
       - run: dart analyze
       - run: dart test
+
+  # The relay against MariaDB, as on most hosts.
+  mysql:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: fst
+          MARIADB_USER: fst
+          MARIADB_PASSWORD: fstpass
+          MARIADB_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    defaults:
+      run:
+        working-directory: packages/screentime_sync
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dart-lang/setup-dart@v1
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: sodium, pdo_sqlite, pdo_mysql
+      - run: dart pub get
+      - run: dart test test/relay_test.dart
+        env:
+          FST_TEST_MYSQL: 127.0.0.1:fst:fst:fstpass

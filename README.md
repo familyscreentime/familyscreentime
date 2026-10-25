@@ -18,10 +18,10 @@ https://github.com/familyscreentime/familyscreentime
 | Folder | Role | Status |
 | --- | --- | --- |
 | `packages/screentime_engine` | Rule engine in pure Dart, shared by every client | Phase 1 complete |
-| `packages/screentime_sync` | Synchronisation in pure Dart: signed event log, merge, keys, encrypted sessions, pairing | Steps 1–4 of the sync done: family log on each device, sync on the local network, pairing, a parent's phone; the PHP server comes next |
+| `packages/screentime_sync` | Synchronisation in pure Dart: signed event log, merge, keys, encrypted sessions, pairing, relay client; each child's devices receive only that child's data | Local network, pairing, a parent's phone, the relay server, per-child data |
+| `server` | Relay server in PHP 8.2 (MySQL, MariaDB or SQLite): stores the events end-to-end encrypted, by invitation; see `server/README.md` (API 2 since app 0.25) | In testing; also downloadable from the site |
 | `apps/family_screen_time` | Flutter app: Android client today, Windows client later | Phase 1 complete, in real-use testing |
-| `site` | familyscreentime.org: home page and privacy policy (FR, NL, EN), static files; `build_site.py` regenerates them | Ready to upload |
+| `site` | familyscreentime.org: home page and privacy policy (FR, NL, EN), static files and the server's zip; `build_site.py` regenerates the pages | Ready to upload |
 | `store` | Google Play: store listing, Play Console answers and declarations (English and French console), icon and feature graphic | Ready for internal testing |
 
-Synchronisation (local network, then the PHP/MySQL server) comes next, then
-the Windows client, as described in the specification.
+The Windows client comes next, as described in the specification.

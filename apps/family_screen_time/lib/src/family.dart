@@ -22,6 +22,23 @@ const knownSystemPackages = {
   'com.android.permissioncontroller',
 };
 
+/// Home screens of the usual makers: not counted in the statistics, even
+/// from a device that has not shared its own (see `FamilySync.publishSystem`).
+const knownLaunchers = {
+  'com.miui.home',
+  'com.mi.android.globallauncher',
+  'com.sec.android.app.launcher',
+  'com.google.android.apps.nexuslauncher',
+  'com.android.launcher',
+  'com.android.launcher3',
+  'com.huawei.android.launcher',
+  'com.hihonor.android.launcher',
+  'com.oppo.launcher',
+  'com.motorola.launcher3',
+  'com.teslacoilsw.launcher',
+  'com.microsoft.launcher',
+};
+
 /// Configuration for a new family on this device.
 FamilyConfig initialConfig(SystemPackages p) => FamilyConfig(
   alwaysAllowed: {?p.dialer, ?p.sms},

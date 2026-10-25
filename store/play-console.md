@@ -69,8 +69,9 @@ installed by a parent on a child's device, whichever you choose.
 
 From 0.20, linked devices exchange data with each other, and the form must
 account for it. What travels, only between the devices the parent linked,
-over the home Wi-Fi, end-to-end encrypted, with no server of the
-publisher:
+end-to-end encrypted, with no server of the publisher: over the home
+Wi-Fi, and from 0.23 through a relay server the family hosts itself (or
+someone it trusts), if the parent sets one up:
 
 - the children's first names;
 - rules, app groups, extra time, blocks and time away from the devices;
@@ -88,7 +89,15 @@ sender and recipient as a result of end-to-end encryption does not need to
 be disclosed." The condition: no intermediary, the developer included, can
 read the data; only sender and recipient hold the keys. That is the case
 here: each session between two devices is encrypted with ephemeral keys
-(X25519, ChaCha20-Poly1305) known to them alone, with no server or relay.
+(X25519, ChaCha20-Poly1305) known to them alone. Through the relay server,
+each event is encrypted on the device before it leaves
+(XChaCha20-Poly1305), with a key only the linked devices hold: the server
+stores and passes on ciphertext, and neither it nor its administrator can
+read it. The relay is not the developer's: the developer runs no server.
+
+Exports (CSV, ActivityWatch) are files the parent hands to another app of
+their choice through Android's share menu: user-initiated, not collection
+by the app.
 
 Answers:
 
@@ -106,8 +115,8 @@ declare: collection **Yes**; encrypted in transit **Yes**; deletion
 **Installed apps**, **Device or other IDs**; for each collected yes, shared
 no, optional, purpose **App functionality**.
 
-To be reviewed with the self-hosted server: it stays outside the exemption
-if it can read the data, so it must only store end-to-end encrypted events.
+The relay server only ever stores end-to-end encrypted events: the
+exemption holds.
 
 ### Accessibility API declaration
 
@@ -116,9 +125,11 @@ if it can read the data, so it must only store end-to-end encrypted events.
 
 > Family Screen Time is a parental control app. Its accessibility service
 > detects which app is in the foreground (package and activity names of
-> window changes), so that screen time is counted and the limits set by the
-> parent are applied; it sends the user to the home screen when an app is
-> blocked; and it shows the countdown, warnings, block notices and the
+> window changes) and which apps have windows on screen (package names of
+> the window list: split screen, picture in picture), so that screen time
+> is counted and the limits set by the parent are applied; it sends the
+> user to the home screen when an app is blocked, and dismisses the
+> picture-in-picture window of a blocked app; and it shows the countdown, warnings, block notices and the
 > optional device lock as accessibility overlays, which stay visible over
 > full-screen apps. When the parent turns on uninstall protection, the
 > service also closes the Android settings pages that would switch the app
@@ -126,8 +137,9 @@ if it can read the data, so it must only store end-to-end encrypted events.
 > Android's security page offering to remove its access). For this, screen
 > content is read only on Android's security and permission pages. No data
 > is stored beyond usage times, which stay on the device, or go only to the
-> user's other devices the parent linked (over the home Wi-Fi, end-to-end
-> encrypted, never to the developer or third parties). Before the
+> user's other devices the parent linked (over the home Wi-Fi, or through a
+> relay server the family hosts itself, always end-to-end encrypted, never
+> to the developer or third parties). Before the
 > service is turned on, an in-app disclosure explains this and asks for
 > consent. The source code is public: https://github.com/familyscreentime/familyscreentime
 
@@ -164,8 +176,9 @@ if it can read the data, so it must only store end-to-end encrypted events.
   foreground app; usage history stays on the device.
 - INTERNET, ACCESS_NETWORK_STATE, CHANGE_WIFI_MULTICAST_STATE: optional
   linked devices find each other on the home Wi-Fi (DNS-SD) and exchange
-  settings and usage directly, end-to-end encrypted. No server is
-  contacted; a device linked to no other uses no network.
+  settings and usage directly, end-to-end encrypted, and with the relay
+  server the parent set up, if any (the family's own, never the
+  developer's). A device linked to no other uses no network.
 
 ## 3. Upload to internal testing
 

@@ -81,7 +81,7 @@ void main() {
     }
     expect(find.text('Tablette'), findsOneWidget);
     expect(find.text('Appareil de Emma · Cet appareil'), findsOneWidget);
-    expect(find.text('Appareil de Emma · Connecté'), findsOneWidget);
+    expect(find.textContaining('Appareil de Emma · Connecté'), findsOneWidget);
     expect(find.text('Relier un appareil'), findsOneWidget);
     expect(find.text('Détacher cet appareil'), findsOneWidget);
     // Each can be renamed; only the other device can be removed from here.

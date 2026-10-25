@@ -108,6 +108,17 @@ class BlockActivity : Activity() {
             addView(message, LinearLayout.LayoutParams(match, wrap))
             addView(homeButton, LinearLayout.LayoutParams(match, wrap))
             addView(openButton, LinearLayout.LayoutParams(match, wrap))
+            // Drawn edge to edge (Android 15 and later): the texts and
+            // buttons stay clear of the status and navigation bars and of
+            // the camera cutout; the background fills the screen.
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
+                val bars = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                        androidx.core.view.WindowInsetsCompat.Type.displayCutout(),
+                )
+                v.setPadding(pad + bars.left, pad + bars.top, pad + bars.right, pad + bars.bottom)
+                insets
+            }
         }
     }
 

@@ -72,13 +72,58 @@ class _FamilyScreenTimeAppState extends State<FamilyScreenTimeApp>
         supportedLocales: [for (final l in supportedLanguages) Locale(l)],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         // Every touch keeps parent mode open.
-        builder: (context, child) =>
-            Listener(onPointerDown: (_) => controller.touch(), child: child),
+        builder: (context, child) => Listener(
+          onPointerDown: (_) => controller.touch(),
+          child: SystemBarsInset(child: child!),
+        ),
         home: !controller.settings.setupDone
             ? SetupFlow(controller: controller)
             : controller.settings.parentDevice
             ? ParentDeviceHome(controller: controller)
             : ChildHome(controller: controller),
+      ),
+    );
+  }
+}
+
+/// Keeps the screens clear of the navigation bar and of the sides' cutouts,
+/// with the app drawn edge to edge (Android 15 and later): the screens'
+/// background fills that space, and their content (lists, buttons) ends
+/// above it. The status bar is the app bars' business.
+class SystemBarsInset extends StatelessWidget {
+  final Widget child;
+
+  const SystemBarsInset({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final inset = EdgeInsets.fromLTRB(
+      mq.viewPadding.left,
+      0,
+      mq.viewPadding.right,
+      mq.viewPadding.bottom,
+    );
+    if (inset == EdgeInsets.zero) return child;
+    EdgeInsets less(EdgeInsets e) => EdgeInsets.fromLTRB(
+      (e.left - inset.left).clamp(0, double.infinity),
+      e.top,
+      (e.right - inset.right).clamp(0, double.infinity),
+      (e.bottom - inset.bottom).clamp(0, double.infinity),
+    );
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surface,
+      child: Padding(
+        padding: inset,
+        child: MediaQuery(
+          data: mq.copyWith(
+            padding: less(mq.padding),
+            viewPadding: less(mq.viewPadding),
+            // The keyboard rises from the bottom of the screen.
+            viewInsets: less(mq.viewInsets),
+          ),
+          child: child,
+        ),
       ),
     );
   }

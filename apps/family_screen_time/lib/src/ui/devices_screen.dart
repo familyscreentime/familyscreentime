@@ -9,6 +9,7 @@ import 'package:screentime_engine/screentime_engine.dart' show dayOf;
 import 'package:screentime_sync/screentime_sync.dart';
 
 import '../controller.dart';
+import '../ordering.dart';
 import '../store.dart';
 import '../strings.dart';
 import '../sync/bonsoir_directory.dart';
@@ -291,6 +292,12 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final s = c.s;
     final log = _log;
     final now = DateTime.now();
+    final devices = log?.devices ?? const <String, Map<String, Object?>>{};
+    // Every child's name, also on a child's device.
+    final childNames = {
+      for (final child in log?.allChildren() ?? c.family.children)
+        child.id: child.name,
+    };
     return Scaffold(
       appBar: AppBar(title: Text(s.t('devicesTitle'))),
       floatingActionButton: !_loaded || !_linked
@@ -321,10 +328,28 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       label: Text(s.t('joinDevices')),
                     ),
                 ] else ...[
-                  Text(s.t('devicesHint')),
+                  Text(
+                    s.t(
+                      _relay != null && _relayKey
+                          ? 'devicesHintRelay'
+                          : 'devicesHint',
+                    ),
+                  ),
                   const SizedBox(height: 8),
-                  for (final e in log!.devices.entries)
-                    _deviceTile(context, s, log, e.key, e.value, now),
+                  for (final id in devicesInOrder(
+                    devices,
+                    here: log!.deviceId,
+                    childName: (id) => childNames[id],
+                  ))
+                    _deviceTile(
+                      context,
+                      s,
+                      log,
+                      id,
+                      devices[id]!,
+                      childNames[devices[id]!['childId']],
+                      now,
+                    ),
                   Card(
                     child: ListTile(
                       leading: const Icon(Icons.fact_check_outlined),
@@ -366,11 +391,10 @@ class _DevicesScreenState extends State<DevicesScreen> {
     FamilySync log,
     String id,
     Map<String, Object?> d,
+    String? child,
     DateTime now,
   ) {
-    final c = widget.controller;
     final name = d['name'] as String? ?? id;
-    final child = c.family.child(d['childId'] as String?);
     final here = id == log.deviceId;
     final peer = _peers[id];
     // The last contact on the network or through the relay.
@@ -395,7 +419,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
         subtitle: Text(
           [
             if (child != null)
-              s.t('deviceOfChild', {'child': child.name})
+              s.t('deviceOfChild', {'child': child})
             else if (d['role'] == 'parent')
               s.t('deviceParent'),
             status,
@@ -491,7 +515,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
         name: info['name'] as String? ?? '',
         child: child is Map ? Map<String, Object?>.from(child) : null,
         // Every child, also from a child's device.
-        children: _linkLog?.allChildren() ?? c.family.children,
+        children: childrenByName(_linkLog?.allChildren() ?? c.family.children),
       ),
     );
     if (registration == null) return null;

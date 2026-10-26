@@ -1,0 +1,59 @@
+name: Windows client
+
+on:
+  push:
+    paths:
+      - 'apps/family_screen_time/**'
+      - 'packages/screentime_engine/**'
+      - 'packages/screentime_sync/**'
+      - 'installer/windows/**'
+      - '.github/workflows/windows.yml'
+  pull_request:
+    paths:
+      - 'apps/family_screen_time/**'
+      - 'packages/screentime_engine/**'
+      - 'packages/screentime_sync/**'
+      - 'installer/windows/**'
+      - '.github/workflows/windows.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/family_screen_time
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze
+      # The C++ compiler's errors, as annotations, when the build fails.
+      - name: Build
+        shell: pwsh
+        run: |
+          flutter build windows --release 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            Select-String -Path build.log -Pattern ': (fatal )?error ' |
+              Select-Object -First 40 |
+              ForEach-Object { Write-Output "::error::$($_.Line.Trim())" }
+            exit 1
+          }
+      - name: Installer
+        shell: pwsh
+        run: |
+          # The Visual C++ runtime goes next to the app.
+          $release = 'build\windows\x64\runner\Release'
+          foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            Copy-Item "$env:SystemRoot\System32\$dll" $release
+          }
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version: ([0-9.]+)').Matches[0].Groups[1].Value
+          & $iscc "/DAppVersion=$version" ..\..\installer\windows\FamilyScreenTime.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - uses: actions/upload-artifact@v6
+        with:
+          name: windows-installer
+          path: installer/windows/Output/*.exe

@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "org.familyscreentime" "\0"
-            VALUE "FileDescription", "family_screen_time" "\0"
+            VALUE "CompanyName", "FamilyScreenTime" "\0"
+            VALUE "FileDescription", "Family Screen Time" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "family_screen_time" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 org.familyscreentime. All rights reserved." "\0"
-            VALUE "OriginalFilename", "family_screen_time.exe" "\0"
-            VALUE "ProductName", "family_screen_time" "\0"
+            VALUE "InternalName", "FamilyScreenTime" "\0"
+            VALUE "LegalCopyright", "MIT licence, Family Screen Time contributors" "\0"
+            VALUE "OriginalFilename", "FamilyScreenTime.exe" "\0"
+            VALUE "ProductName", "Family Screen Time" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

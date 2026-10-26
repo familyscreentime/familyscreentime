@@ -7,6 +7,7 @@ import 'package:screentime_engine/screentime_engine.dart';
 
 import '../controller.dart';
 import '../family.dart';
+import '../ordering.dart';
 import '../platform.dart';
 import '../strings.dart';
 import '../usage_report.dart';
@@ -38,8 +39,10 @@ List<String> devicesOf(
       if (s.childId == childId && !s.isInjected && s.deviceId != null)
         s.deviceId!,
   }.toList();
-  String name(String id) => (names[id] ?? id).toLowerCase();
-  return ids..sort((a, b) => name(a).compareTo(name(b)));
+  return ids..sort((a, b) {
+    final c = compareNames(names[a] ?? a, names[b] ?? b);
+    return c != 0 ? c : a.compareTo(b);
+  });
 }
 
 /// Name of device [id], or the start of its id.

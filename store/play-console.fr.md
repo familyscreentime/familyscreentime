@@ -147,9 +147,48 @@ l'exemption s'applique.
 
 ### Déclaration relative à l'API d'accessibilité
 
-- Votre application est-elle un outil d'accessibilité
-  (isAccessibilityTool) ? **Non.**
-- Description de l'utilisation, à coller :
+Contenu de l'application › API d'accessibilité. L'attribut
+`isAccessibilityTool` n'est pas renseigné : l'appli n'est donc pas
+déclarée comme outil d'accessibilité, ce qui est juste. Le formulaire
+(octobre 2026) pose trois questions :
+
+- **Utilisation** : cocher seulement **Fonctionnement de l'appli**
+  (compter le temps des applis à l'écran, fermer une appli bloquée,
+  afficher le décompte et le verrouillage, protection contre la
+  désinstallation). Rien pour l'analyse, la publicité, la
+  personnalisation, les comptes ni les communications.
+- **Données sensibles** : **Non**, comme dans la section Sécurité des
+  données. Le service ne transmet rien au développeur ni à des tiers ;
+  l'appli à l'écran et la durée d'utilisation restent sur l'appareil, ou
+  vont aux appareils reliés et au serveur relais de la famille, chiffrées
+  de bout en bout (exemption prévue par l'aide de Google, à laquelle la
+  question renvoie). Si un examinateur conteste, répondre **Oui** ici et
+  déclarer la collecte dans Sécurité des données (voir plus haut) : la
+  mention dans l'appli dit déjà ce qui est fait de ces données.
+- **Visibilité des communiqués** : un lien vers une vidéo (YouTube « non
+  répertoriée », moins de 3 minutes) qui montre la mention présentée avant
+  l'activation, puis cocher la confirmation.
+
+Vidéo, sur une tablette avec l'enregistreur d'écran d'Android (une
+installation neuve depuis le Play Store, en français ou en anglais) :
+
+1. L'ouverture de l'appli et la configuration jusqu'à l'écran des
+   autorisations.
+2. Un appui sur **Accessibilité** : la fenêtre d'information s'ouvre. La
+   laisser à l'écran le temps de lire tout le texte (quelques secondes ;
+   faire défiler s'il dépasse).
+3. Un appui sur **Accepter et activer** : la page d'accessibilité
+   d'Android s'ouvre ; activer Family Screen Time et confirmer.
+4. Le retour dans l'appli : l'accessibilité est cochée.
+5. Facultatif mais utile : une appli limitée qui se ferme, avec son
+   message, et la vidéo en petite fenêtre d'une appli bloquée qui se
+   ferme.
+
+Montrer aussi **Refuser** une fois (la fenêtre se ferme, rien n'est
+activé) aide l'examinateur à voir que le choix est libre.
+
+Texte de référence, si un examinateur demande une description de
+l'utilisation (en anglais) :
 
 > Family Screen Time is a parental control app. Its accessibility service
 > detects which app is in the foreground (package and activity names of
@@ -170,12 +209,6 @@ l'exemption s'applique.
 > to the developer or third parties). Before the
 > service is turned on, an in-app disclosure explains this and asks for
 > consent. The source code is public: https://github.com/familyscreentime/familyscreentime
-
-- Vidéo : Google peut demander une courte vidéo (un lien, par exemple
-  YouTube en « non répertoriée »). Montrer : le premier lancement, l'écran
-  des autorisations, la fenêtre d'information avec « Accepter et activer »,
-  l'activation du service dans les paramètres Android, puis une appli
-  limitée qui se ferme avec son message.
 
 ### Services de premier plan (utilisation spéciale)
 

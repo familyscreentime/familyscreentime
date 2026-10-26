@@ -7,6 +7,7 @@ import 'package:screentime_sync/screentime_sync.dart'
     show PeerState, RelayState;
 
 import '../controller.dart';
+import '../ordering.dart';
 import '../sync/family_sync.dart';
 import 'devices_screen.dart';
 import 'parent_home.dart';
@@ -31,12 +32,22 @@ class ParentDeviceHome extends StatelessWidget {
     );
   }
 
-  /// The log, this device's last exchange with the relay, and what each
-  /// device has not received yet.
+  /// The log, this device's last exchange with the relay (when it can use
+  /// one), and what each device has not received yet.
   Future<(FamilySync?, RelayState?, Map<String, int>)> _summary(
     AppController c,
-  ) async =>
-      (await c.sync, (await c.relayStatus())?.$2, await c.pendingChanges());
+  ) async => (
+    await c.sync,
+    await c.hasRelayKey ? (await c.relayStatus())?.$2 : null,
+    await c.pendingChanges(),
+  );
+
+  /// Whether the last pass with the relay server went through.
+  static bool _serverOk(RelayState relay) {
+    final ok = relay.lastOk;
+    final error = relay.errorAt;
+    return ok != null && (error == null || !error.isAfter(ok));
+  }
 
   /// One linked device: its name (and child), and whether it is here now.
   Widget _deviceLine(
@@ -116,9 +127,13 @@ class ParentDeviceHome extends StatelessWidget {
                 final data = snapshot.data;
                 if (data == null) return const SizedBox.shrink();
                 final (log, relay, pending) = data;
+                final devices = log?.devices ?? const {};
                 final others = {
-                  for (final e in (log?.devices ?? const {}).entries)
-                    if (e.key != log?.deviceId) e.key: e.value,
+                  for (final id in devicesInOrder(
+                    devices,
+                    childName: (id) => c.family.child(id)?.name,
+                  ))
+                    if (id != log?.deviceId) id: devices[id]!,
                 };
                 if (others.isEmpty) {
                   return Text(
@@ -151,13 +166,23 @@ class ParentDeviceHome extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
-                          s.t('parentDevicePending', {
-                            'devices': [
-                              for (final e in pending.entries)
-                                if (e.value > 0)
-                                  others[e.key]?['name'] as String? ?? e.key,
-                            ].join(', '),
-                          }),
+                          s.t(
+                            // With the relay server, the Wi-Fi does not
+                            // matter: once on the server, the changes
+                            // reach them wherever they are.
+                            relay == null
+                                ? 'parentDevicePending'
+                                : _serverOk(relay)
+                                ? 'parentDevicePendingServer'
+                                : 'parentDevicePendingOffline',
+                            {
+                              'devices': [
+                                for (final id in others.keys)
+                                  if ((pending[id] ?? 0) > 0)
+                                    others[id]?['name'] as String? ?? id,
+                              ].join(', '),
+                            },
+                          ),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.error,
                           ),
@@ -177,7 +202,7 @@ class ParentDeviceHome extends StatelessWidget {
                 ),
               )
             else ...[
-              for (final child in c.family.children)
+              for (final child in childrenByName(c.family.children))
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.child_care),

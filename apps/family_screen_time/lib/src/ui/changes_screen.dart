@@ -9,6 +9,7 @@ import 'package:screentime_engine/screentime_engine.dart';
 import 'package:screentime_sync/screentime_sync.dart';
 
 import '../controller.dart';
+import '../ordering.dart';
 import '../strings.dart';
 import '../sync/family_entities.dart';
 import '../sync/family_sync.dart';
@@ -178,7 +179,14 @@ class _ChangesScreenState extends State<ChangesScreen> {
     final now = DateTime.now();
     final devices = log.devices;
     String name(String id) => devices[id]?['name'] as String? ?? id;
-    final targets = targetsOf(log, change);
+    // In the order of the devices screen.
+    final order = devicesInOrder(
+      devices,
+      here: log.deviceId,
+      childName: (id) => c.family.child(id)?.name,
+    );
+    final targets = targetsOf(log, change)
+      ..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),

@@ -120,8 +120,41 @@ exemption holds.
 
 ### Accessibility API declaration
 
-- Is your app an accessibility tool (isAccessibilityTool)? **No.**
-- Description of use, to paste:
+App content › Accessibility API. The `isAccessibilityTool` attribute is
+not set, so the app is declared as not an accessibility tool, which is
+right. The form (October 2026) asks three things:
+
+- **Use**: tick only **App functionality** (counting the time of the apps
+  on screen, closing a blocked app, showing the countdown and the lock,
+  uninstall protection). Nothing for analytics, ads, personalisation,
+  accounts or developer communications.
+- **Sensitive data**: **No**, as in the Data safety section. The service
+  sends nothing to the developer or third parties; the app on screen and
+  usage times stay on the device, or go to the linked devices and the
+  family's relay server, end-to-end encrypted (the exemption in Google's
+  help, which the question links to). If a reviewer objects, answer
+  **Yes** here and declare the collection in Data safety (see above): the
+  in-app disclosure already says what is done with this data.
+- **Prominent disclosure**: a link to a video (unlisted on YouTube, under
+  3 minutes) showing the disclosure shown before the service is turned on,
+  then tick the confirmation.
+
+Video, on a tablet with Android's screen recorder (a fresh install from
+the Play Store):
+
+1. Opening the app and setting it up up to the permissions screen.
+2. Tapping **Accessibility**: the disclosure opens. Leave it on screen
+   long enough to read all of it (scroll if it is longer).
+3. Tapping **Accept and turn on**: Android's accessibility page opens;
+   turn Family Screen Time on and confirm.
+4. Back in the app: accessibility is ticked.
+5. Optional but useful: a limited app closing, with its message, and the
+   small video window of a blocked app closing.
+
+Showing **Decline** once (the dialog closes, nothing is turned on) helps
+the reviewer see the choice is free.
+
+Reference text, if a reviewer asks for a description of use:
 
 > Family Screen Time is a parental control app. Its accessibility service
 > detects which app is in the foreground (package and activity names of
@@ -142,11 +175,6 @@ exemption holds.
 > to the developer or third parties). Before the
 > service is turned on, an in-app disclosure explains this and asks for
 > consent. The source code is public: https://github.com/familyscreentime/familyscreentime
-
-- Video: Google may ask for a short video (a link, e.g. unlisted YouTube).
-  Show: first launch, the permissions screen, the disclosure dialog with
-  "Accept and turn on", turning the service on in Android settings, then a
-  limited app being closed with its notice.
 
 ### Foreground service (special use)
 

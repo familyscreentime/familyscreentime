@@ -795,4 +795,80 @@ void main() {
       );
     });
   });
+
+  group('eye breaks', () {
+    /// 25 minutes of YouTube (no limit) on this device, up to now.
+    Future<void> watched() async {
+      final now = DateTime.now();
+      await store.appendUsage(
+        UsageSegment.device(
+          childId: 'emma',
+          deviceId: 'tablet',
+          appId: 'youtube',
+          start: now.subtract(const Duration(minutes: 25)),
+          end: now,
+        ),
+      );
+      await send('reload', null);
+    }
+
+    Iterable<MethodCall> sent(String method) =>
+        calls.where((c) => c.method == method);
+
+    test('after 20 minutes of screen, announced with a put-off', () async {
+      await watched();
+      await send('foreground', {'package': 'youtube'});
+      final notice = sent('eyeNotice').single.arguments as Map;
+      expect(
+        notice['title'],
+        'Il va être temps de faire une pause pour les yeux',
+      );
+      expect(notice['text'], contains('encore 3 fois'));
+      expect(notice['later'], 'Dans 1 min');
+      expect(sent('eyeVeil'), isEmpty);
+    });
+
+    test('"now": the veil, not counted as screen time', () async {
+      await watched();
+      await send('foreground', {'package': 'youtube'});
+      final before = DateTime.now();
+      await send('eyeBreak', {'action': 'now'});
+      final veil = sent('eyeVeil').single.arguments as Map;
+      final ends = DateTime.fromMillisecondsSinceEpoch(veil['endsAt'] as int);
+      // 25 minutes of screen: 25 seconds.
+      expect(ends.difference(before).inSeconds, inInclusiveRange(24, 26));
+      expect(veil['title'], 'Regarde au loin');
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      await send('screen', {'on': false});
+      expect(sent('eyeHide'), hasLength(1));
+      final usage = await store.loadUsage(since: dayOf(DateTime.now()));
+      expect(usage.where((u) => !u.start.isBefore(before)), isEmpty);
+    });
+
+    test('put off: no veil for a minute, the notice goes', () async {
+      await watched();
+      await send('foreground', {'package': 'youtube'});
+      await send('eyeBreak', {'action': 'later'});
+      expect(sent('eyeVeil'), isEmpty);
+      expect(sent('eyeNotice'), hasLength(1));
+    });
+
+    test('none when the parent turned them off', () async {
+      final family = await store.loadFamily();
+      await store.saveFamily(
+        family.copyWith(
+          children: const [
+            Child(
+              id: 'emma',
+              name: 'Emma',
+              eyeBreak: EyeBreakPolicy(enabled: false),
+            ),
+          ],
+        ),
+      );
+      await watched();
+      await send('foreground', {'package': 'youtube'});
+      expect(sent('eyeNotice'), isEmpty);
+    });
+  });
 }

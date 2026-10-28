@@ -84,6 +84,7 @@ if (!d.allowed) {
 | Daily time by weekday | `dailyQuotaByWeekday` overrides `dailyQuota` for given weekdays; zero blocks the day. A weekday with neither has no daily limit: it produces no overrun or savings and takes no carry-over. |
 | Days outside a profile | A day when the rule is not in force produces neither savings nor overruns. |
 | Mandatory break | Use on all covered devices is merged; a gap at least as long as the break resets the counter. |
+| Eye break | Not a rule: `EyeBreakPolicy` per child, and `screenStretchStart` gives the start of the stretch of screen use on one device (all apps, those beside the one in front counted once). A gap at least as long as the break ends the stretch. `lengthAfter` makes a later break longer, in proportion, up to three times its length. |
 | Rule history | Past days are recomputed with the current rules. |
 
 ## Tests

@@ -57,6 +57,18 @@ void main() {
     expect(back.withPresets(const [10]).volumeHeadphones, 60);
   });
 
+  test('eye breaks: on by default, settings survive a round trip', () {
+    final saved = const Child(id: 'emma', name: 'Emma').toJson()
+      ..remove('eyeBreak');
+    expect(Child.fromJson(saved).eyeBreak, const EyeBreakPolicy());
+    const policy = EyeBreakPolicy(every: Duration(minutes: 30), snoozes: 1);
+    final child = const Child(
+      id: 'emma',
+      name: 'Emma',
+    ).withEyeBreak(policy).withVolume(headphones: 50);
+    expect(Child.fromJson(child.toJson()).eyeBreak, policy);
+  });
+
   test('reminder choices survive a round trip, with defaults', () async {
     final settings = await store.loadSettings(defaultLanguage: 'fr');
     expect(settings.warningMinutes, [10, 5, 1]);

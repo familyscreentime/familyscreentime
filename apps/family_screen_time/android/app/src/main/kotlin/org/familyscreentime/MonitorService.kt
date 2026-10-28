@@ -146,6 +146,10 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
             }
             "visible" -> visible(data.getStringArrayList("packages") ?: arrayListOf())
             "reload" -> reload()
+            // The child's answer to an eye break's notice, or "busy".
+            "eyeBreak" -> main.post {
+                channel?.invokeMethod("eyeBreak", mapOf("action" to data.getString("action")))
+            }
         }
     }
 
@@ -384,7 +388,7 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
                 result.success(null)
             }
             "block", "unblock", "warn", "overlay", "overlayHide", "lockState",
-            "volumeCap", "familyChanged" -> {
+            "volumeCap", "familyChanged", "eyeNotice", "eyeVeil", "eyeHide" -> {
                 forward(call.method, call.arguments as? Map<*, *>)
                 result.success(null)
             }

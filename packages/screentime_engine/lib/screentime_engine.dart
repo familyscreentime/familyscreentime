@@ -6,6 +6,7 @@ library;
 
 export 'src/calendar.dart';
 export 'src/engine.dart';
+export 'src/eye_break.dart';
 export 'src/json.dart';
 export 'src/modifiers.dart';
 export 'src/rules.dart';

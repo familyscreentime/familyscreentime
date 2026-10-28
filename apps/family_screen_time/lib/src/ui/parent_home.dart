@@ -20,6 +20,7 @@ import 'periods_screen.dart';
 import 'trends_screen.dart';
 import 'devices_screen.dart';
 import 'usage_screen.dart';
+import 'eye_break_screen.dart';
 import 'volume_screen.dart';
 
 class ParentHome extends StatefulWidget {
@@ -500,6 +501,15 @@ class _ParentHomeState extends State<ParentHome> {
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _open(context, VolumeScreen(controller: c)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.visibility_outlined),
+              title: Text(s.t('eyeBreakTitle')),
+              subtitle: Text(
+                eyeBreakSummary(s, c.child?.eyeBreak ?? const EyeBreakPolicy()),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(context, EyeBreakScreen(controller: c)),
             ),
             // This device's permissions: none needed on a parent's device.
             if (!c.settings.parentDevice) ...[

@@ -176,12 +176,16 @@ class Child {
   /// Media volume cap on the speaker, in percent; `null`: no cap.
   final int? volumeSpeaker;
 
+  /// Breaks to look into the distance, on by default.
+  final EyeBreakPolicy eyeBreak;
+
   const Child({
     required this.id,
     required this.name,
     this.presets = defaultPresets,
     this.volumeHeadphones,
     this.volumeSpeaker,
+    this.eyeBreak = const EyeBreakPolicy(),
   });
 
   Child withPresets(List<int> presets) => Child(
@@ -190,6 +194,7 @@ class Child {
     presets: presets,
     volumeHeadphones: volumeHeadphones,
     volumeSpeaker: volumeSpeaker,
+    eyeBreak: eyeBreak,
   );
 
   /// The same child with new volume caps (`null`: no cap).
@@ -199,6 +204,17 @@ class Child {
     presets: presets,
     volumeHeadphones: headphones,
     volumeSpeaker: speaker,
+    eyeBreak: eyeBreak,
+  );
+
+  /// The same child with new eye-break settings.
+  Child withEyeBreak(EyeBreakPolicy policy) => Child(
+    id: id,
+    name: name,
+    presets: presets,
+    volumeHeadphones: volumeHeadphones,
+    volumeSpeaker: volumeSpeaker,
+    eyeBreak: policy,
   );
 
   Json toJson() => {
@@ -207,6 +223,7 @@ class Child {
     'presets': presets,
     'volumeHeadphones': ?volumeHeadphones,
     'volumeSpeaker': ?volumeSpeaker,
+    'eyeBreak': eyeBreak.toJson(),
   };
 
   factory Child.fromJson(Json j) => Child(
@@ -217,6 +234,9 @@ class Child {
         : [for (final m in j['presets'] as List<Object?>) (m as num).toInt()],
     volumeHeadphones: (j['volumeHeadphones'] as num?)?.toInt(),
     volumeSpeaker: (j['volumeSpeaker'] as num?)?.toInt(),
+    eyeBreak: j['eyeBreak'] == null
+        ? const EyeBreakPolicy()
+        : EyeBreakPolicy.fromJson(j['eyeBreak'] as Json),
   );
 }
 

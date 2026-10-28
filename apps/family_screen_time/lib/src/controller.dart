@@ -1027,6 +1027,19 @@ class AppController extends ChangeNotifier {
     );
   }
 
+  /// Sets the child's eye breaks.
+  Future<void> setEyeBreak(EyeBreakPolicy policy) {
+    final id = childId;
+    return updateFamily(
+      family.copyWith(
+        children: [
+          for (final c in family.children)
+            c.id == id ? c.withEyeBreak(policy) : c,
+        ],
+      ),
+    );
+  }
+
   Future<void> setPresets(List<int> minutes) {
     final id = childId;
     final sorted = {...minutes}.where((m) => m > 0).toList()..sort();

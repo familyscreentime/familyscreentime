@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
 import 'availability.dart';
+import 'eye_breaks.dart';
 
 import 'package:screentime_sync/screentime_sync.dart'
     show Accepted, LanDirectory, LanSync, RemoteSource;
@@ -85,6 +86,12 @@ class Monitor {
   DateTime? _overlayEnd;
   DateTime? _overlaySentEnd;
   String? _overlaySentStyle;
+
+  /// The child's eye breaks on this device.
+  final _eye = EyeBreaks();
+
+  /// Time until the next eye-break step, set by the last evaluation.
+  Duration? _eyeNext;
 
   Future<void> start() async {
     // A parent's device limits nothing: Android started this by mistake.
@@ -406,8 +413,23 @@ class Monitor {
         _relay?.screenOn = _screenOn;
         if (!_screenOn) {
           _visible = {};
+          await _eyeCancel();
           await _switchTo(null);
         }
+      case 'eyeBreak':
+        final args = call.arguments as Map<Object?, Object?>;
+        final now = DateTime.now();
+        switch (args['action']) {
+          case 'later':
+            _eye.snooze(_eyePolicy, now);
+          case 'now':
+            _eye.startNow(now);
+          case 'busy':
+            // The veil could not show (a call): its time counts after all.
+            if (_eye.veilUntil(now) != null) _resumeRecording(now);
+            _eye.busy(now);
+        }
+        await _evaluate();
       case 'reload':
         // Became a parent's device, by joining others.
         if ((await store.loadSettings()).parentDevice) {
@@ -431,9 +453,9 @@ class Monitor {
     await _closeOpen(now);
     _foreground = app;
     _recordAs = app;
-    _openStart = app == null ? null : now;
+    _openStart = app == null ? null : _recordingFrom(now);
     if (app != null) {
-      await store.saveOpen(OpenSegment(app, now, now));
+      await store.saveOpen(OpenSegment(app, _openStart!, now));
     } else {
       await store.clearOpen();
     }
@@ -454,9 +476,13 @@ class Monitor {
       _alsoBlocked.remove(app);
     }
     for (final app in want) {
-      _alsoOpen.putIfAbsent(app, () => now);
+      _alsoOpen.putIfAbsent(app, () => _recordingFrom(now));
     }
   }
+
+  /// When use seen at [now] starts counting: at once, or once the eye
+  /// break's veil is gone (the time under it is not screen time).
+  DateTime _recordingFrom(DateTime now) => _eye.veilUntil(now) ?? now;
 
   /// Records the use of the apps beside the one in front so far, every
   /// few minutes (a stopped monitor loses little).
@@ -473,7 +499,7 @@ class Monitor {
     final start = _openStart;
     if (app == null || start == null) return;
     await _record(app, start, now);
-    _openStart = now;
+    _openStart = _recordingFrom(now);
   }
 
   /// Records use of [app] from [start] to [end], split at midnight so each
@@ -538,6 +564,7 @@ class Monitor {
   Future<void> _evaluateOnce() async {
     _next?.cancel();
     _alsoSoonest = null;
+    _eyeNext = null;
     final settings = _settings;
     final now = DateTime.now();
     if (settings == null || settings.childId == null) {
@@ -546,6 +573,7 @@ class Monitor {
     }
     final app = _foreground;
     if (!_screenOn || app == null) {
+      await _eyeCancel();
       await _countdown(_s.t('monitorIdle'));
       _schedule(const Duration(minutes: 1));
       return;
@@ -601,6 +629,11 @@ class Monitor {
     }
 
     if (!d.allowed) {
+      // A break (mandatory, or taken by the child) rests the eyes too.
+      if (d.reason == Reason.mandatoryBreak || _pauseTaken(app, d, now)) {
+        _eye.restedAt = d.until ?? now;
+      }
+      await _eyeCancel();
       await _block(app, d, now);
       _schedule(_untilDelay(d.until, now));
       return;
@@ -655,8 +688,125 @@ class Monitor {
           _shownEnd(engine, state, settings, app, now) ?? now.add(remaining);
       await _maybeWarn(d, label, remaining, now);
     }
+    await _eyeStep(d, usage, settings, now);
     _schedule(_nextDelay(remaining, _thresholds(d)));
   }
+
+  EyeBreakPolicy get _eyePolicy {
+    for (final c in _family.children) {
+      if (c.id == _settings?.childId) return c.eyeBreak;
+    }
+    return const EyeBreakPolicy(enabled: false);
+  }
+
+  DateTime? _eyeStretch(
+    List<UsageSegment> usage,
+    AppSettings settings,
+    EyeBreakPolicy policy,
+    DateTime now,
+  ) => policy.enabled
+      ? screenStretchStart(
+          usage,
+          deviceId: settings.deviceId,
+          now: now,
+          rest: policy.length,
+          restedAt: _eye.restedAt,
+        )
+      : null;
+
+  /// Announces, starts or ends the eye break due at [now], and sets when
+  /// to look again.
+  Future<void> _eyeStep(
+    Decision d,
+    List<UsageSegment> usage,
+    AppSettings settings,
+    DateTime now,
+  ) async {
+    final policy = _eyePolicy;
+    final left = d.remaining;
+    final step = _eye.step(
+      policy: policy,
+      stretchStart: _eyeStretch(usage, settings, policy, now),
+      now: now,
+      blockSoon: left != null && left <= eyeBlockSoon,
+    );
+    switch (step.kind) {
+      case EyeStepKind.none:
+        break;
+      case EyeStepKind.notice:
+        final count = step.snoozesLeft;
+        await _channel.invokeMethod('eyeNotice', {
+          'title': _s.t('eyeNoticeTitle'),
+          'text': count > 0
+              ? _s.t('eyeNoticeText', {'count': '$count'})
+              : _s.t('eyeNoticeTextLast'),
+          'now': _s.t('eyeNow'),
+          'later': count > 0 ? _s.t('eyeLater') : null,
+          'endsAt': now.add(EyeBreakPolicy.notice).millisecondsSinceEpoch,
+        });
+      case EyeStepKind.veil:
+        await _pauseRecording(now, step.until!);
+        await _channel.invokeMethod('eyeVeil', {
+          'title': _s.t('eyeVeilTitle'),
+          'text': _s.t('eyeVeilText'),
+          'endsAt': step.until!.millisecondsSinceEpoch,
+        });
+      case EyeStepKind.reminder:
+        await _channel.invokeMethod('warn', {
+          'title': _s.t('eyeReminderTitle', {'time': _s.duration(step.length)}),
+          'text': _s.t('eyeReminderText'),
+        });
+      case EyeStepKind.hide:
+        await _channel.invokeMethod('eyeHide');
+    }
+    _eyeNext = _eye.next(
+      policy: policy,
+      stretchStart: _eyeStretch(usage, settings, policy, now),
+      now: now,
+    );
+  }
+
+  /// Takes down the eye break's notice or veil, if shown.
+  Future<void> _eyeCancel() async {
+    _eyeNext = null;
+    if (_eye.cancel()) await _channel.invokeMethod('eyeHide');
+  }
+
+  /// Stops recording use from [now] to [until], the time of the veil.
+  Future<void> _pauseRecording(DateTime now, DateTime until) async {
+    if (_recordAs != null && _openStart != null) {
+      await _closeOpen(now);
+      _openStart = until;
+    }
+    for (final app in _alsoOpen.keys.toList()) {
+      await _record(app, _alsoOpen[app]!, now);
+      _alsoOpen[app] = until;
+    }
+  }
+
+  /// Records use from [now] again, before the end of the veil.
+  void _resumeRecording(DateTime now) {
+    final start = _openStart;
+    if (start != null && start.isAfter(now)) _openStart = now;
+    for (final e in _alsoOpen.entries.toList()) {
+      if (e.value.isAfter(now)) _alsoOpen[e.key] = now;
+    }
+  }
+
+  /// Whether [app] is held only by breaks the child chose to take.
+  bool _pauseTaken(String app, Decision d, DateTime now) {
+    if (d.reason != Reason.temporaryBlock) return false;
+    final blocks = _blocksHolding(app, now);
+    return blocks.isNotEmpty && blocks.every((b) => b.voluntary);
+  }
+
+  List<TemporaryBlock> _blocksHolding(String app, DateTime now) => [
+    for (final b in _family.state.temporaryBlocks)
+      if (b.childId == _settings?.childId &&
+          b.isActiveAt(now) &&
+          b.appTarget.covers(app, _family.config.appGroups))
+        b,
+  ];
 
   /// "Your time for today is up. See you tomorrow from 9.", while screen
   /// time only comes back on a later day.
@@ -825,17 +975,7 @@ class Monitor {
       return (_s.t('blockTitleTime'), over);
     }
     // A break the child chose: every block holding the app is voluntary.
-    final blocks = [
-      for (final b in _family.state.temporaryBlocks)
-        if (b.childId == _settings?.childId &&
-            b.isActiveAt(now) &&
-            b.appTarget.covers(app, _family.config.appGroups))
-          b,
-    ];
-    final pause =
-        d.reason == Reason.temporaryBlock &&
-        blocks.isNotEmpty &&
-        blocks.every((b) => b.voluntary);
+    final pause = _pauseTaken(app, d, now);
     final message = switch (d.reason) {
       Reason.familyBlock => _s.t('blockFamily'),
       Reason.temporaryBlock when pause => _s.t('blockPause', {
@@ -1020,12 +1160,14 @@ class Monitor {
   }
 
   void _schedule(Duration delay) {
-    // Sooner when an app beside the one in front runs out first.
-    final also = _alsoSoonest;
-    if (also != null && also < delay) {
-      delay = also < const Duration(seconds: 1)
-          ? const Duration(seconds: 1)
-          : also;
+    // Sooner when an app beside the one in front runs out first, or an
+    // eye break is due.
+    for (final sooner in [_alsoSoonest, _eyeNext]) {
+      if (sooner != null && sooner < delay) {
+        delay = sooner < const Duration(seconds: 1)
+            ? const Duration(seconds: 1)
+            : sooner;
+      }
     }
     _next?.cancel();
     _next = Timer(delay, () => _evaluate());

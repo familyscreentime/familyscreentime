@@ -36,6 +36,7 @@ internal object Enforcer {
     private lateinit var banner: WarningBanner
     private lateinit var blockNotice: BlockOverlay
     private lateinit var deviceLock: DeviceLockOverlay
+    private lateinit var eyeBreak: EyeBreakOverlay
     lateinit var volume: VolumeGuard
         private set
 
@@ -65,6 +66,9 @@ internal object Enforcer {
         banner = WarningBanner(app)
         blockNotice = BlockOverlay(app)
         deviceLock = DeviceLockOverlay(app)
+        eyeBreak = EyeBreakOverlay(app) { choice ->
+            send("eyeBreak", Bundle().apply { putString("action", choice) })
+        }
         volume = VolumeGuard(app)
         Shared.createChannels(app)
         val filter = IntentFilter().apply {
@@ -91,6 +95,7 @@ internal object Enforcer {
                     screenOn = false
                     lastForeground = null
                     lastVisible = emptyList()
+                    eyeBreak.hide()
                 }
                 Intent.ACTION_SCREEN_ON -> if (!keyguardLocked()) screenOn = true
                 Intent.ACTION_USER_PRESENT -> screenOn = true
@@ -244,6 +249,9 @@ internal object Enforcer {
                 Shared.int(data, "speaker"),
                 data.getString("message") ?: "",
             )
+            "eyeNotice" -> eyeNotice(data)
+            "eyeVeil" -> eyeVeil(data)
+            "eyeHide" -> eyeBreak.hide()
             "familyChanged" -> PlatformBridge.uiChannel?.invokeMethod("familyChanged", null)
             "restart" -> restartForAccessibility()
         }
@@ -295,6 +303,7 @@ internal object Enforcer {
         // left). The monitor checks again when parent mode ends.
         if (ProtectionGuard.allowed()) return
         banner.hide()
+        eyeBreak.hide()
         val app = data.getString("package") ?: lastForeground
         if (app != null) recentBlocks[app] = SystemClock.elapsedRealtime() to Bundle(data)
         val title = data.getString("title") ?: ""
@@ -425,6 +434,7 @@ internal object Enforcer {
         if (show) {
             banner.hide()
             blockNotice.hide()
+            eyeBreak.hide()
             deviceLock.show(lockTexts, lockExempt)
         } else {
             deviceLock.hide()
@@ -446,6 +456,52 @@ internal object Enforcer {
             .setAutoCancel(true)
             .build()
         Shared.notificationManager(app).notify(Shared.WARNING_ID, n)
+    }
+
+    /**
+     * Whether an eye break must wait: a call going on (voice or video),
+     * the device lock or parent mode on screen. The monitor tries again
+     * a little later.
+     */
+    private fun eyeBreakWaits(): Boolean {
+        val audio = app.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        val inCall = audio.mode == android.media.AudioManager.MODE_IN_CALL ||
+            audio.mode == android.media.AudioManager.MODE_IN_COMMUNICATION ||
+            audio.mode == android.media.AudioManager.MODE_RINGTONE
+        return inCall || lastForeground in callScreens || deviceLock.isShown ||
+            ProtectionGuard.allowed() || !screenOn
+    }
+
+    private fun eyeNotice(data: Bundle) {
+        if (eyeBreakWaits()) {
+            eyeBreak.hide()
+            send("eyeBreak", Bundle().apply { putString("action", "busy") })
+            return
+        }
+        val title = data.getString("title") ?: ""
+        val text = data.getString("text") ?: ""
+        val shown = eyeBreak.showNotice(
+            title,
+            text,
+            data.getString("now") ?: "OK",
+            data.getString("later"),
+            Shared.long(data, "endsAt") ?: 0L,
+        )
+        // No overlay layer: a notification, and no veil after it.
+        if (!shown) warn(title, text)
+    }
+
+    private fun eyeVeil(data: Bundle) {
+        if (eyeBreakWaits()) {
+            eyeBreak.hide()
+            send("eyeBreak", Bundle().apply { putString("action", "busy") })
+            return
+        }
+        eyeBreak.showVeil(
+            data.getString("title") ?: "",
+            data.getString("text") ?: "",
+            Shared.long(data, "endsAt") ?: 0L,
+        )
     }
 
     private fun appLabel(pkg: String): String = try {

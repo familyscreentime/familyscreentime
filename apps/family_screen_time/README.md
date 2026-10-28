@@ -83,6 +83,12 @@ behind the parent code.
 - The child can take a break of their own: every app is blocked (phone and
   messages aside) for the chosen time, which only a parent can cut short;
   messages say "break" rather than "blocked".
+- Eye breaks, on by default and set per child: every 20 minutes of screen
+  on a device, a notice at the top of the screen, then a veil with a
+  countdown asking the child to look into the distance for 20 seconds. The
+  child may put it off by a minute, three times; a later break lasts
+  longer, in proportion (23 s after 23 min). Nothing is blocked, the time
+  under the veil is not screen time, and the break waits for a call to end.
 - Time away from the devices (console, TV), entered by the parent in quick
   actions, counts for total screen time or a group.
 - Rule settings for grace time (with an optional firm limit after repeated

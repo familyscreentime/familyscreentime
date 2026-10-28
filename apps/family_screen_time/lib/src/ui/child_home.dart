@@ -568,6 +568,7 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
                     b.voluntary ? Icons.self_improvement : Icons.block,
                   ),
                   title: Text(blockLine(s, c, b)),
+                  subtitle: b.message == null ? null : Text(b.message!),
                 ),
               ),
             if (_status.isEmpty)

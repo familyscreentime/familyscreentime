@@ -113,6 +113,17 @@ behind the parent code.
   parent mode, an app can be put in groups straight from its detail.
   On first use, Android's own usage history is imported (it keeps about ten
   days in detail), for statistics only: the rules never see it.
+- A parent's device, locked: only the app's name and the unlock button.
+  Unlocked: each child by name, a padlock saying whether their devices
+  are locked now, and the actions that fit: extra time or unlocking (until
+  the end of the next allowed hours today, which start early, or until
+  midnight), or blocking now. With several children, "Lock everything" or
+  "Unlock everything". Then the linked devices and the family's settings.
+- A block can carry a short message for the child ("Dinner's ready!"),
+  shown on the block screen; the messages written before are offered again.
+- Family settings (special periods, devices used at the same time, how long
+  use is kept, parent code): their own page on a parent's device, at the
+  end of parent mode's settings on a child's device.
 - Interface in French, Dutch and English.
 
 This completes the features planned for phase 1 on Android; the next step
@@ -169,6 +180,15 @@ flutter build apk --release --split-per-abi
 ```
 
 `flutter run` with a phone connected installs a debug build.
+
+The demonstration build is an app of its own (`org.familyscreentime.demo`),
+beside the real one: a parent's device with a made-up family of two
+children, linked to nothing and started afresh at each launch, to check
+the screens and take screenshots. Its parent code is 1234.
+
+```sh
+flutter build apk --release -t lib/main_demo.dart -P demo=true
+```
 
 Release builds are signed with the upload key named in `android/key.properties`
 (not in the repository: `storePassword`, `keyPassword`, `keyAlias`, and

@@ -55,11 +55,18 @@ class AppController extends ChangeNotifier {
   /// The parent key while in parent mode, unlocked by the code entered.
   Future<SigningKey?>? _parentKey;
 
+  /// The demonstration build: its parent code, shown on the locked home.
+  /// It links to no device and keeps nothing.
+  final String? demoCode;
+
+  bool get demo => demoCode != null;
+
   AppController(
     this.store,
     this.settings,
     FamilyData family, {
     this.platform = const PlatformApi(),
+    this.demoCode,
   }) : family = ownGroups(family);
 
   static Future<AppController> load() async {
@@ -858,10 +865,11 @@ class AppController extends ChangeNotifier {
     (u) => u.childId == childId && u.coversDay(now),
   );
 
-  /// Lifts (or restores) every restriction until midnight.
-  Future<void> setDayUnlocked(bool on, {DateTime? now}) {
+  /// Lifts (or restores) every restriction until midnight, for the child
+  /// shown or [forChild].
+  Future<void> setDayUnlocked(bool on, {DateTime? now, String? forChild}) {
     final t = now ?? DateTime.now();
-    final childId = this.childId!;
+    final childId = forChild ?? this.childId!;
     return updateFamily(
       family.copyWith(
         state: stateWith(
@@ -878,15 +886,23 @@ class AppController extends ChangeNotifier {
     );
   }
 
-  /// Blocks of the child active at [now].
-  List<TemporaryBlock> activeBlocks(DateTime now) => [
+  /// Blocks of the child (or of [forChild]) active at [now].
+  List<TemporaryBlock> activeBlocks(DateTime now, {String? forChild}) => [
     for (final b in family.state.temporaryBlocks)
-      if (b.childId == childId && b.isActiveAt(now)) b,
+      if (b.childId == (forChild ?? childId) && b.isActiveAt(now)) b,
   ];
 
-  /// Blocks [target] from now until [until] (`null`: until lifted).
-  Future<void> blockNow(AppTarget target, DateTime? until, {DateTime? now}) {
+  /// Blocks [target] from now until [until] (`null`: until lifted), for
+  /// the child shown or each of [children], with the parent's [message].
+  Future<void> blockNow(
+    AppTarget target,
+    DateTime? until, {
+    DateTime? now,
+    Iterable<String>? children,
+    String? message,
+  }) {
     final t = now ?? DateTime.now();
+    final text = message?.trim();
     return updateFamily(
       family.copyWith(
         state: stateWith(
@@ -894,18 +910,48 @@ class AppController extends ChangeNotifier {
           temporaryBlocks: [
             for (final b in family.state.temporaryBlocks)
               if (b.until == null || _recent(b.until!, t)) b,
-            TemporaryBlock(
-              id: newId(),
-              childId: childId!,
-              appTarget: target,
-              from: t,
-              until: until,
-            ),
+            for (final id in children ?? [childId!])
+              TemporaryBlock(
+                id: newId(),
+                childId: id,
+                appTarget: target,
+                from: t,
+                until: until,
+                message: text == null || text.isEmpty ? null : text,
+              ),
           ],
         ),
       ),
     );
   }
+
+  /// Most block messages kept for the next time.
+  static const blockMessagesKept = 8;
+
+  /// Keeps [message] first among the messages offered with a block.
+  Future<void> rememberBlockMessage(String message) {
+    final text = message.trim();
+    if (text.isEmpty) return Future.value();
+    return updateSettings(
+      settings.copyWith(
+        blockMessages: [
+          text,
+          for (final m in settings.blockMessages)
+            if (m != text) m,
+        ].take(blockMessagesKept).toList(),
+      ),
+    );
+  }
+
+  /// No longer offers [message].
+  Future<void> forgetBlockMessage(String message) => updateSettings(
+    settings.copyWith(
+      blockMessages: [
+        for (final m in settings.blockMessages)
+          if (m != message) m,
+      ],
+    ),
+  );
 
   /// The child takes a break from every app (phone and messages aside)
   /// for [length], starting now. It cannot be cut short from the child's
@@ -944,19 +990,25 @@ class AppController extends ChangeNotifier {
   }
 
   /// Rules whose hours can be opened early now: outside their hours, not
-  /// already opened, with a range later today.
-  List<(Rule, DateTime)> openableEarly(DateTime now) => [
-    for (final r in activeChildRules)
-      if (!r.setByChild &&
+  /// already opened, with a range later today; for the child shown or
+  /// [forChild].
+  List<(Rule, DateTime)> openableEarly(DateTime now, {String? forChild}) => [
+    for (final r in family.state.rules)
+      if (r.childId == (forChild ?? childId) &&
+          r.enabled &&
+          !r.setByChild &&
           ruleInForce(r, now) &&
-          !hoursOpenedEarly(now).any((u) => u.ruleId == r.id))
+          !hoursOpenedEarly(
+            now,
+            forChild: forChild,
+          ).any((u) => u.ruleId == r.id))
         if (nextRangeEnd(r, now) case final end?) (r, end),
   ];
 
   /// Early openings of hours in force at [now].
-  List<HoursUnlock> hoursOpenedEarly(DateTime now) => [
+  List<HoursUnlock> hoursOpenedEarly(DateTime now, {String? forChild}) => [
     for (final u in family.state.hoursUnlocks)
-      if (u.childId == childId && u.isActiveAt(now)) u,
+      if (u.childId == (forChild ?? childId) && u.isActiveAt(now)) u,
   ];
 
   /// Opens [r]'s hours from now until [until] (the end of its next range):

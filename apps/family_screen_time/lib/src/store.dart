@@ -47,6 +47,10 @@ class AppSettings {
   /// child's choice. Warnings and closing still follow every limit.
   final Set<String> hiddenCountdowns;
 
+  /// Messages the parent wrote with a block on this device, latest first,
+  /// offered again in one tap.
+  final List<String> blockMessages;
+
   const AppSettings({
     required this.deviceId,
     required this.language,
@@ -62,6 +66,7 @@ class AppSettings {
     this.overlay = 'off',
     this.warningMinutes = defaultWarningMinutes,
     this.hiddenCountdowns = const {},
+    this.blockMessages = const [],
   });
 
   AppSettings copyWith({
@@ -79,6 +84,7 @@ class AppSettings {
     String? overlay,
     List<int>? warningMinutes,
     Set<String>? hiddenCountdowns,
+    List<String>? blockMessages,
   }) => AppSettings(
     deviceId: deviceId,
     language: language ?? this.language,
@@ -94,6 +100,7 @@ class AppSettings {
     overlay: overlay ?? this.overlay,
     warningMinutes: warningMinutes ?? this.warningMinutes,
     hiddenCountdowns: hiddenCountdowns ?? this.hiddenCountdowns,
+    blockMessages: blockMessages ?? this.blockMessages,
   );
 
   Json toJson() => {
@@ -113,6 +120,7 @@ class AppSettings {
     'warningMinutes': warningMinutes,
     if (hiddenCountdowns.isNotEmpty)
       'hiddenCountdowns': hiddenCountdowns.toList()..sort(),
+    if (blockMessages.isNotEmpty) 'blockMessages': blockMessages,
   };
 
   factory AppSettings.fromJson(Json j) => AppSettings(
@@ -132,6 +140,10 @@ class AppSettings {
       for (final k in j['hiddenCountdowns'] as List<Object?>? ?? const [])
         k as String,
     },
+    blockMessages: [
+      for (final m in j['blockMessages'] as List<Object?>? ?? const [])
+        m as String,
+    ],
     warningMinutes: j['warningMinutes'] == null
         ? defaultWarningMinutes
         : [

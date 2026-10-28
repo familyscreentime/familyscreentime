@@ -42,7 +42,7 @@ class QuickActions extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.more_time),
             title: Text(s.t('bonusAction')),
-            onTap: () => _giveBonus(context),
+            onTap: () => showBonusSheet(context, c, clock: clock),
           ),
           for (final b in c.activeBonuses(now))
             _activeLine(
@@ -105,7 +105,7 @@ class QuickActions extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.block),
             title: Text(s.t('blockAction')),
-            onTap: () => _block(context),
+            onTap: () => showBlockSheet(context, c, clock: clock),
           ),
           for (final b in c.activeBlocks(now))
             _activeLine(
@@ -158,106 +158,6 @@ class QuickActions extends StatelessWidget {
       ],
     ),
   );
-
-  /// Rules that extra time can raise, the one closest to running out first.
-  Future<List<Rule>> _bonusRules() async {
-    final c = controller;
-    final rules = [
-      // The child changes their own limits themselves.
-      for (final r in c.activeChildRules)
-        if (r.hasQuota && !r.setByChild) r,
-    ];
-    if (rules.length < 2) return rules;
-    final now = clock();
-    final state = c.family.state.copyWith(usage: await c.recentUsage());
-    final engine = RuleEngine(c.family.config);
-    final left = {
-      for (final r in rules)
-        r.id:
-            ruleStatus(
-              engine,
-              state,
-              r,
-              childId: c.childId!,
-              now: now,
-            ).remaining ??
-            const Duration(days: 365),
-    };
-    return rules..sort((a, b) => left[a.id]!.compareTo(left[b.id]!));
-  }
-
-  Future<void> _giveBonus(BuildContext context) async {
-    final c = controller;
-    final s = c.s;
-    final rules = await _bonusRules();
-    if (!context.mounted) return;
-    if (rules.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(s.t('bonusNoRule'))));
-      return;
-    }
-    // The limit closest to running out; others can be added (or it taken
-    // away): extra game time need not raise total screen time.
-    final chosen = {rules.first.id};
-    var amount = Duration(minutes: c.presets.first);
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => _Sheet(
-          title: s.t('bonusAction'),
-          children: [
-            Text(
-              s.t('bonusFor'),
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final r in rules)
-                  FilterChip(
-                    label: Text(c.labelOf(r)),
-                    selected: chosen.contains(r.id),
-                    onSelected: (on) => setState(
-                      () => on ? chosen.add(r.id) : chosen.remove(r.id),
-                    ),
-                  ),
-              ],
-            ),
-            Text(
-              s.t('bonusForHint'),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              s.t('bonusAmount'),
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            DurationChoice(
-              s: s,
-              presets: c.presets,
-              value: amount,
-              onChanged: (d) => setState(() => amount = d),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: chosen.isEmpty
-                  ? null
-                  : () => Navigator.pop(context, true),
-              child: Text(s.t('bonusGive', {'time': s.duration(amount)})),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (ok == true) {
-      for (final r in rules) {
-        if (chosen.contains(r.id)) {
-          await c.giveBonus(r, amount, now: clock());
-        }
-      }
-    }
-  }
 
   Future<void> _addAway(BuildContext context) async {
     final c = controller;
@@ -326,133 +226,287 @@ class QuickActions extends StatelessWidget {
       await c.addAwayTime(target, amount, now: clock());
     }
   }
+}
 
-  Future<void> _block(BuildContext context) async {
-    final c = controller;
-    final s = c.s;
-    final targets = <AppTarget>[
-      const AppTarget.all(),
-      for (final id in c.childGroups.keys) AppTarget.group(id),
-    ];
-    var target = targets.first;
-    // Minutes, or -1: until a chosen time, 0: until lifted.
-    var length = c.presets.first;
-    TimeOfDay? untilTime;
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => _Sheet(
-          title: s.t('blockAction'),
-          children: [
-            Text(
-              s.t('blockWhat'),
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final t in targets)
-                  ChoiceChip(
-                    label: Text(c.targetLabel(t)),
-                    selected: t == target,
-                    onSelected: (_) => setState(() => target = t),
+/// Rules that extra time can raise for the child shown, the one closest
+/// to running out first.
+Future<List<Rule>> _bonusRules(AppController c, DateTime now) async {
+  final rules = [
+    // The child changes their own limits themselves.
+    for (final r in c.activeChildRules)
+      if (r.hasQuota && !r.setByChild) r,
+  ];
+  if (rules.length < 2) return rules;
+  final state = c.family.state.copyWith(usage: await c.recentUsage());
+  final engine = RuleEngine(c.family.config);
+  final left = {
+    for (final r in rules)
+      r.id:
+          ruleStatus(
+            engine,
+            state,
+            r,
+            childId: c.childId!,
+            now: now,
+          ).remaining ??
+          const Duration(days: 365),
+  };
+  return rules..sort((a, b) => left[a.id]!.compareTo(left[b.id]!));
+}
+
+/// Gives the child shown extra time, on the limits the parent picks.
+Future<void> showBonusSheet(
+  BuildContext context,
+  AppController c, {
+  DateTime Function() clock = DateTime.now,
+}) async {
+  final s = c.s;
+  final rules = await _bonusRules(c, clock());
+  if (!context.mounted) return;
+  if (rules.isEmpty) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(s.t('bonusNoRule'))));
+    return;
+  }
+  // The limit closest to running out; others can be added (or it taken
+  // away): extra game time need not raise total screen time.
+  final chosen = {rules.first.id};
+  var amount = Duration(minutes: c.presets.first);
+  final ok = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => _Sheet(
+        title: s.t('bonusAction'),
+        children: [
+          Text(s.t('bonusFor'), style: Theme.of(context).textTheme.labelLarge),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final r in rules)
+                FilterChip(
+                  label: Text(c.labelOf(r)),
+                  selected: chosen.contains(r.id),
+                  onSelected: (on) => setState(
+                    () => on ? chosen.add(r.id) : chosen.remove(r.id),
                   ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              s.t('blockHowLong'),
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final m in c.presets)
-                  ChoiceChip(
-                    label: Text(s.duration(Duration(minutes: m))),
-                    selected: m == length,
-                    onSelected: (_) => setState(() => length = m),
-                  ),
-                ChoiceChip(
-                  avatar: const Icon(Icons.edit_outlined, size: 18),
-                  label: Text(
-                    length > 0 && !c.presets.contains(length)
-                        ? s.duration(Duration(minutes: length))
-                        : s.t('customDurationShort'),
-                  ),
-                  selected: length > 0 && !c.presets.contains(length),
-                  onSelected: (_) async {
-                    final d = await askDuration(context, s);
-                    if (d != null) setState(() => length = d.inMinutes);
-                  },
                 ),
-                ChoiceChip(
-                  label: Text(
-                    length == -1 && untilTime != null
-                        ? s.t('blockUntilAt', {
-                            'time':
-                                '${untilTime!.hour.toString().padLeft(2, '0')}:'
-                                '${untilTime!.minute.toString().padLeft(2, '0')}',
-                          })
-                        : s.t('blockUntilTime'),
-                  ),
-                  selected: length == -1,
-                  onSelected: (_) async {
-                    final picked = await showTimePicker(
-                      context: context,
-                      initialTime: TimeOfDay.fromDateTime(
-                        clock().add(const Duration(hours: 1)),
-                      ),
-                    );
-                    if (picked != null) {
-                      setState(() {
-                        untilTime = picked;
-                        length = -1;
-                      });
-                    }
-                  },
-                ),
-                ChoiceChip(
-                  label: Text(s.t('blockUntilLifted')),
-                  selected: length == 0,
-                  onSelected: (_) => setState(() => length = 0),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(s.t('blockGo')),
-            ),
-          ],
-        ),
+            ],
+          ),
+          Text(
+            s.t('bonusForHint'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            s.t('bonusAmount'),
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          DurationChoice(
+            s: s,
+            presets: c.presets,
+            value: amount,
+            onChanged: (d) => setState(() => amount = d),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: chosen.isEmpty
+                ? null
+                : () => Navigator.pop(context, true),
+            child: Text(s.t('bonusGive', {'time': s.duration(amount)})),
+          ),
+        ],
       ),
-    );
-    if (ok != true) return;
-    final now = clock();
-    DateTime? until;
-    if (length > 0) {
-      until = now.add(Duration(minutes: length));
-    } else if (length == -1 && untilTime != null) {
-      until = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        untilTime!.hour,
-        untilTime!.minute,
-      );
-      // A time already past today means tomorrow.
-      if (!until.isAfter(now)) {
-        final tomorrow = addDays(dayOf(now), 1);
-        until = tomorrow.add(
-          Duration(hours: untilTime!.hour, minutes: untilTime!.minute),
-        );
+    ),
+  );
+  if (ok == true) {
+    for (final r in rules) {
+      if (chosen.contains(r.id)) {
+        await c.giveBonus(r, amount, now: clock());
       }
     }
-    await c.blockNow(target, until, now: now);
   }
 }
+
+/// Blocks now, for the child shown or, with [children], for each of them
+/// (then everything is blocked: groups belong to each child). The parent
+/// may add a few words, shown to the child; those already written are
+/// offered again. Whether a block was made.
+Future<bool> showBlockSheet(
+  BuildContext context,
+  AppController c, {
+  DateTime Function() clock = DateTime.now,
+  List<String>? children,
+}) async {
+  final s = c.s;
+  final targets = <AppTarget>[
+    const AppTarget.all(),
+    if (children == null)
+      for (final id in c.childGroups.keys) AppTarget.group(id),
+  ];
+  var target = targets.first;
+  // Minutes, or -1: until a chosen time, 0: until lifted.
+  var length = c.presets.first;
+  TimeOfDay? untilTime;
+  final message = TextEditingController();
+  final ok = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        final theme = Theme.of(context);
+        return Padding(
+          // Above the keyboard while the message is typed.
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SingleChildScrollView(
+            child: _Sheet(
+              title: s.t(children == null ? 'blockAction' : 'lockAll'),
+              children: [
+                if (targets.length > 1) ...[
+                  Text(s.t('blockWhat'), style: theme.textTheme.labelLarge),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final t in targets)
+                        ChoiceChip(
+                          label: Text(c.targetLabel(t)),
+                          selected: t == target,
+                          onSelected: (_) => setState(() => target = t),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Text(s.t('blockHowLong'), style: theme.textTheme.labelLarge),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final m in c.presets)
+                      ChoiceChip(
+                        label: Text(s.duration(Duration(minutes: m))),
+                        selected: m == length,
+                        onSelected: (_) => setState(() => length = m),
+                      ),
+                    ChoiceChip(
+                      avatar: const Icon(Icons.edit_outlined, size: 18),
+                      label: Text(
+                        length > 0 && !c.presets.contains(length)
+                            ? s.duration(Duration(minutes: length))
+                            : s.t('customDurationShort'),
+                      ),
+                      selected: length > 0 && !c.presets.contains(length),
+                      onSelected: (_) async {
+                        final d = await askDuration(context, s);
+                        if (d != null) setState(() => length = d.inMinutes);
+                      },
+                    ),
+                    ChoiceChip(
+                      label: Text(
+                        length == -1 && untilTime != null
+                            ? s.t('blockUntilAt', {
+                                'time':
+                                    '${untilTime!.hour.toString().padLeft(2, '0')}:'
+                                    '${untilTime!.minute.toString().padLeft(2, '0')}',
+                              })
+                            : s.t('blockUntilTime'),
+                      ),
+                      selected: length == -1,
+                      onSelected: (_) async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.fromDateTime(
+                            clock().add(const Duration(hours: 1)),
+                          ),
+                        );
+                        if (picked != null) {
+                          setState(() {
+                            untilTime = picked;
+                            length = -1;
+                          });
+                        }
+                      },
+                    ),
+                    ChoiceChip(
+                      label: Text(s.t('blockUntilLifted')),
+                      selected: length == 0,
+                      onSelected: (_) => setState(() => length = 0),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: message,
+                  maxLength: blockMessageMaxLength,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: s.t('blockMessage'),
+                    hintText: s.t('blockMessageHint'),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                if (c.settings.blockMessages.isNotEmpty)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final m in c.settings.blockMessages)
+                        InputChip(
+                          label: Text(m),
+                          selected: message.text.trim() == m,
+                          showCheckmark: false,
+                          onPressed: () => setState(() => message.text = m),
+                          deleteButtonTooltipMessage: s.t('blockMessageForget'),
+                          onDeleted: () async {
+                            await c.forgetBlockMessage(m);
+                            setState(() {});
+                          },
+                        ),
+                    ],
+                  ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(s.t('blockGo')),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+  // Not disposed: the sheet may still be closing with the field in it.
+  final text = message.text.trim();
+  if (ok != true) return false;
+  final now = clock();
+  DateTime? until;
+  if (length > 0) {
+    until = now.add(Duration(minutes: length));
+  } else if (length == -1 && untilTime != null) {
+    until = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      untilTime!.hour,
+      untilTime!.minute,
+    );
+    // A time already past today means tomorrow.
+    if (!until.isAfter(now)) {
+      final tomorrow = addDays(dayOf(now), 1);
+      until = tomorrow.add(
+        Duration(hours: untilTime!.hour, minutes: untilTime!.minute),
+      );
+    }
+  }
+  await c.blockNow(target, until, now: now, children: children, message: text);
+  if (text.isNotEmpty) await c.rememberBlockMessage(text);
+  return true;
+}
+
+/// Longest message the parent may write with a block.
+const blockMessageMaxLength = 60;
 
 /// "Games: blocked until 15:30", until further notice, or "On a break
 /// until 15:30" when the child chose it.

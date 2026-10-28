@@ -38,3 +38,10 @@ jobs:
         with:
           name: apks
           path: apps/family_screen_time/build/app/outputs/flutter-apk/*-release.apk
+      # The demonstration build: its own app, a made-up family, nothing kept.
+      - run: flutter build apk --release -t lib/main_demo.dart -P demo=true
+      - run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/family-screen-time-demo.apk
+      - uses: actions/upload-artifact@v6
+        with:
+          name: demo-apk
+          path: apps/family_screen_time/build/app/outputs/flutter-apk/family-screen-time-demo.apk

@@ -11,16 +11,15 @@ import '../strings.dart';
 import 'accessible_apps_screen.dart';
 import 'group_editor.dart';
 import 'permissions.dart';
-import 'pin_dialog.dart';
 import 'quick_actions.dart';
 import 'self_limit_report_screen.dart';
 import 'limit_screen.dart';
 import '../family.dart';
-import 'periods_screen.dart';
 import 'trends_screen.dart';
 import 'devices_screen.dart';
 import 'usage_screen.dart';
 import 'eye_break_screen.dart';
+import 'family_settings.dart';
 import 'volume_screen.dart';
 
 class ParentHome extends StatefulWidget {
@@ -66,16 +65,6 @@ class _ParentHomeState extends State<ParentHome> {
     }
   }
 
-  Future<void> _changePin(BuildContext context) async {
-    final pin = await askNewPin(context, controller);
-    if (pin == null) return;
-    await controller.changeParentCode(pin);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(controller.s.t('pinChanged'))));
-    }
-  }
-
   /// One kind of time: its rules in short and today's time; opens its
   /// rules and, for a group, its apps.
   Widget _limitTile(
@@ -114,32 +103,6 @@ class _ParentHomeState extends State<ParentHome> {
         await _loadTimes();
       },
     );
-  }
-
-  /// The special period now running, else the next one, if any.
-  String _periodsSummary() {
-    final c = controller;
-    final s = c.s;
-    final now = DateTime.now();
-    final running = c.activePeriod(now);
-    if (running != null) {
-      return '${c.periodName(running)} · ${nextDates(s, running, now)}';
-    }
-    (Profile, DateTime)? next;
-    for (final p in c.specialPeriods) {
-      for (final r in p.periods) {
-        if (r.first.isAfter(now) &&
-            (next == null || r.first.isBefore(next.$2))) {
-          next = (p, r.first);
-        }
-      }
-    }
-    if (next != null) {
-      return '${c.periodName(next.$1)} · ${nextDates(s, next.$1, now)}';
-    }
-    return c.specialPeriods.isEmpty
-        ? s.t('periodsNone')
-        : c.specialPeriods.map(c.periodName).join(', ');
   }
 
   Future<void> _open(BuildContext context, Widget page) async {
@@ -324,74 +287,6 @@ class _ParentHomeState extends State<ParentHome> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _open(context, SelfLimitReportScreen(controller: c)),
             ),
-            ListTile(
-              leading: const Icon(Icons.event_outlined),
-              title: Text(s.t('periodsTitle')),
-              subtitle: Text(_periodsSummary()),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _open(context, PeriodsScreen(controller: c)),
-            ),
-            const Divider(),
-            ListTile(title: Text(s.t('countingTitle'), style: header)),
-            RadioGroup<SimultaneousCounting>(
-              groupValue: c.family.config.counting,
-              onChanged: (v) {
-                if (v != null) {
-                  c.updateFamily(
-                    c.family.copyWith(
-                      config: c.family.config.copyWith(counting: v),
-                    ),
-                  );
-                }
-              },
-              child: Column(
-                children: [
-                  for (final (mode, title, hint) in [
-                    (
-                      SimultaneousCounting.sum,
-                      'countingSum',
-                      'countingSumHint',
-                    ),
-                    (
-                      SimultaneousCounting.elapsed,
-                      'countingOnce',
-                      'countingOnceHint',
-                    ),
-                  ])
-                    RadioListTile<SimultaneousCounting>(
-                      value: mode,
-                      title: Text(s.t(title)),
-                      subtitle: Text(s.t(hint)),
-                    ),
-                ],
-              ),
-            ),
-            const Divider(),
-            ListTile(title: Text(s.t('historyTitle'), style: header)),
-            ListTile(
-              leading: const Icon(Icons.history),
-              title: Text(s.t('usageKept')),
-              subtitle: DropdownButton<int>(
-                value: c.family.usageKeptDays,
-                isExpanded: true,
-                items: [
-                  for (final d in {...usageKeptChoices, c.family.usageKeptDays})
-                    DropdownMenuItem(value: d, child: Text(keptLabel(s, d))),
-                ],
-                onChanged: (d) {
-                  if (d != null) {
-                    c.updateFamily(c.family.copyWith(usageKeptDays: d));
-                  }
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(72, 0, 16, 8),
-              child: Text(
-                s.t('usageKeptHint'),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
             const Divider(),
             ListTile(title: Text(s.t('remindersTitle'), style: header)),
             ListTile(
@@ -478,13 +373,15 @@ class _ParentHomeState extends State<ParentHome> {
                   c.updateFamily(c.family.copyWith(settingsParentOnly: v)),
             ),
             const Divider(),
-            ListTile(
-              leading: const Icon(Icons.devices_outlined),
-              title: Text(s.t('devicesTitle')),
-              subtitle: Text(s.t('devicesSubtitle')),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _open(context, DevicesScreen(controller: c)),
-            ),
+            // On a parent's device, the linked devices are on the home.
+            if (!c.settings.parentDevice)
+              ListTile(
+                leading: const Icon(Icons.devices_outlined),
+                title: Text(s.t('devicesTitle')),
+                subtitle: Text(s.t('devicesSubtitle')),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _open(context, DevicesScreen(controller: c)),
+              ),
             ListTile(
               leading: const Icon(Icons.volume_down_outlined),
               title: Text(s.t('volumeTitle')),
@@ -522,11 +419,6 @@ class _ParentHomeState extends State<ParentHome> {
             ],
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.password),
-              title: Text(s.t('changePin')),
-              onTap: () => _changePin(context),
-            ),
-            ListTile(
               leading: const Icon(Icons.language),
               title: Text(s.t('language')),
               trailing: DropdownButton<String>(
@@ -545,6 +437,13 @@ class _ParentHomeState extends State<ParentHome> {
                 },
               ),
             ),
+            // On a parent's device, the family's settings have their own
+            // page, from the home.
+            if (!c.settings.parentDevice) ...[
+              const Divider(),
+              ListTile(title: Text(s.t('familySettingsTitle'), style: header)),
+              FamilySettingsSection(controller: c),
+            ],
           ],
         ),
       );

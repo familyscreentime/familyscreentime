@@ -83,7 +83,15 @@ void main() {
     expect(find.text('Appareil de Emma · Cet appareil'), findsOneWidget);
     expect(find.textContaining('Appareil de Emma · Connecté'), findsOneWidget);
     expect(find.text('Relier un appareil'), findsOneWidget);
-    expect(find.text('Détacher cet appareil'), findsOneWidget);
+    expect(
+      find.text('Détacher cet appareil', skipOffstage: false),
+      findsOneWidget,
+    );
+    // The phone has not received the family yet: said under the list.
+    expect(
+      find.textContaining('Pas encore transmis à : Téléphone'),
+      findsOneWidget,
+    );
     // Each can be renamed; only the other device can be removed from here.
     await tester.tap(
       find.descendant(
@@ -151,8 +159,11 @@ void main() {
     );
     await tester.pumpWidget(MaterialApp(home: ParentDeviceHome(controller: c)));
     await tester.pump();
+    // Locked: the name of the app and the unlock button, nothing else.
+    expect(find.text('Family Screen Time'), findsOneWidget);
     expect(find.text('Déverrouiller'), findsOneWidget);
     expect(find.text('Emma'), findsNothing);
+    expect(find.text('Appareils reliés'), findsNothing);
     // No child of its own: the first one is shown until another is chosen.
     expect(c.childId, 'emma');
     c.enterParentMode();
@@ -160,6 +171,7 @@ void main() {
     expect(find.text('Emma'), findsOneWidget);
     expect(find.text('Lucas'), findsOneWidget);
     expect(find.text('Appareils reliés'), findsOneWidget);
+    expect(find.text('Paramètres de la famille'), findsOneWidget);
     c.selectChild('lucas');
     expect(c.childId, 'lucas');
     expect(c.child?.name, 'Lucas');

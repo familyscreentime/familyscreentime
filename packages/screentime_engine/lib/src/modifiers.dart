@@ -47,6 +47,9 @@ class Bonus {
 ///
 /// A [voluntary] block is a break the child chose to take: it blocks the
 /// same way, and only the wording differs.
+///
+/// [message]: a few words from the parent shown with the block ("Dinner's
+/// ready!").
 class TemporaryBlock {
   final String id;
   final String childId;
@@ -55,6 +58,7 @@ class TemporaryBlock {
   final DateTime from;
   final DateTime? until;
   final bool voluntary;
+  final String? message;
 
   const TemporaryBlock({
     required this.id,
@@ -64,6 +68,7 @@ class TemporaryBlock {
     required this.from,
     this.until,
     this.voluntary = false,
+    this.message,
   });
 
   /// The same block, ending at [end].
@@ -75,6 +80,7 @@ class TemporaryBlock {
     from: from,
     until: end,
     voluntary: voluntary,
+    message: message,
   );
 
   bool isActiveAt(DateTime t) =>

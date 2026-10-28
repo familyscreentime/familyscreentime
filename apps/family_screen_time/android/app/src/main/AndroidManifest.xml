@@ -22,7 +22,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
-        android:label="Family Screen Time"
+        android:label="${appLabel}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
@@ -53,7 +53,7 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
-            android:taskAffinity="org.familyscreentime.block"
+            android:taskAffinity="${applicationId}.block"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
 
         <!-- The rule engine, in its own process: Android may stop it when

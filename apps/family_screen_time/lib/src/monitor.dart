@@ -976,7 +976,18 @@ class Monitor {
     }
     // A break the child chose: every block holding the app is voluntary.
     final pause = _pauseTaken(app, d, now);
-    final message = switch (d.reason) {
+    // The parent's few words, from the latest block that has some.
+    TemporaryBlock? latest;
+    if (d.reason == Reason.temporaryBlock) {
+      for (final b in _blocksHolding(app, now)) {
+        if (b.message != null &&
+            (latest == null || b.from.isAfter(latest.from))) {
+          latest = b;
+        }
+      }
+    }
+    final said = latest?.message;
+    final why = switch (d.reason) {
       Reason.familyBlock => _s.t('blockFamily'),
       Reason.temporaryBlock when pause => _s.t('blockPause', {
         'time': _s.time(until ?? now),
@@ -1002,6 +1013,7 @@ class Monitor {
       }),
       _ => _s.t('blockQuota', {'label': _label(d.ruleId)}),
     };
+    final message = said == null ? why : '$said\n$why';
     // Out of time: said plainly, so the closing is not taken for a crash.
     final listen =
         d.reason == Reason.quotaExhausted &&

@@ -299,6 +299,7 @@ Json temporaryBlockToJson(TemporaryBlock b) => {
   'from': instantToJson(b.from),
   if (b.until != null) 'until': instantToJson(b.until!),
   if (b.voluntary) 'voluntary': true,
+  if (b.message != null) 'message': b.message,
 };
 
 TemporaryBlock temporaryBlockFromJson(Json j) => TemporaryBlock(
@@ -309,6 +310,7 @@ TemporaryBlock temporaryBlockFromJson(Json j) => TemporaryBlock(
   from: instantFromJson(j['from']),
   until: optionalInstant(j['until']),
   voluntary: j['voluntary'] as bool? ?? false,
+  message: j['message'] as String?,
 );
 
 Json hoursUnlockToJson(HoursUnlock u) => {

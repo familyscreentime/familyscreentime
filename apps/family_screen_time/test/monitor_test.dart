@@ -796,6 +796,28 @@ void main() {
     });
   });
 
+  test('a block shows the parent\'s message', () async {
+    final family = await store.loadFamily();
+    await store.saveFamily(
+      family.copyWith(
+        state: family.state.copyWith(
+          temporaryBlocks: [
+            TemporaryBlock(
+              id: 'dinner',
+              childId: 'emma',
+              from: DateTime.now().subtract(const Duration(minutes: 1)),
+              message: 'À table !',
+            ),
+          ],
+        ),
+      ),
+    );
+    await send('reload', null);
+    await send('foreground', {'package': 'youtube'});
+    final block = calls.lastWhere((c) => c.method == 'block');
+    expect((block.arguments as Map)['message'], startsWith('À table !\n'));
+  });
+
   group('eye breaks', () {
     /// 25 minutes of YouTube (no limit) on this device, up to now.
     Future<void> watched() async {

@@ -300,7 +300,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     };
     return Scaffold(
       appBar: AppBar(title: Text(s.t('devicesTitle'))),
-      floatingActionButton: !_loaded || !_linked
+      floatingActionButton: !_loaded || !_linked || c.demo
           ? null
           : FloatingActionButton.extended(
               onPressed: _add,
@@ -312,7 +312,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
-                if (!_linked) ...[
+                if (c.demo)
+                  Text(s.t('demoNoLinking'))
+                else if (!_linked) ...[
                   Text(s.t('devicesAlone')),
                   const SizedBox(height: 24),
                   FilledButton.icon(
@@ -350,6 +352,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       childNames[devices[id]!['childId']],
                       now,
                     ),
+                  ?_pendingHint(context, s, devices, childNames),
                   Card(
                     child: ListTile(
                       leading: const Icon(Icons.fact_check_outlined),
@@ -382,6 +385,52 @@ class _DevicesScreenState extends State<DevicesScreen> {
                 ],
               ],
             ),
+    );
+  }
+
+  /// Whether the last pass with the relay server went through.
+  static bool _serverOk(RelayState relay) {
+    final ok = relay.lastOk;
+    final error = relay.errorAt;
+    return ok != null && (error == null || !error.isAfter(ok));
+  }
+
+  /// What to do when devices have not received the latest changes; `null`
+  /// when they all have.
+  Widget? _pendingHint(
+    BuildContext context,
+    S s,
+    Map<String, Map<String, Object?>> devices,
+    Map<String, String> childNames,
+  ) {
+    final waiting = [
+      for (final id in devicesInOrder(
+        devices,
+        here: _log?.deviceId,
+        childName: (id) => childNames[id],
+      ))
+        if ((_pending[id] ?? 0) > 0) devices[id]?['name'] as String? ?? id,
+    ];
+    if (waiting.isEmpty) return null;
+    final relay = _relayKey ? _relay?.$2 : null;
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      child: Text(
+        s.t(
+          // With the relay server, the Wi-Fi does not matter: once on the
+          // server, the changes reach them wherever they are.
+          relay == null
+              ? 'parentDevicePending'
+              : _serverOk(relay)
+              ? 'parentDevicePendingServer'
+              : 'parentDevicePendingOffline',
+          {'devices': waiting.join(', ')},
+        ),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.error,
+        ),
+      ),
     );
   }
 

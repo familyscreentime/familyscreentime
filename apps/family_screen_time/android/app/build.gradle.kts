@@ -14,6 +14,10 @@ val keyProperties = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// The demonstration build (-P demo=true, with lib/main_demo.dart): its own
+// app beside the real one, with a made-up family and nothing kept.
+val demo = (project.findProperty("demo") as String?) == "true"
+
 android {
     namespace = "org.familyscreentime"
     compileSdk = flutter.compileSdkVersion
@@ -36,6 +40,12 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLabel"] = "Family Screen Time"
+        if (demo) {
+            applicationIdSuffix = ".demo"
+            versionNameSuffix = "-demo"
+            manifestPlaceholders["appLabel"] = "FST démo"
+        }
     }
 
     signingConfigs {

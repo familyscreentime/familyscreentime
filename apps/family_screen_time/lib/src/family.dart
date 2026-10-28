@@ -20,6 +20,22 @@ const knownSystemPackages = {
   'com.google.android.gms.supervision',
   'com.google.android.permissioncontroller',
   'com.android.permissioncontroller',
+  // Windows: the sign-in and lock screens, the administrator prompt, the
+  // Start menu, search, notifications, the touch keyboard, and the frame
+  // of Store apps (the app inside it is the one counted).
+  'logonui.exe',
+  'lockapp.exe',
+  'consent.exe',
+  'startmenuexperiencehost.exe',
+  'searchhost.exe',
+  'searchapp.exe',
+  'searchui.exe',
+  'shellexperiencehost.exe',
+  'shellhost.exe',
+  'textinputhost.exe',
+  'applicationframehost.exe',
+  'systemsettings.exe',
+  'taskmgr.exe',
 };
 
 /// Home screens of the usual makers: not counted in the statistics, even
@@ -37,6 +53,8 @@ const knownLaunchers = {
   'com.motorola.launcher3',
   'com.teslacoilsw.launcher',
   'com.microsoft.launcher',
+  // Windows: the desktop and the taskbar.
+  'explorer.exe',
 };
 
 /// Configuration for a new family on this device.

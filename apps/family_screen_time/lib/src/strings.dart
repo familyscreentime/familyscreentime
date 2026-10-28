@@ -17,8 +17,18 @@ class S {
     return S(supportedLanguages.contains(lang) ? lang : 'en');
   }
 
+  /// Whether texts are for Windows: a key's `@windows` variant, when there
+  /// is one, replaces it.
+  static bool windows = false;
+
   String t(String key, [Map<String, String> args = const {}]) {
-    var text = _texts[language]?[key] ?? _texts['en']![key] ?? key;
+    String? find(String lang) {
+      final texts = _texts[lang];
+      if (texts == null) return null;
+      return (windows ? texts['$key@windows'] : null) ?? texts[key];
+    }
+
+    var text = find(language) ?? find('en') ?? key;
     args.forEach((k, v) => text = text.replaceAll('{$k}', v));
     return text;
   }
@@ -118,6 +128,26 @@ const _texts = <String, Map<String, String>>{
     'permAutostart': 'Démarrage automatique',
     'permAutostartText': 'Réglage propre à Xiaomi : sans lui, le système arrête la surveillance sans prévenir.',
     'permAutostartUnknown': 'Réglage propre à Xiaomi : vérifiez que Family Screen Time est autorisée, sinon le système arrête la surveillance sans prévenir.',
+    // Windows.
+    'permAutostartWindows': 'Démarrage avec Windows',
+    'permAutostartWindowsText':
+        'La surveillance démarre à chaque ouverture de session de ce compte.',
+    'permMonitorRunning': 'Surveillance en cours',
+    'permMonitorRunningText':
+        'Compte le temps, avertit et ferme les applis limitées.',
+    'permStandardAccount': 'Compte standard',
+    'permStandardAccountText': 'Le compte Windows de l\'enfant n\'est pas administrateur : il ne peut pas désinstaller l\'appli.',
+    'permStandardAccountAdmin': 'Ce compte est administrateur du PC : l\'enfant pourrait arrêter la surveillance ou désinstaller l\'appli. Un compte standard est plus sûr.',
+    'welcomeText@windows': 'Ce compte Windows va être configuré pour un enfant. Le parent choisit un code ; l\'appli suit ensuite le temps passé devant l\'écran.',
+    'permissionsText@windows': 'Vérifiez chaque élément. Pour un enfant qui a plusieurs comptes ou plusieurs PC, configurez chacun d\'eux.',
+    'blockHome@windows': 'Retour au bureau',
+    'androidName@windows': 'Nom Windows : {name}',
+    'overlayHint@windows':
+        'Affiché par-dessus les applis limitées. Il se déplace à la souris.',
+    'outOfTimeAppsHint@windows':
+        'Les paramètres et le bureau restent accessibles.',
+    'outOfTimeSettingsHint@windows': 'Paramètres Windows, Gestionnaire des tâches et Éditeur du Registre compris.',
+    'settingsParentOnlyHint@windows': 'Même quand il reste du temps, les Paramètres Windows, le Gestionnaire des tâches et l\'Éditeur du Registre ne s\'ouvrent qu\'en mode parent.',
     'open': 'Ouvrir',
     'permDeviceAdmin': 'Protection contre la désinstallation',
     'permDeviceAdminText': 'Facultatif : sans le code parent, impossible de désinstaller l\'appli ou d\'ouvrir ses réglages Android (fiche de l\'appli, accessibilité, protection).',
@@ -722,6 +752,27 @@ const _texts = <String, Map<String, String>>{
     'permAutostart': 'Automatisch starten',
     'permAutostartText': 'Xiaomi-instelling: zonder deze stopt het systeem het toezicht zonder te waarschuwen.',
     'permAutostartUnknown': 'Xiaomi-instelling: controleer of Family Screen Time is toegestaan, anders stopt het systeem het toezicht zonder te waarschuwen.',
+    // Windows.
+    'permAutostartWindows': 'Starten met Windows',
+    'permAutostartWindowsText':
+        'Het toezicht start telkens als dit account zich aanmeldt.',
+    'permMonitorRunning': 'Toezicht actief',
+    'permMonitorRunningText':
+        'Telt de tijd, waarschuwt en sluit de beperkte apps.',
+    'permStandardAccount': 'Standaardaccount',
+    'permStandardAccountText': 'Het Windows-account van het kind is geen beheerder: het kan de app niet verwijderen.',
+    'permStandardAccountAdmin': 'Dit account is beheerder van de pc: het kind zou het toezicht kunnen stoppen of de app verwijderen. Een standaardaccount is veiliger.',
+    'welcomeText@windows': 'Dit Windows-account wordt ingesteld voor een kind. De ouder kiest een code; daarna volgt de app de schermtijd.',
+    'permissionsText@windows': 'Controleer elk onderdeel. Heeft een kind meerdere accounts of pc\'s, stel ze dan elk in.',
+    'blockHome@windows': 'Naar het bureaublad',
+    'androidName@windows': 'Windows-naam: {name}',
+    'overlayHint@windows':
+        'Getoond boven de beperkte apps. Te verplaatsen met de muis.',
+    'outOfTimeAppsHint@windows':
+        'De instellingen en het bureaublad blijven bereikbaar.',
+    'outOfTimeSettingsHint@windows':
+        'Windows-instellingen, Taakbeheer en Register-editor inbegrepen.',
+    'settingsParentOnlyHint@windows': 'Ook als er nog tijd is, gaan de Windows-instellingen, Taakbeheer en de Register-editor alleen in de oudermodus open.',
     'open': 'Openen',
     'permDeviceAdmin': 'Bescherming tegen verwijderen',
     'permDeviceAdminText': 'Optioneel: zonder de oudercode kan de app niet worden verwijderd en kunnen haar Android-instellingen (app-info, toegankelijkheid, beveiliging) niet worden geopend.',
@@ -1320,6 +1371,26 @@ const _texts = <String, Map<String, String>>{
     'permAutostart': 'Autostart',
     'permAutostartText': 'Xiaomi setting: without it, the system stops the monitor without warning.',
     'permAutostartUnknown': 'Xiaomi setting: check that Family Screen Time is allowed, or the system stops the monitor without warning.',
+    // Windows.
+    'permAutostartWindows': 'Start with Windows',
+    'permAutostartWindowsText':
+        'The monitor starts each time this account signs in.',
+    'permMonitorRunning': 'Monitor running',
+    'permMonitorRunningText':
+        'Counts the time, warns and closes the limited apps.',
+    'permStandardAccount': 'Standard account',
+    'permStandardAccountText': 'The child\'s Windows account is not an administrator: it cannot uninstall the app.',
+    'permStandardAccountAdmin': 'This account is an administrator of the PC: the child could stop the monitor or uninstall the app. A standard account is safer.',
+    'welcomeText@windows': 'This Windows account is about to be set up for a child. The parent chooses a code; the app then tracks screen time.',
+    'permissionsText@windows': 'Check each item. For a child with several accounts or PCs, set up each of them.',
+    'blockHome@windows': 'Go to the desktop',
+    'androidName@windows': 'Windows name: {name}',
+    'overlayHint@windows':
+        'Shown over the limited apps. Drag it with the mouse.',
+    'outOfTimeAppsHint@windows': 'The settings and the desktop stay open.',
+    'outOfTimeSettingsHint@windows':
+        'Windows Settings, Task Manager and Registry Editor included.',
+    'settingsParentOnlyHint@windows': 'Even with time left, Windows Settings, Task Manager and Registry Editor only open in parent mode.',
     'open': 'Open',
     'permDeviceAdmin': 'Uninstall protection',
     'permDeviceAdminText': 'Optional: without the parent code, the app cannot be uninstalled and its Android settings (app info, accessibility, protection) cannot be opened.',

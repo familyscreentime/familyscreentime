@@ -17,6 +17,9 @@ const _titles = {
   'battery': 'permBattery',
   'deviceAdmin': 'permDeviceAdmin',
   'autostart': 'permAutostart',
+  'autostartWindows': 'permAutostartWindows',
+  'monitorRunning': 'permMonitorRunning',
+  'standardAccount': 'permStandardAccount',
 };
 
 const _texts = {
@@ -27,7 +30,13 @@ const _texts = {
   'battery': 'permBatteryText',
   'deviceAdmin': 'permDeviceAdminText',
   'autostart': 'permAutostartText',
+  'autostartWindows': 'permAutostartWindowsText',
+  'monitorRunning': 'permMonitorRunningText',
+  'standardAccount': 'permStandardAccountText',
 };
+
+/// Not turned on from here, only looked at: the button opens the settings.
+const _openOnly = {'standardAccount'};
 
 /// Explanations shown before a sensitive permission is turned on.
 const _disclosures = {
@@ -160,6 +169,8 @@ class _PermissionsViewState extends State<PermissionsView>
                 ? 'permAccessibilityStopped'
                 : unknown
                 ? 'permAutostartUnknown'
+                : kind == 'standardAccount' && !on
+                ? 'permStandardAccountAdmin'
                 : _texts[kind]!,
           ),
           style: stopped ? TextStyle(color: error) : null,
@@ -176,7 +187,7 @@ class _PermissionsViewState extends State<PermissionsView>
             ? Text(s.t('enabled'))
             : FilledButton.tonal(
                 // Already agreed to: no explanation again.
-                onPressed: stopped || unknown
+                onPressed: stopped || unknown || _openOnly.contains(kind)
                     ? () => widget.controller.platform.openPermissionSettings(
                         kind,
                       )
@@ -185,7 +196,7 @@ class _PermissionsViewState extends State<PermissionsView>
                   s.t(
                     stopped
                         ? 'restart'
-                        : unknown
+                        : unknown || _openOnly.contains(kind)
                         ? 'open'
                         : 'enable',
                   ),
@@ -201,15 +212,16 @@ class _PermissionsViewState extends State<PermissionsView>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final kind in _kinds) _tile(context, kind),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            icon: const Icon(Icons.info_outline),
-            label: Text(widget.controller.s.t('permAppDetails')),
-            onPressed: () =>
-                widget.controller.platform.openPermissionSettings('appDetails'),
+        if (!onWindows)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: const Icon(Icons.info_outline),
+              label: Text(widget.controller.s.t('permAppDetails')),
+              onPressed: () => widget.controller.platform
+                  .openPermissionSettings('appDetails'),
+            ),
           ),
-        ),
       ],
     );
   }

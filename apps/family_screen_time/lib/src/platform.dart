@@ -1,5 +1,8 @@
-/// Access to the Android side (permissions, apps, monitor control).
+/// Access to the system side, Android or Windows (permissions, apps,
+/// monitor control).
 library;
+
+import 'dart:io' show Platform;
 
 import 'package:flutter/services.dart';
 
@@ -33,18 +36,28 @@ class SystemPackages {
   });
 }
 
-/// Permissions the monitor relies on, in the order they are asked for.
-const permissionKinds = [
-  'accessibility',
-  'overlay',
-  'notifications',
-  'battery',
-  'usageAccess',
-  'deviceAdmin',
-];
+/// Whether this is the Windows client (a PC), rather than Android; tests
+/// set it to try the Windows client.
+bool onWindows = Platform.isWindows;
+
+/// Permissions the monitor relies on, in the order they are asked for. On
+/// Windows: starting with Windows, running now, and whether the child's
+/// account is a standard one (an administrator could stop the monitor).
+List<String> get permissionKinds => onWindows
+    ? const ['autostartWindows', 'monitorRunning', 'standardAccount']
+    : const [
+        'accessibility',
+        'overlay',
+        'notifications',
+        'battery',
+        'usageAccess',
+        'deviceAdmin',
+      ];
 
 /// Permissions without which limits cannot be enforced.
-const requiredPermissions = {'accessibility', 'overlay', 'notifications'};
+Set<String> get requiredPermissions => onWindows
+    ? const {'autostartWindows', 'monitorRunning'}
+    : const {'accessibility', 'overlay', 'notifications'};
 
 class PlatformApi {
   static const _channel = MethodChannel('org.familyscreentime/platform');
@@ -136,11 +149,13 @@ class PlatformApi {
   /// The device's maker and model ("Xiaomi Redmi Pad 2"), to name it.
   Future<String> deviceName() async {
     try {
-      return await _channel.invokeMethod<String>('deviceName') ?? 'Android';
+      return await _channel.invokeMethod<String>('deviceName') ?? _system;
     } on Object {
-      return 'Android';
+      return _system;
     }
   }
+
+  static String get _system => onWindows ? 'PC' : 'Android';
 
   Future<void> reloadMonitor() => _channel.invokeMethod('reloadMonitor');
 

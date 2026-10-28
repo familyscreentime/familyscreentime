@@ -88,7 +88,10 @@ class Monitor {
 
   Future<void> start() async {
     // A parent's device limits nothing: Android started this by mistake.
-    if ((await store.loadSettings()).parentDevice) {
+    // On Windows, it starts in every account at sign-in: it stays only in
+    // those set up for a child.
+    final settings = await store.loadSettings();
+    if (settings.parentDevice || (onWindows && settings.childId == null)) {
       await _channel.invokeMethod('unwanted');
       return;
     }
@@ -910,6 +913,11 @@ class Monitor {
         {if (_family.appNames[app] != null) 'app': _family.appNames[app]!},
       ),
       'package': app,
+      // Listen only: the app goes to the background (minimized on
+      // Windows) rather than closed, so the music goes on.
+      if (d.reason == Reason.quotaExhausted &&
+          _rule(d.ruleId)?.listenOnly != null)
+        'background': true,
       'ok': _s.t('ok'),
       'home': _s.t('blockHome'),
       'open': _s.t('blockOpen'),

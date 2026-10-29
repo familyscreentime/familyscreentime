@@ -52,6 +52,7 @@ UsageSegment withTimes(UsageSegment s, DateTime start, DateTime end) =>
       appId: s.appId!,
       start: start,
       end: end,
+      activity: s.activity,
     );
 
 /// [t] in ISO 8601 local time with its offset (`2026-10-24T15:04:05+02:00`).
@@ -70,10 +71,13 @@ String _csvField(String v) =>
     v.contains(RegExp('[",\n\r]')) ? '"${v.replaceAll('"', '""')}"' : v;
 
 /// One line per stretch of use: child, device, app, package, start, end
-/// (local time with offset) and seconds. UTF-8 with a byte order mark, so
+/// (local time with offset), seconds, and what a browser was used for
+/// (video, scroll, other) when known. UTF-8 with a byte order mark, so
 /// that spreadsheets read the accents.
 String usageCsv(List<UsageSegment> segments, ExportNames names) {
-  final b = StringBuffer('﻿child,device,app,package,start,end,seconds\r\n');
+  final b = StringBuffer(
+    '﻿child,device,app,package,start,end,seconds,activity\r\n',
+  );
   for (final s in segments) {
     b
       ..writeAll([
@@ -84,6 +88,7 @@ String usageCsv(List<UsageSegment> segments, ExportNames names) {
         isoLocal(s.start),
         isoLocal(s.end),
         s.length.inSeconds,
+        s.activity ?? '',
       ], ',')
       ..write('\r\n');
   }
@@ -140,6 +145,7 @@ String activityWatchJson(
               'title': names.app(s.appId!),
               'package': s.appId,
               'child': names.child(s.childId),
+              'activity': ?s.activity,
             },
           },
       ],

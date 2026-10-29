@@ -149,7 +149,10 @@ void main() {
       app: (p) => {'com.game': 'Jeu "X"'}[p] ?? p,
     );
     final csv = usageCsv(segments, names).split('\r\n');
-    expect(csv.first, '\uFEFFchild,device,app,package,start,end,seconds');
+    expect(
+      csv.first,
+      '\uFEFFchild,device,app,package,start,end,seconds,activity',
+    );
     expect(
       csv[1],
       startsWith(
@@ -157,7 +160,7 @@ void main() {
         '${isoLocal(start.add(const Duration(minutes: 5)))},',
       ),
     );
-    expect(csv[1], endsWith(',300'));
+    expect(csv[1], endsWith(',300,'));
     expect(isoLocal(start), matches(r'^2026-10-24T15:00:05[+-]\d\d:\d\d$'));
 
     final aw = jsonDecode(activityWatchJson(segments, names)) as Map;

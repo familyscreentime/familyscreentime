@@ -25,9 +25,15 @@ internal object Shared {
     const val MONITOR_CHANNEL = "monitor"
     const val WARNING_CHANNEL = "warnings"
     const val SHOWN_WARNING_CHANNEL = "warnings_shown"
+    const val RULES_CHANNEL = "rules"
+    // Notification numbers, all here so that no two are the same: a
+    // notification replaces the one with its number, whichever process
+    // posts it.
     const val MONITOR_ID = 1
     const val WARNING_ID = 2
     const val STOPPED_ID = 3
+    const val PARENT_MODE_ID = 4
+    const val RULES_ID = 5
 
     /** How far back to look for the app in front when it is not known. */
     const val SINCE_UNLOCK_MS = 6 * 60 * 60 * 1000L
@@ -58,6 +64,13 @@ internal object Shared {
                 context.getString(R.string.shown_warning_channel),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply { setShowBadge(false) },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                RULES_CHANNEL,
+                context.getString(R.string.rules_channel),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ),
         )
     }
 

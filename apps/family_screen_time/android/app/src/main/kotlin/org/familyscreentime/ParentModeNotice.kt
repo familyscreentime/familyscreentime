@@ -17,7 +17,6 @@ import android.os.Looper
  */
 object ParentModeNotice {
     private const val CHANNEL_ID = "parent_mode"
-    private const val ID = 3
     const val ACTION_LEAVE = "org.familyscreentime.LEAVE_PARENT_MODE"
 
     fun show(context: Context, title: String, text: String, leave: String) {
@@ -60,12 +59,12 @@ object ParentModeNotice {
                 Notification.Action.Builder(null, leave, leaveIntent).build(),
             )
             .build()
-        nm.notify(ID, n)
+        nm.notify(Shared.PARENT_MODE_ID, n)
     }
 
     fun hide(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.cancel(ID)
+        nm.cancel(Shared.PARENT_MODE_ID)
     }
 }
 

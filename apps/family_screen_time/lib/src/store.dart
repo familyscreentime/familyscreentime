@@ -12,6 +12,7 @@ import 'dart:math';
 import 'package:path_provider/path_provider.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
+import 'browser_activity.dart';
 import 'family.dart' show usageHistoryDays;
 import 'self_limits.dart';
 
@@ -420,18 +421,23 @@ class OpenSegment {
   final DateTime start;
   final DateTime lastSeen;
 
-  const OpenSegment(this.appId, this.start, this.lastSeen);
+  /// What the app is used for, when known (see [UsageSegment.activity]).
+  final String? activity;
+
+  const OpenSegment(this.appId, this.start, this.lastSeen, {this.activity});
 
   Json toJson() => {
     'appId': appId,
     'start': instantToJson(start),
     'lastSeen': instantToJson(lastSeen),
+    'activity': ?activity,
   };
 
   factory OpenSegment.fromJson(Json j) => OpenSegment(
     j['appId'] as String,
     instantFromJson(j['start']),
     instantFromJson(j['lastSeen']),
+    activity: j['activity'] as String?,
   );
 }
 
@@ -579,7 +585,7 @@ class LocalStore {
     final days = keptDays < usageHistoryDays ? usageHistoryDays : keptDays;
     final before = '${dayToJson(addDays(today, -days))}.jsonl';
     var removed = 0;
-    for (final d in [_usageDir, _importedDir]) {
+    for (final d in [_usageDir, _importedDir, _browserDir]) {
       if (!await d.exists()) continue;
       await for (final f in d.list()) {
         final name = f.uri.pathSegments.last;
@@ -609,6 +615,39 @@ class LocalStore {
     }
     if (first == null) return null;
     return DateTime.tryParse(first.substring(0, first.length - 6));
+  }
+
+  Directory get _browserDir => Directory('${dir.path}/browser');
+
+  /// What the browsers measured, from [since] (a day): kept on this device
+  /// only, to check how their use is classed.
+  Future<List<BrowserSample>> loadBrowserSamples({
+    required DateTime since,
+  }) async {
+    final result = <BrowserSample>[];
+    final today = dayOf(DateTime.now());
+    for (var day = dayOf(since); !day.isAfter(today); day = addDays(day, 1)) {
+      final f = File('${_browserDir.path}/${dayToJson(day)}.jsonl');
+      if (!await f.exists()) continue;
+      for (final line in await f.readAsLines()) {
+        if (line.trim().isEmpty) continue;
+        try {
+          result.add(BrowserSample.fromJson(jsonDecode(line) as Json));
+        } on Object {
+          // A line cut short by a crash is skipped.
+        }
+      }
+    }
+    return result;
+  }
+
+  Future<void> appendBrowserSample(BrowserSample b) async {
+    await _browserDir.create(recursive: true);
+    await File('${_browserDir.path}/${dayToJson(b.start)}.jsonl').writeAsString(
+      '${jsonEncode(b.toJson())}\n',
+      mode: FileMode.append,
+      flush: true,
+    );
   }
 
   /// Appends a closed segment to the file of the day it starts on.
@@ -653,6 +692,7 @@ Iterable<UsageSegment> splitByDay(UsageSegment s) sync* {
             appId: s.appId!,
             start: from,
             end: to,
+            activity: s.activity,
           );
     from = to;
   }

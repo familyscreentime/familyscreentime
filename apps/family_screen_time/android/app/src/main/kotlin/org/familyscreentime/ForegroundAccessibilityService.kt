@@ -14,7 +14,8 @@ import android.view.inputmethod.InputMethodManager
  * Reports which app comes to the foreground, as soon as it does, from the
  * package and activity names of window changes. Screen content is never
  * read, except on Android's security and permission pages while uninstall
- * protection is on (see [ProtectionGuard]).
+ * protection is on (see [ProtectionGuard]). In browsers, scroll events are
+ * counted (see [BrowserWatch]), their content left aside.
  */
 class ForegroundAccessibilityService : AccessibilityService() {
 
@@ -27,6 +28,11 @@ class ForegroundAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
+        // Only counted, for the browsers (see BrowserWatch).
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            Enforcer.get(this).onScroll(event)
+            return
+        }
         if (ProtectionGuard.mustClose(this, event)) {
             closeProtected()
             return

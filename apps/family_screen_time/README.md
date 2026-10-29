@@ -119,6 +119,21 @@ behind the parent code.
   the end of the next allowed hours today, which start early, or until
   midnight), or blocking now. With several children, "Lock everything" or
   "Unlock everything". Then the linked devices and the family's settings.
+- Browsers (any app that opens every web link: Chrome and those built on
+  it, Firefox…) measured without reading the pages: every 15 seconds, the
+  scroll events the accessibility service receives and the sound playing.
+  Their time is classed as video, quick scrolling or reading and other,
+  shown in the app's usage detail. Measured only for now: nothing is
+  limited by it.
+- On a child's device, a notification says which of the child's rules a
+  parent added, changed or removed on another device (one notification,
+  replaced by the next; the child's own limits are left out).
+- Phone calls are never covered nor closed: the screens of a call are
+  found whatever the maker (every app providing Android's in-call screen,
+  and the phone app), and the device lock steps aside while a phone call
+  rings or goes on.
+- Nothing is counted while the screen is off or locked, whatever windows
+  Android reports then (an alarm getting ready, say).
 - A block can carry a short message for the child ("Dinner's ready!"),
   shown on the block screen; the messages written before are offered again.
 - Family settings (special periods, devices used at the same time, how long
@@ -188,6 +203,16 @@ the screens and take screenshots. Its parent code is 1234.
 
 ```sh
 flutter build apk --release -t lib/main_demo.dart -P demo=true
+```
+
+The calibration build, for checking how browser use is classed on a few
+devices, is the full app as an app of its own (`org.familyscreentime.calibration`,
+"FST calibrage"), installed beside the one from Google Play. A browser's
+usage page then offers an export of the raw measures. To be removed once
+the thresholds are set.
+
+```sh
+flutter build apk --release -P calibration=true
 ```
 
 Release builds are signed with the upload key named in `android/key.properties`

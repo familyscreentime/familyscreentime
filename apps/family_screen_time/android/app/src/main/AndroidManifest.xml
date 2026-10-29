@@ -71,7 +71,7 @@
         <service
             android:name=".ForegroundAccessibilityService"
             android:exported="true"
-            android:label="@string/accessibility_label"
+            android:label="${serviceLabel}"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
@@ -137,6 +137,16 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- Browsers, whose use is measured (see BrowserWatch). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <!-- Screens of phone calls, which are never covered nor closed. -->
+        <intent>
+            <action android:name="android.telecom.InCallService" />
         </intent>
         <!-- Home screens, which are never blocked. -->
         <intent>

@@ -25,11 +25,16 @@ class SystemPackages {
   final String? sms;
   final List<String> launchers;
 
+  /// The screens of a phone call (the in-call screens and the phone app),
+  /// which differ from maker to maker.
+  final List<String> callScreens;
+
   const SystemPackages({
     required this.self,
     this.dialer,
     this.sms,
     this.launchers = const [],
+    this.callScreens = const [],
   });
 }
 
@@ -126,6 +131,10 @@ class PlatformApi {
       sms: m['sms'] as String?,
       launchers: [
         for (final p in m['launchers'] as List<Object?>? ?? const [])
+          p as String,
+      ],
+      callScreens: [
+        for (final p in m['callScreens'] as List<Object?>? ?? const [])
           p as String,
       ],
     );

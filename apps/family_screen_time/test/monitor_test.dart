@@ -161,6 +161,44 @@ void main() {
     other.dispose();
   });
 
+  test('a phone call\'s screen is never closed, whatever the maker', () async {
+    // Out of time on every app.
+    final family = await store.loadFamily();
+    await store.saveFamily(
+      family.copyWith(
+        state: family.state.copyWith(
+          rules: [
+            ...family.state.rules,
+            Rule(
+              id: 'all',
+              childId: 'emma',
+              schedule: WeeklySchedule(const {}),
+            ),
+          ],
+        ),
+      ),
+    );
+    const platform = MethodChannel('org.familyscreentime/platform');
+    messenger.setMockMethodCallHandler(platform, (call) async {
+      if (call.method != 'systemPackages') return null;
+      return {
+        'self': 'org.familyscreentime',
+        'launchers': ['launcher'],
+        'callScreens': ['com.samsung.android.incallui'],
+      };
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(platform, null));
+    monitor.dispose();
+    calls.clear();
+    monitor = Monitor(store);
+    await monitor.start();
+    await send('foreground', {'package': 'com.samsung.android.incallui'});
+    expect(calls.where((c) => c.method == 'block'), isEmpty);
+    // Any other app is closed.
+    await send('foreground', {'package': 'youtube'});
+    expect(calls.where((c) => c.method == 'block'), hasLength(1));
+  });
+
   test('opening a blocked app shows the block screen', () async {
     await send('foreground', {'package': 'minecraft'});
     final block = calls.where((c) => c.method == 'block').toList();
@@ -219,6 +257,17 @@ void main() {
     final usage = await store.loadUsage(since: dayOf(DateTime.now()));
     expect(usage.single.appId, 'youtube');
     expect(await store.loadOpen(), isNull);
+  });
+
+  test('nothing is recorded while the screen is off', () async {
+    await send('screen', {'on': false});
+    // An alarm app getting ready during the night.
+    await send('foreground', {'package': 'clock'});
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    await send('screen', {'on': true});
+    await send('foreground', {'package': 'youtube'});
+    final usage = await store.loadUsage(since: dayOf(DateTime.now()));
+    expect(usage.where((u) => u.appId == 'clock'), isEmpty);
   });
 
   test('an app installed is shared with the family at once', () async {
@@ -816,6 +865,31 @@ void main() {
     await send('foreground', {'package': 'youtube'});
     final block = calls.lastWhere((c) => c.method == 'block');
     expect((block.arguments as Map)['message'], startsWith('À table !\n'));
+  });
+
+  test('a browser\'s use is recorded with what it was used for', () async {
+    await send('foreground', {'package': 'com.android.chrome'});
+    final now = DateTime.now();
+    // Android measured a video playing for the last 15 seconds.
+    await send('browserActivity', {
+      'package': 'com.android.chrome',
+      'start': now.millisecondsSinceEpoch,
+      'end': now.add(const Duration(seconds: 15)).millisecondsSinceEpoch,
+      'scrolls': 0,
+      'bursts': 0,
+      'scrollDistance': 0,
+      'mediaMs': 15000,
+      'otherMediaMs': 0,
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    await send('screen', {'on': false});
+    final usage = await store.loadUsage(since: dayOf(DateTime.now()));
+    final chrome = usage.where((u) => u.appId == 'com.android.chrome');
+    expect(chrome.map((u) => u.activity), contains(UsageActivity.video));
+    expect(
+      await store.loadBrowserSamples(since: dayOf(DateTime.now())),
+      hasLength(1),
+    );
   });
 
   group('eye breaks', () {

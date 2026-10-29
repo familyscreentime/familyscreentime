@@ -18,6 +18,11 @@ val keyProperties = Properties().apply {
 // app beside the real one, with a made-up family and nothing kept.
 val demo = (project.findProperty("demo") as String?) == "true"
 
+// The calibration build (-P calibration=true): the full app, as its own app
+// beside the one from Google Play, to measure browser use on a few devices.
+// To be removed once the thresholds are set.
+val calibration = (project.findProperty("calibration") as String?) == "true"
+
 android {
     namespace = "org.familyscreentime"
     compileSdk = flutter.compileSdkVersion
@@ -41,6 +46,13 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["appLabel"] = "Family Screen Time"
+        manifestPlaceholders["serviceLabel"] = "@string/accessibility_label"
+        if (calibration) {
+            applicationIdSuffix = ".calibration"
+            versionNameSuffix = "-calibration"
+            manifestPlaceholders["appLabel"] = "FST calibrage"
+            manifestPlaceholders["serviceLabel"] = "FST calibrage"
+        }
         if (demo) {
             applicationIdSuffix = ".demo"
             versionNameSuffix = "-demo"

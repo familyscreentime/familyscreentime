@@ -162,7 +162,9 @@ Reference text, if a reviewer asks for a description of use:
 > the window list: split screen, picture in picture), so that screen time
 > is counted and the limits set by the parent are applied; it sends the
 > user to the home screen when an app is blocked, and dismisses the
-> picture-in-picture window of a blocked app; and it shows the countdown, warnings, block notices and the
+> picture-in-picture window of a blocked app; in browsers, it counts scroll
+> events (their number, pace and distance, never the page content) to tell
+> reading from quick scrolling through feeds; and it shows the countdown, warnings, block notices and the
 > optional device lock as accessibility overlays, which stay visible over
 > full-screen apps. When the parent turns on uninstall protection, the
 > service also closes the Android settings pages that would switch the app

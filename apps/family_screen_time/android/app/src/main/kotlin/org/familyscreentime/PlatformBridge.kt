@@ -395,6 +395,7 @@ class PlatformBridge(
             "dialer" to dialer,
             "sms" to Telephony.Sms.getDefaultSmsPackage(context),
             "launchers" to launchers,
+            "callScreens" to Calls.screens(context).toList(),
         )
     }
 

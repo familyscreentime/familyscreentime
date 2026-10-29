@@ -363,6 +363,7 @@ Json usageSegmentToJson(UsageSegment s) => {
     'injectedTarget': appTargetToJson(s.injectedTarget!),
   'start': instantToJson(s.start),
   'end': instantToJson(s.end),
+  if (s.activity != null) 'activity': s.activity,
 };
 
 UsageSegment usageSegmentFromJson(Json j) {
@@ -381,6 +382,7 @@ UsageSegment usageSegmentFromJson(Json j) {
     appId: j['appId'] as String,
     start: instantFromJson(j['start']),
     end: instantFromJson(j['end']),
+    activity: j['activity'] as String?,
   );
 }
 

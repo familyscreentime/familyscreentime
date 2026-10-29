@@ -10,12 +10,15 @@ import 'package:flutter/services.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
 import 'availability.dart';
+import 'browser_activity.dart';
 import 'eye_breaks.dart';
 
 import 'package:screentime_sync/screentime_sync.dart'
     show Accepted, LanDirectory, LanSync, RemoteSource;
 
+import 'rule_changes.dart';
 import 'sync/bonsoir_directory.dart';
+import 'sync/family_entities.dart' show FamilyKeys;
 import 'sync/family_sync.dart';
 import 'sync/receipts.dart';
 import 'sync/relay_runner.dart';
@@ -56,6 +59,13 @@ class Monitor {
   /// its "listen only" id while it is open only to pick the music.
   String? _recordAs;
   DateTime? _openStart;
+
+  /// What the app in front is used for, when known (a browser's video,
+  /// quick scrolling…): its use is recorded with it.
+  String? _activity;
+
+  /// A browser's latest samples, to class the next one.
+  final List<BrowserSample> _browserSamples = [];
   bool _screenOn = true;
 
   Timer? _next;
@@ -117,10 +127,30 @@ class Monitor {
     await _evaluate();
   }
 
+  /// The screens of a phone call on this device: never blocked nor counted.
+  List<String>? _callScreens;
+
+  Future<List<String>> _loadCallScreens() async {
+    if (_callScreens != null) return _callScreens!;
+    try {
+      return _callScreens =
+          (await const PlatformApi().systemPackages()).callScreens;
+    } on Object {
+      // Tried again at the next load; Android's side covers calls anyway.
+      return const [];
+    }
+  }
+
+  /// The family as stored, with what this device must never block.
+  Future<FamilyData> _familyHere() async => withNeverBlocked(
+    withKnownSystem(await store.loadFamily()),
+    await _loadCallScreens(),
+  );
+
   Future<void> _load() async {
     _settings = await store.loadSettings();
     _s = S.of(_settings!.language);
-    _family = withKnownSystem(await store.loadFamily());
+    _family = await _familyHere();
     final since = addDays(dayOf(DateTime.now()), -usageHistoryDays);
     await _loadLabels();
     // Time entered by the parent counts too.
@@ -154,7 +184,7 @@ class Monitor {
       await log.readOthers();
       // What concerns the other children goes (see FamilySync.tidy).
       if (await log.tidy(store) != null) {
-        _family = withKnownSystem(await store.loadFamily());
+        _family = await _familyHere();
         final since = addDays(dayOf(DateTime.now()), -usageHistoryDays);
         _usage = [...await store.loadUsage(since: since), ..._family.injected];
         try {
@@ -283,13 +313,40 @@ class Monitor {
   Future<void> _onRemote(FamilySync log, Accepted a) async {
     try {
       _receiptsSoon(log);
+      final before = _family;
       final family = await log.applyRemote(a, store);
       await _load();
       await _evaluate();
-      if (family != null) await _channel.invokeMethod('familyChanged');
+      if (family != null) {
+        await _channel.invokeMethod('familyChanged');
+        await _notifyRuleChanges(
+          before,
+          touchedRules([for (final e in a.events) e.key], FamilyKeys.rule),
+        );
+      }
     } on Object catch (e) {
       debugPrint('Change from another device not applied: $e');
     }
+  }
+
+  /// Tells the child which of their rules a parent added, changed or
+  /// removed on another device.
+  Future<void> _notifyRuleChanges(
+    FamilyData before,
+    Set<String> touched,
+  ) async {
+    final childId = _settings?.childId;
+    if (childId == null || touched.isEmpty) return;
+    final changes = ruleChanges(before, _family, touched, childId);
+    if (changes.isEmpty) return;
+    await _loadLabels();
+    final (title, text) = ruleChangeNotice(
+      changes,
+      _family,
+      _s,
+      labels: _labels,
+    );
+    await _channel.invokeMethod('rulesChanged', {'title': title, 'text': text});
   }
 
   /// Puts the use recorded before the family existed into the log, once,
@@ -391,13 +448,21 @@ class Monitor {
   Future<void> _recoverOpenSegment() async {
     final open = await store.loadOpen();
     if (open == null) return;
-    await _record(open.appId, open.start, open.lastSeen);
+    await _record(
+      open.appId,
+      open.start,
+      open.lastSeen,
+      activity: open.activity,
+    );
     await store.clearOpen();
   }
 
   Future<Object?> _onCall(MethodCall call) async {
     switch (call.method) {
       case 'foreground':
+        // Screen off: no use, whatever window Android reports (an alarm
+        // getting ready, say). The app in front comes again at unlocking.
+        if (!_screenOn) return null;
         final args = call.arguments as Map<Object?, Object?>;
         await _switchTo(args['package'] as String?);
       case 'visible':
@@ -439,6 +504,10 @@ class Monitor {
         }
         await _load();
         await _evaluate();
+      case 'browserActivity':
+        await _onBrowserSample(
+          BrowserSample.fromPlatform(call.arguments as Map<Object?, Object?>),
+        );
       case 'appsChanged':
         // Installed or removed just now: the family's devices know at once,
         // so the parent can limit a new app straight away.
@@ -453,6 +522,7 @@ class Monitor {
     await _closeOpen(now);
     _foreground = app;
     _recordAs = app;
+    _activity = null;
     _openStart = app == null ? null : _recordingFrom(now);
     if (app != null) {
       await store.saveOpen(OpenSegment(app, _openStart!, now));
@@ -498,13 +568,56 @@ class Monitor {
     final app = _recordAs;
     final start = _openStart;
     if (app == null || start == null) return;
-    await _record(app, start, now);
+    await _record(app, start, now, activity: _activity);
     _openStart = _recordingFrom(now);
+  }
+
+  /// What a browser in front measured: kept, and its use from then on is
+  /// recorded as video, quick scrolling or other.
+  Future<void> _onBrowserSample(BrowserSample sample) async {
+    try {
+      await store.appendBrowserSample(sample);
+    } on Object catch (e) {
+      debugPrint('Browser sample not kept: $e');
+    }
+    _browserSamples
+      ..removeWhere(
+        (b) =>
+            b.package != sample.package ||
+            b.end.isBefore(sample.start.subtract(quickScrollWindow)),
+      )
+      ..add(sample);
+    if (_recordAs != sample.package) return;
+    final kind = classify(sample, _browserSamples);
+    if (kind == _activity) return;
+    final start = _openStart;
+    // The use so far goes with what it was; from the sample's start, with
+    // what it is now.
+    if (start != null && sample.start.isAfter(start)) {
+      await _record(sample.package, start, sample.start, activity: _activity);
+      _openStart = sample.start;
+    }
+    _activity = kind;
+    if (_openStart != null) {
+      await store.saveOpen(
+        OpenSegment(
+          sample.package,
+          _openStart!,
+          DateTime.now(),
+          activity: kind,
+        ),
+      );
+    }
   }
 
   /// Records use of [app] from [start] to [end], split at midnight so each
   /// day's file holds that day's use.
-  Future<void> _record(String app, DateTime start, DateTime end) async {
+  Future<void> _record(
+    String app,
+    DateTime start,
+    DateTime end, {
+    String? activity,
+  }) async {
     final settings = _settings;
     if (settings == null || settings.childId == null) return;
     var from = start;
@@ -517,6 +630,7 @@ class Monitor {
         appId: app,
         start: from,
         end: to,
+        activity: activity,
       );
       _usage.add(segment);
       await store.appendUsage(segment);
@@ -533,7 +647,9 @@ class Monitor {
     final app = _recordAs;
     final start = _openStart;
     if (app != null && start != null) {
-      await store.saveOpen(OpenSegment(app, start, DateTime.now()));
+      await store.saveOpen(
+        OpenSegment(app, start, DateTime.now(), activity: _activity),
+      );
     }
     await _flushAlsoOpen(DateTime.now());
     // Once a day, whatever the number of calls.

@@ -42,8 +42,24 @@ const knownLaunchers = {
 /// Configuration for a new family on this device.
 FamilyConfig initialConfig(SystemPackages p) => FamilyConfig(
   alwaysAllowed: {?p.dialer, ?p.sms},
-  neverBlocked: {p.self, ...p.launchers, ...knownSystemPackages},
+  neverBlocked: {
+    p.self,
+    ...p.launchers,
+    ...p.callScreens,
+    ...knownSystemPackages,
+  },
 );
+
+/// [f] with [apps] among those never blocked nor counted: the screens of a
+/// phone call on this device, say.
+FamilyData withNeverBlocked(FamilyData f, Iterable<String> apps) =>
+    f.config.neverBlocked.containsAll(apps)
+    ? f
+    : f.copyWith(
+        config: f.config.copyWith(
+          neverBlocked: {...f.config.neverBlocked, ...apps},
+        ),
+      );
 
 /// Keeps the list of system components up to date (launchers can change).
 /// The always-allowed apps are the parent's choice: set once at setup, then
@@ -53,6 +69,7 @@ FamilyConfig refreshSystemLists(FamilyConfig c, SystemPackages p) => c.copyWith(
     ...c.neverBlocked,
     p.self,
     ...p.launchers,
+    ...p.callScreens,
     ...knownSystemPackages,
   },
 );

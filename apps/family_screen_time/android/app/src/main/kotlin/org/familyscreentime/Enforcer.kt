@@ -37,6 +37,7 @@ internal object Enforcer {
     private lateinit var blockNotice: BlockOverlay
     private lateinit var deviceLock: DeviceLockOverlay
     private lateinit var eyeBreak: EyeBreakOverlay
+    private lateinit var browserWatch: BrowserWatch
     lateinit var volume: VolumeGuard
         private set
 
@@ -56,6 +57,9 @@ internal object Enforcer {
     private const val RECENT_BLOCK_MS = 3 * 60 * 60 * 1000L
 
     private var started = false
+
+    /** A phone call rings or goes on, as last checked. */
+    private var phoneCall = false
     private var lastMonitorStart = 0L
 
     fun get(context: Context): Enforcer {
@@ -69,6 +73,7 @@ internal object Enforcer {
         eyeBreak = EyeBreakOverlay(app) { choice ->
             send("eyeBreak", Bundle().apply { putString("action", choice) })
         }
+        browserWatch = BrowserWatch(app) { sample -> send("browserActivity", sample) }
         volume = VolumeGuard(app)
         Shared.createChannels(app)
         val filter = IntentFilter().apply {
@@ -96,9 +101,16 @@ internal object Enforcer {
                     lastForeground = null
                     lastVisible = emptyList()
                     eyeBreak.hide()
+                    browserWatch.foreground(null)
                 }
-                Intent.ACTION_SCREEN_ON -> if (!keyguardLocked()) screenOn = true
-                Intent.ACTION_USER_PRESENT -> screenOn = true
+                Intent.ACTION_SCREEN_ON -> if (!keyguardLocked()) {
+                    screenOn = true
+                    confirmSoon()
+                }
+                Intent.ACTION_USER_PRESENT -> {
+                    screenOn = true
+                    confirmSoon()
+                }
             }
             updateDeviceLock()
         }
@@ -110,6 +122,14 @@ internal object Enforcer {
      */
     private val safetyWatcher = object : Runnable {
         override fun run() {
+            // A phone call began or ended: nothing may cover it.
+            val call = Calls.phoneCall(app)
+            if (call != phoneCall) {
+                phoneCall = call
+                Log.i(TAG, if (call) "Phone call" else "Phone call ended")
+                if (call) clearForCall()
+                updateDeviceLock()
+            }
             val accessibility = ForegroundAccessibilityService.instance
             if (screenOn && accessibility != null && ProtectionGuard.safetyCenterInFront(app)) {
                 accessibility.closeProtected()
@@ -132,8 +152,15 @@ internal object Enforcer {
         main.post {
             // A volume raised in parent mode comes back under the cap.
             volume.enforce()
+            // Screen off or locked: a window shown then (an alarm getting
+            // ready, say) is no use of the device. The app in front is
+            // looked up again once the screen is unlocked.
+            if (!screenOn) return@post
             if (pkg == lastForeground) return@post
             lastForeground = pkg
+            // A call's screen: whatever covered the screen goes.
+            if (Calls.isScreen(app, pkg)) clearForCall()
+            browserWatch.foreground(pkg)
             updateDeviceLock()
             if (fromMonitor) return@post
             if (!send("foreground", Bundle().apply { putString("package", pkg) })) {
@@ -158,6 +185,16 @@ internal object Enforcer {
             lastVisible = sorted
             send("visible", Bundle().apply { putStringArrayList("packages", ArrayList(sorted)) })
         }
+    }
+
+    /** A scroll in some app: measured if it is a browser in front. */
+    fun onScroll(event: android.view.accessibility.AccessibilityEvent) {
+        if (started && screenOn) browserWatch.onScroll(event)
+    }
+
+    /** Unlocked just now: the app in front, once Android has noted it. */
+    private fun confirmSoon() {
+        main.postDelayed({ confirmForeground() }, UNLOCK_CHECK_MS)
     }
 
     /** The app in front according to the usage statistics, after a window change that named none. */
@@ -302,9 +339,11 @@ internal object Enforcer {
         // such as device administration may belong to apps with no time
         // left). The monitor checks again when parent mode ends.
         if (ProtectionGuard.allowed()) return
+        val app = data.getString("package") ?: lastForeground
+        // A call is never closed, whatever the time left.
+        if (Calls.isScreen(this.app, app)) return
         banner.hide()
         eyeBreak.hide()
-        val app = data.getString("package") ?: lastForeground
         if (app != null) recentBlocks[app] = SystemClock.elapsedRealtime() to Bundle(data)
         val title = data.getString("title") ?: ""
         val message = data.getString("message") ?: ""
@@ -427,10 +466,12 @@ internal object Enforcer {
         if (!started) return
         val fg = lastForeground
         val exempt = fg != null && (
-            fg == app.packageName || fg in lockExempt || fg in callScreens
+            fg == app.packageName || fg in lockExempt || Calls.isScreen(app, fg)
             )
+        // During a phone call, the lock steps aside whatever is in front:
+        // the call's screen may be one no list knows.
         val show = deviceLocked && screenOn && !keyguardLocked() &&
-            !exempt && !ProtectionGuard.allowed()
+            !exempt && !phoneCall && !ProtectionGuard.allowed()
         if (show) {
             banner.hide()
             blockNotice.hide()
@@ -464,11 +505,7 @@ internal object Enforcer {
      * a little later.
      */
     private fun eyeBreakWaits(): Boolean {
-        val audio = app.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-        val inCall = audio.mode == android.media.AudioManager.MODE_IN_CALL ||
-            audio.mode == android.media.AudioManager.MODE_IN_COMMUNICATION ||
-            audio.mode == android.media.AudioManager.MODE_RINGTONE
-        return inCall || lastForeground in callScreens || deviceLock.isShown ||
+        return Calls.anyCall(app) || Calls.isScreen(app, lastForeground) || deviceLock.isShown ||
             ProtectionGuard.allowed() || !screenOn
     }
 
@@ -504,6 +541,14 @@ internal object Enforcer {
         )
     }
 
+    /** A call comes in front: the block notice, the eye break and the block screen go. */
+    private fun clearForCall() {
+        blockNotice.hide()
+        eyeBreak.hide()
+        BlockActivity.dismiss()
+        deviceLock.hide()
+    }
+
     private fun appLabel(pkg: String): String = try {
         val pm = app.packageManager
         pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
@@ -520,15 +565,7 @@ internal object Enforcer {
     private const val PIP_WATCH_MS = 10 * 60 * 1000L
     private const val TAG = "FamilyScreenTime"
     private const val SAFETY_POLL_MS = 1_000L
-
-    /** In-call screens, which must never be covered. */
-    private val callScreens = setOf(
-        "com.android.incallui",
-        "com.android.server.telecom",
-        "com.android.phone",
-        "com.android.emergency",
-        "com.google.android.dialer",
-    )
+    private const val UNLOCK_CHECK_MS = 500L
 }
 
 /**

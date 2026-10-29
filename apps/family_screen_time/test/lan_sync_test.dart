@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:family_screen_time/src/controller.dart';
+import 'package:family_screen_time/src/rule_changes.dart';
 import 'package:family_screen_time/src/store.dart';
+import 'package:family_screen_time/src/strings.dart';
+import 'package:family_screen_time/src/sync/family_entities.dart';
 import 'package:family_screen_time/src/sync/family_sync.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -280,6 +283,18 @@ void main() {
     }
     final onTablet = await storeA.loadFamily();
     expect(onTablet.state.rules.single.dailyQuota, const Duration(hours: 3));
+    // The child is told: the rule the phone changed, from the events' keys.
+    final touched = touchedRules([
+      for (final a in remoteA)
+        for (final e in a.events) e.key,
+    ], FamilyKeys.rule);
+    expect(touched, {'all'});
+    final changes = ruleChanges(family, onTablet, touched, 'emma');
+    expect(changes.single.kind, RuleChangeKind.changed);
+    expect(ruleChangeNotice(changes, onTablet, const S('fr')), (
+      'Règle modifiée : Temps total d\'utilisation',
+      '3 h par jour',
+    ));
     // Without the key, the phone signs nothing in the family's name.
     final events = await phone.recordChange(more, onPhone);
     expect(events, isEmpty);

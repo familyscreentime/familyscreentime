@@ -73,7 +73,19 @@ internal object Enforcer {
         eyeBreak = EyeBreakOverlay(app) { choice ->
             send("eyeBreak", Bundle().apply { putString("action", choice) })
         }
-        browserWatch = BrowserWatch(app) { sample -> send("browserActivity", sample) }
+        browserWatch = BrowserWatch(
+            app,
+            send = { sample -> send("browserActivity", sample) },
+            media = { pkg, playing ->
+                send(
+                    "browserMedia",
+                    Bundle().apply {
+                        putString("package", pkg)
+                        putBoolean("playing", playing)
+                    },
+                )
+            },
+        )
         volume = VolumeGuard(app)
         Shared.createChannels(app)
         val filter = IntentFilter().apply {
@@ -289,6 +301,13 @@ internal object Enforcer {
             "eyeNotice" -> eyeNotice(data)
             "eyeVeil" -> eyeVeil(data)
             "eyeHide" -> eyeBreak.hide()
+            // A video in a browser with no time left: paused, and said why.
+            "pauseMedia" -> {
+                if (!ProtectionGuard.allowed()) {
+                    pauseMedia()
+                    warn(data.getString("title") ?: "", data.getString("text") ?: "")
+                }
+            }
             "familyChanged" -> PlatformBridge.uiChannel?.invokeMethod("familyChanged", null)
             "restart" -> restartForAccessibility()
         }

@@ -85,7 +85,8 @@ if (!d.allowed) {
 | Days outside a profile | A day when the rule is not in force produces neither savings nor overruns. |
 | Mandatory break | Use on all covered devices is merged; a gap at least as long as the break resets the counter. |
 | Eye break | Not a rule: `EyeBreakPolicy` per child, and `screenStretchStart` gives the start of the stretch of screen use on one device (all apps, those beside the one in front counted once). A gap at least as long as the break ends the stretch. `lengthAfter` makes a later break longer, in proportion, up to three times its length. |
-| Rule history | Past days are recomputed with the current rules. |
+| Browser videos | `browserVideoApp` stands for the videos played in any browser. A segment whose `activity` is `video` counts for the rules covering it (in a group, or alone), even when the browser itself is never limited, and for the browser's own rules as before. Total screen time counts the browser once, as before. |
+| Rule history | Each rule keeps its earlier daily limits (`Rule.history`, `RuleVersion`: the limit, or none, until a change). A past day is judged by the limit in force at its end; its overrun is measured against the most generous limit of the day, and a day with no limit for part of it overruns nothing. So a stricter limit never turns the time used before it into overruns, nor a new rule. Today always follows the current limit, whatever the clock says. Other settings (hours, weekly quota, grace) are taken as they are now. |
 
 ## Tests
 

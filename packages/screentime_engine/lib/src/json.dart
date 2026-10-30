@@ -162,7 +162,30 @@ Json ruleToJson(Rule r) => {
     },
   if (r.setByChild) 'setByChild': true,
   if (!r.enabled) 'enabled': false,
+  if (r.history.isNotEmpty)
+    'history': [for (final v in r.history) ruleVersionToJson(v)],
 };
+
+Json ruleVersionToJson(RuleVersion v) => {
+  'until': instantToJson(v.until),
+  if (!v.active) 'active': false,
+  if (v.dailyQuota != null) 'dailyQuota': durationToJson(v.dailyQuota!),
+  if (v.dailyQuotaByWeekday.isNotEmpty)
+    'dailyQuotaByWeekday': {
+      for (final e in v.dailyQuotaByWeekday.entries)
+        '${e.key}': durationToJson(e.value),
+    },
+};
+
+RuleVersion ruleVersionFromJson(Json j) => RuleVersion(
+  until: instantFromJson(j['until']),
+  active: j['active'] as bool? ?? true,
+  dailyQuota: optionalDuration(j['dailyQuota']),
+  dailyQuotaByWeekday: {
+    for (final e in (j['dailyQuotaByWeekday'] as Json? ?? const {}).entries)
+      int.parse(e.key): durationFromJson(e.value),
+  },
+);
 
 Rule ruleFromJson(Json j) {
   final rolling = j['rollingQuota'] as Json?;
@@ -227,6 +250,10 @@ Rule ruleFromJson(Json j) {
           ),
     setByChild: j['setByChild'] as bool? ?? false,
     enabled: j['enabled'] as bool? ?? true,
+    history: [
+      for (final v in j['history'] as List<Object?>? ?? const [])
+        ruleVersionFromJson(v as Json),
+    ],
   );
 }
 

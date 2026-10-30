@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:family_screen_time/src/controller.dart';
+import 'package:family_screen_time/src/platform.dart' show AppVersion;
 import 'package:family_screen_time/src/store.dart';
 import 'package:family_screen_time/src/sync/family_sync.dart';
+import 'package:family_screen_time/src/sync/receipts.dart';
 import 'package:family_screen_time/src/ui/devices_screen.dart';
 import 'package:family_screen_time/src/ui/parent_device_home.dart';
 import 'package:flutter/material.dart';
@@ -62,6 +64,7 @@ void main() {
       await log.savePeers([
         PeerState('phone', DateTime.now(), connected: true),
       ]);
+      await recordVersion(log, const AppVersion('0.28.1', 55));
     });
     final c = AppController(store, settings, family);
     await tester.runAsync(c.openSync);
@@ -80,7 +83,10 @@ void main() {
       await tester.pump();
     }
     expect(find.text('Tablette'), findsOneWidget);
-    expect(find.text('Appareil de Emma · Cet appareil'), findsOneWidget);
+    expect(
+      find.text('Appareil de Emma · Cet appareil · version 0.28.1'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Appareil de Emma · Connecté'), findsOneWidget);
     expect(find.text('Relier un appareil'), findsOneWidget);
     expect(

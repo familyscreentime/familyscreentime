@@ -29,6 +29,12 @@ internal class BrowserWatch(
     private val context: Context,
     /** Sends a sample to the monitor. */
     private val send: (Bundle) -> Unit,
+    /**
+     * Says at once that a browser in front began or stopped playing
+     * something ([playing]), so a video with no time left is paused
+     * without waiting for the sample.
+     */
+    private val media: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -85,7 +91,12 @@ internal class BrowserWatch(
     fun foreground(pkg: String?) {
         val browser = pkg?.takeIf { it in browsers() }
         if (browser == current) return
-        if (current != null) flush()
+        current?.let { old ->
+            flush()
+            // Left while playing: no longer the browser's.
+            if (playingHere) media(old, false)
+            playingHere = false
+        }
         main.removeCallbacks(tick)
         current = browser
         if (browser == null) return
@@ -125,9 +136,12 @@ internal class BrowserWatch(
             if (playingHere) mediaMs += elapsed else otherMediaMs += elapsed
         }
         val active = audio.isMusicActive
+        val before = playingHere
         if (active && !playing) playingHere = true
         if (!active) playingHere = false
         playing = active
+        val pkg = current
+        if (pkg != null && playingHere != before) media(pkg, playingHere)
     }
 
     private fun flush() {

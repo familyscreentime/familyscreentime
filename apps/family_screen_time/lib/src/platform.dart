@@ -18,6 +18,15 @@ class InstalledApp {
   const InstalledApp(this.package, this.label);
 }
 
+/// An app version: its name (`0.28.1`) and its number (55), which grows
+/// with every version.
+class AppVersion {
+  final String name;
+  final int build;
+
+  const AppVersion(this.name, this.build);
+}
+
 /// Packages with a special role on this device.
 class SystemPackages {
   final String self;
@@ -120,6 +129,20 @@ class PlatformApi {
           end: DateTime.fromMillisecondsSinceEpoch(m['end'] as int),
         ),
     ];
+  }
+
+  /// This app's version: its name (`0.28.1`) and its number (55); `null`
+  /// when the platform cannot say.
+  Future<AppVersion?> appVersion() async {
+    try {
+      final m = await _channel.invokeMapMethod<String, Object?>('appVersion');
+      final version = m?['version'];
+      final build = m?['build'];
+      if (version is! String || build is! num) return null;
+      return AppVersion(version, build.toInt());
+    } on Object {
+      return null;
+    }
   }
 
   Future<SystemPackages> systemPackages() async {

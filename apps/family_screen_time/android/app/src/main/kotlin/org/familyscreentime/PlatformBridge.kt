@@ -72,6 +72,7 @@ class PlatformBridge(
                 }
             }
             "systemPackages" -> result.success(systemPackages())
+            "appVersion" -> result.success(appVersion())
             "usageHistory" -> {
                 val from = call.argument<Number>("from")?.toLong() ?: 0L
                 val to = call.argument<Number>("to")?.toLong() ?: System.currentTimeMillis()
@@ -374,6 +375,18 @@ class PlatformBridge(
         pausedAt?.let { close(it) }
         if (closeOpen) close(to)
         return out
+    }
+
+    /** This app's version: its name (0.28.1) and its number (55). */
+    private fun appVersion(): Map<String, Any?> {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        val build = if (Build.VERSION.SDK_INT >= 28) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
+        return mapOf("version" to info.versionName, "build" to build)
     }
 
     /** Packages with a special role: dialer, SMS, home screens, this app. */

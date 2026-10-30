@@ -5,6 +5,7 @@ library;
 
 import 'package:screentime_sync/screentime_sync.dart';
 
+import '../platform.dart' show AppVersion;
 import 'family_entities.dart';
 import 'family_sync.dart';
 
@@ -17,6 +18,45 @@ const seenPrefix = 'seen/';
 /// (which would answer one another without end).
 bool _counts(SyncEvent e) =>
     e.type != EventType.usage && !e.key.startsWith(seenPrefix);
+
+/// Field of a device's receipts holding its app version: `{version,
+/// build}`. Receipts are the one entry every device, whatever its version,
+/// lets a device write about itself; older versions read only the
+/// origins' fields there, and leave this one alone.
+const versionField = 'app';
+
+/// Says, in the log, which version of the app this device runs, when it
+/// changed. Whether it was said.
+Future<bool> recordVersion(FamilySync log, AppVersion version) async {
+  final node = log.node;
+  final key = seenKey(log.deviceId);
+  final said = node.replica[key];
+  final held = said?[versionField];
+  if (held is Map &&
+      held['version'] == version.name &&
+      held['build'] == version.build) {
+    return false;
+  }
+  final value = {'version': version.name, 'build': version.build};
+  await node.emit([
+    said == null
+        ? EventDraft.put(key, {versionField: value})
+        : EventDraft.patch(key, {versionField: value}),
+  ]);
+  return true;
+}
+
+/// The app version device [id] last said it runs; `null` when it has not
+/// (before 0.28.1), or when this device does not get its receipts (a
+/// child's device gets only its own).
+AppVersion? versionOf(FamilySync log, String id) {
+  final v = log.node.replica[seenKey(id)]?[versionField];
+  if (v is! Map) return null;
+  final name = v['version'];
+  final build = v['build'];
+  if (name is! String || build is! num) return null;
+  return AppVersion(name, build.toInt());
+}
 
 /// Says, in the log, what this device holds now (after events came in).
 /// Only what changed since last said; nothing when nothing did.

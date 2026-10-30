@@ -161,6 +161,15 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
                 main.post { channel?.invokeMethod("browserActivity", sample) }
             }
             // The child's answer to an eye break's notice, or "busy".
+            "browserMedia" -> main.post {
+                channel?.invokeMethod(
+                    "browserMedia",
+                    mapOf(
+                        "package" to data.getString("package"),
+                        "playing" to data.getBoolean("playing"),
+                    ),
+                )
+            }
             "eyeBreak" -> main.post {
                 channel?.invokeMethod("eyeBreak", mapOf("action" to data.getString("action")))
             }
@@ -419,7 +428,8 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
                 result.success(null)
             }
             "block", "unblock", "warn", "overlay", "overlayHide", "lockState",
-            "volumeCap", "familyChanged", "eyeNotice", "eyeVeil", "eyeHide" -> {
+            "volumeCap", "familyChanged", "eyeNotice", "eyeVeil", "eyeHide",
+            "pauseMedia" -> {
                 forward(call.method, call.arguments as? Map<*, *>)
                 result.success(null)
             }

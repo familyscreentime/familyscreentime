@@ -66,6 +66,14 @@ class Monitor {
 
   /// A browser's latest samples, to class the next one.
   final List<BrowserSample> _browserSamples = [];
+
+  /// The browser in front while it plays something (a video), as Android
+  /// says at once.
+  String? _videoIn;
+
+  /// Pauses asked for the video now playing with no time left.
+  int _videoPauses = 0;
+  DateTime? _videoPausedAt;
   bool _screenOn = true;
 
   Timer? _next;
@@ -205,9 +213,16 @@ class Monitor {
       final relay = _relay ??= RelayRunner(log)..screenOn = _screenOn;
       await relay.update();
       await _publishApps(log);
+      await _recordVersion(log);
     } on Object catch (e) {
       debugPrint('Family log: $e');
     }
+  }
+
+  /// Says which version of the app runs here, once per version.
+  Future<void> _recordVersion(FamilySync log) async {
+    final version = await const PlatformApi().appVersion();
+    if (version != null) await recordVersion(log, version);
   }
 
   /// Shares the names and icons of the apps installed here with the
@@ -504,6 +519,19 @@ class Monitor {
         }
         await _load();
         await _evaluate();
+      case 'browserMedia':
+        final args = call.arguments as Map<Object?, Object?>;
+        final package = args['package'] as String?;
+        final playing = args['playing'] as bool? ?? false;
+        if (playing && package != null && package == _recordAs) {
+          _videoIn = package;
+          _videoPauses = 0;
+          // Counted as video from now, without waiting for the sample.
+          await _setActivity(package, UsageActivity.video, DateTime.now());
+        } else if (package == _videoIn) {
+          _videoIn = null;
+        }
+        await _evaluate();
       case 'browserActivity':
         await _onBrowserSample(
           BrowserSample.fromPlatform(call.arguments as Map<Object?, Object?>),
@@ -523,6 +551,7 @@ class Monitor {
     _foreground = app;
     _recordAs = app;
     _activity = null;
+    if (app != _videoIn) _videoIn = null;
     _openStart = app == null ? null : _recordingFrom(now);
     if (app != null) {
       await store.saveOpen(OpenSegment(app, _openStart!, now));
@@ -588,24 +617,26 @@ class Monitor {
       )
       ..add(sample);
     if (_recordAs != sample.package) return;
-    final kind = classify(sample, _browserSamples);
-    if (kind == _activity) return;
+    // Playing now: a video, whatever the sample says of its first seconds.
+    final kind = _videoIn == sample.package
+        ? UsageActivity.video
+        : classify(sample, _browserSamples);
+    await _setActivity(sample.package, kind, sample.start);
+  }
+
+  /// The browser [package] in front is used for [kind] from [from]: the
+  /// use before goes with what it was.
+  Future<void> _setActivity(String package, String kind, DateTime from) async {
+    if (_recordAs != package || kind == _activity) return;
     final start = _openStart;
-    // The use so far goes with what it was; from the sample's start, with
-    // what it is now.
-    if (start != null && sample.start.isAfter(start)) {
-      await _record(sample.package, start, sample.start, activity: _activity);
-      _openStart = sample.start;
+    if (start != null && from.isAfter(start)) {
+      await _record(package, start, from, activity: _activity);
+      _openStart = from;
     }
     _activity = kind;
     if (_openStart != null) {
       await store.saveOpen(
-        OpenSegment(
-          sample.package,
-          _openStart!,
-          DateTime.now(),
-          activity: kind,
-        ),
+        OpenSegment(package, _openStart!, DateTime.now(), activity: kind),
       );
     }
   }
@@ -782,17 +813,36 @@ class Monitor {
       }
     }
 
-    final remaining = d.remaining;
-    final label = _label(d.ruleId);
-    if (d.reason == Reason.alwaysAllowed) {
+    // A video playing in the browser: the limit of the browser's videos
+    // too. Out of time, the video is paused; the browser stays open.
+    var shown = d;
+    if (_videoIn == app) {
+      final dv = engine.evaluate(
+        state,
+        childId: settings.childId!,
+        deviceId: settings.deviceId,
+        appId: browserVideoApp,
+        now: now,
+      );
+      if (!dv.allowed) {
+        await _stopVideo(app, dv, now);
+        return;
+      }
+      final left = dv.remaining;
+      final mine = d.remaining;
+      if (left != null && (mine == null || left < mine)) shown = dv;
+    }
+    final remaining = shown.remaining;
+    final label = _label(shown.ruleId);
+    if (shown.reason == Reason.alwaysAllowed && shown == d) {
       // Home screen, settings, phone, this app…
       await _countdown(_s.t('monitorIdle'));
-    } else if (d.reason == Reason.dayUnlocked) {
+    } else if (shown.reason == Reason.dayUnlocked) {
       await _countdown(_s.t('monitorDayUnlocked'));
     } else if (remaining == null) {
       await _countdown(_s.t('monitorUnlimited'));
     } else {
-      final key = switch (d.limiter) {
+      final key = switch (shown.limiter) {
         Limiter.schedule => 'monitorSchedule',
         Limiter.breakDue => 'monitorBreak',
         Limiter.grace => 'monitorGrace',
@@ -800,13 +850,42 @@ class Monitor {
         _ => 'monitorQuota',
       };
       await _countdown(_s.t(key, {'label': label}), endsAt: now.add(remaining));
-      _overlayEnd =
-          _shownEnd(engine, state, settings, app, now) ?? now.add(remaining);
-      await _maybeWarn(d, label, remaining, now);
+      _overlayEnd = identical(shown, d)
+          ? _shownEnd(engine, state, settings, app, now) ?? now.add(remaining)
+          : now.add(remaining);
+      await _maybeWarn(shown, label, remaining, now);
     }
     await _eyeStep(d, usage, settings, now);
-    _schedule(_nextDelay(remaining, _thresholds(d)));
+    _schedule(_nextDelay(remaining, _thresholds(shown)));
   }
+
+  /// A video plays in [app] with no time left for the browser's videos
+  /// ([dv]): paused, and the child told. Should the site ignore the pause,
+  /// the browser is left, after a few tries.
+  Future<void> _stopVideo(String app, Decision dv, DateTime now) async {
+    final last = _videoPausedAt;
+    final again = last == null || now.difference(last) >= _videoRetry;
+    if (again) {
+      _videoPausedAt = now;
+      _videoPauses++;
+      if (_videoPauses > _videoTries) {
+        await _block(app, dv, now);
+      } else {
+        await _channel.invokeMethod('pauseMedia', {
+          'title': _s.t('videoPausedTitle', {'label': _label(dv.ruleId)}),
+          'text': _s.t('videoPausedText'),
+        });
+      }
+    }
+    await _countdown(_s.t('videoPausedTitle', {'label': _label(dv.ruleId)}));
+    _schedule(_videoRetry);
+  }
+
+  /// Time given to a pause before trying again.
+  static const _videoRetry = Duration(seconds: 3);
+
+  /// Pauses tried before the browser is left.
+  static const _videoTries = 3;
 
   EyeBreakPolicy get _eyePolicy {
     for (final c in _family.children) {

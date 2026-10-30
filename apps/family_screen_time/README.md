@@ -125,6 +125,13 @@ behind the parent code.
   Their time is classed as video, quick scrolling or reading and other,
   shown in the app's usage detail. Measured only for now: nothing is
   limited by it.
+- Videos in the browser, as an app of their own ("Videos in the
+  browser", listed first among the apps): the parent puts them in a group
+  (with YouTube, say) or limits them alone. The time a browser plays a
+  video counts for them, from the moment it starts. Out of time, the video
+  is paused and the child told; the browser stays open for the rest. A
+  site that ignores the pause has the browser left after three tries.
+  Not seen: a video playing without sound.
 - On a child's device, a notification says which of the child's rules a
   parent added, changed or removed on another device (one notification,
   replaced by the next; the child's own limits are left out).
@@ -134,6 +141,10 @@ behind the parent code.
   rings or goes on.
 - Nothing is counted while the screen is off or locked, whatever windows
   Android reports then (an alarm getting ready, say).
+- Each device says which version of the app it runs, in its receipts
+  (the one entry every version lets a device write about itself); the
+  linked devices list shows it, and flags a device behind the newest. A
+  child's device gets only its own receipts, so shows only its own.
 - A block can carry a short message for the child ("Dinner's ready!"),
   shown on the block screen; the messages written before are offered again.
 - Family settings (special periods, devices used at the same time, how long

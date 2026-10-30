@@ -308,10 +308,13 @@ List<String> appBadges(AppController c, AppUsage app) {
   ];
 }
 
-Widget appIcon(AppInfo? info, {double size = 40}) {
+Widget appIcon(AppInfo? info, {double size = 40, String? package}) {
   final icon = info?.icon;
   if (icon != null) {
     return Image.memory(icon, width: size, height: size, gaplessPlayback: true);
+  }
+  if (package == browserVideoApp) {
+    return Icon(Icons.ondemand_video, size: size);
   }
   return Icon(Icons.android, size: size);
 }

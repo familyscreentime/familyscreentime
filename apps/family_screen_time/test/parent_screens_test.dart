@@ -147,7 +147,14 @@ void main() {
       ))
         (tile.title! as Text).data,
     ];
-    expect(titles, ['Minecraft', 'Roblox', 'Aardvark', 'Zoo']);
+    // Then the browsers' videos, ahead of the other apps.
+    expect(titles, [
+      'Minecraft',
+      'Roblox',
+      'Vidéos dans le navigateur',
+      'Aardvark',
+      'Zoo',
+    ]);
 
     // Ticking does not move anything.
     await tester.tap(find.text('Zoo'));

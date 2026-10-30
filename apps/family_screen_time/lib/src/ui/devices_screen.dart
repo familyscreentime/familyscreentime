@@ -14,6 +14,7 @@ import '../store.dart';
 import '../strings.dart';
 import '../sync/bonsoir_directory.dart';
 import '../sync/family_sync.dart';
+import '../sync/receipts.dart' show versionOf;
 import 'changes_screen.dart';
 import 'join_screen.dart';
 import 'widgets.dart';
@@ -434,6 +435,11 @@ class _DevicesScreenState extends State<DevicesScreen> {
     );
   }
 
+  /// The newest version the family's devices run, by number.
+  int _newest(FamilySync log) =>
+      [for (final id in log.devices.keys) versionOf(log, id)?.build ?? 0]
+          .fold(0, (a, b) => a > b ? a : b);
+
   Widget _deviceTile(
     BuildContext context,
     S s,
@@ -472,6 +478,11 @@ class _DevicesScreenState extends State<DevicesScreen> {
             else if (d['role'] == 'parent')
               s.t('deviceParent'),
             status,
+            if (versionOf(log, id) case final v?)
+              s.t(
+                v.build < _newest(log) ? 'deviceVersionOld' : 'deviceVersion',
+                {'version': v.name},
+              ),
             if ((_pending[id] ?? 0) > 0)
               s.t('devicePending', {'n': '${_pending[id]}'}),
           ].join(' · '),

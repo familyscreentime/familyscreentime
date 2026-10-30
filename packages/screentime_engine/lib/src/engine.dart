@@ -606,11 +606,19 @@ class RuleEngine {
 
   /// True when the segment counts towards the rule.
   ///
-  /// Time in "always allowed" apps and never-blocked system components does
+  /// A browser's video time also counts for the rules covering
+  /// [browserVideoApp]. Time in "always allowed" apps and never-blocked system components does
   /// not count. Injected time has no device: it counts towards rules that
   /// target all devices and whose app target is "All", the same target, or a
   /// group containing the injected app.
   bool segmentCounts(Rule r, UsageSegment s) {
+    // A video in a browser counts for the rules naming the browser's
+    // videos, even when the browser itself is never limited.
+    if (s.activity == UsageActivity.video &&
+        r.appTarget.kind != TargetKind.all &&
+        r.appTarget.covers(browserVideoApp, config.appGroups)) {
+      return r.deviceTarget.covers(s.deviceId!, config.deviceGroups);
+    }
     final app = s.appId;
     if (app != null &&
         (config.alwaysAllowed.contains(app) ||
@@ -757,6 +765,13 @@ class RuleEngine {
   /// Day-by-day account of the rule's daily limit, from the earliest
   /// relevant day up to today (last element, stopped at [now]).
   ///
+  /// Each past day is judged by the daily limit in force that day
+  /// ([Rule.history]): the limit at the end of the day sets the time
+  /// allowed (today: the current limit, always); a day when the limit changed only overruns the most generous
+  /// of its limits, and a day with no limit for part of it overruns
+  /// nothing. A stricter limit is thus never applied to the time used
+  /// before it.
+  ///
   /// Days are simulated in order because carry-over and savings depend on
   /// it: a day's carry-over comes from the previous days' overruns, and
   /// savings build up and are spent over time. The oldest savings are
@@ -813,7 +828,12 @@ class RuleEngine {
       final end = isToday ? now : addDays(day, 1);
       pots.removeWhere((p) => p.index < i - keep);
 
-      final quota = r.dailyQuotaOn(day);
+      // Today: the rule as it is now, whatever the clock says (a clock set
+      // back to before a change does not bring the former limit back).
+      final quota = isToday
+          ? r.dailyQuotaOn(day)
+          : r.dailyQuotaAt(end.subtract(_instant));
+      final overrunQuota = _overrunQuota(r, day, end);
       if (quota == null || !_ruleActiveOn(r, day)) {
         overruns.add(Duration.zero);
         ledger.add(DayLedger.inactive(day));
@@ -871,8 +891,10 @@ class RuleEngine {
       }
 
       // Overrun is measured against the nominal quota so that carry-overs
-      // do not snowball.
-      var over = used - (quota + bonus) - drawn;
+      // do not snowball, and against the most generous limit of the day.
+      var over = overrunQuota == null
+          ? Duration.zero
+          : used - (overrunQuota + bonus) - drawn;
       if (unlocked || over < Duration.zero) over = Duration.zero;
       overruns.add(over);
 
@@ -917,6 +939,20 @@ class RuleEngine {
   bool _ruleActiveOn(Rule r, DateTime day) =>
       _profileMatches(r, activeProfileId(config.profiles, day));
 
+  static const _instant = Duration(microseconds: 1);
+
+  /// The limit a day's overrun is measured against: the most generous of
+  /// those in force from [day] to [end]; `null` when there was no limit
+  /// for part of it.
+  Duration? _overrunQuota(Rule r, DateTime day, DateTime end) {
+    Duration? most;
+    for (final q in r.dailyQuotasDuring(day, end)) {
+      if (q == null) return null;
+      if (most == null || q > most) most = q;
+    }
+    return most;
+  }
+
   /// A day's overrun computed on its own (without savings), for days before
   /// the start of the simulation.
   Duration _standaloneOverrun(
@@ -925,10 +961,10 @@ class RuleEngine {
     String childId,
     DateTime day,
   ) {
-    final quota = r.dailyQuotaOn(day);
+    final end = addDays(day, 1);
+    final quota = _overrunQuota(r, day, end);
     if (quota == null || !_ruleActiveOn(r, day)) return Duration.zero;
     if (isDayUnlocked(state, childId, day)) return Duration.zero;
-    final end = addDays(day, 1);
     final used = consumption(state, r, childId: childId, from: day, to: end);
     final b = bonuses(
       state,

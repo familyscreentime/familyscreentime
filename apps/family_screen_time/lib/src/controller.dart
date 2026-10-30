@@ -129,8 +129,10 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> updateFamily(FamilyData next) async {
-    next = ownGroups(next);
     final before = family;
+    // Each rule keeps the daily limit it had before a change, so past days
+    // are judged by the limit in force then.
+    next = withRuleVersions(before, ownGroups(next), DateTime.now());
     if (next.usageKeptDays != before.usageKeptDays) {
       unawaited(_prune(store, next));
     }
@@ -147,11 +149,25 @@ class AppController extends ChangeNotifier {
   Future<FamilySync?> get sync => _sync ?? Future.value(null);
 
   /// Opens the family log (at start, and once the family exists).
-  Future<FamilySync?> openSync() =>
-      _sync = FamilySync.open(store, background: false).catchError((Object e) {
-        debugPrint('Family log not opened: $e');
-        return null;
-      });
+  Future<FamilySync?> openSync() {
+    final opening = _sync = FamilySync.open(store, background: false)
+        .catchError((Object e) {
+          debugPrint('Family log not opened: $e');
+          return null;
+        });
+    // Which version runs here, for the list of linked devices (a parent's
+    // device has no monitor to say it).
+    unawaited(
+      opening
+          .then((log) async {
+            if (log == null) return;
+            final version = await platform.appVersion();
+            if (version != null) await recordVersion(log, version);
+          })
+          .catchError((Object e) => debugPrint('Version not recorded: $e')),
+    );
+    return opening;
+  }
 
   /// Records the change in the family log, signed by the parent key in
   /// parent mode. A failure never stops the change made here.
@@ -1218,7 +1234,15 @@ class AppController extends ChangeNotifier {
 
   /// The apps of this device, and those installed only on the family's
   /// other devices (to limit them from here).
-  Future<List<InstalledApp>> familyApps() async {
+  /// The apps the parent can put in groups or limit: the child's, and
+  /// the browsers' videos first.
+  Future<List<InstalledApp>> familyApps() async => [
+    InstalledApp(browserVideoApp, s.t('browserVideos')),
+    for (final a in await _childApps())
+      if (a.package != browserVideoApp) a,
+  ];
+
+  Future<List<InstalledApp>> _childApps() async {
     // A parent's own apps are not the child's: on a parent's device, only
     // those the child's devices shared.
     final parent = settings.parentDevice;
@@ -1447,7 +1471,9 @@ class AppController extends ChangeNotifier {
 
   /// Name shown for an app: the parent's name for it, else Android's.
   String appName(String package, {String? androidLabel}) =>
-      family.appNames[package] ?? androidLabel ?? package;
+      family.appNames[package] ??
+      androidLabel ??
+      (package == browserVideoApp ? s.t('browserVideos') : package);
 
   Future<void> renameApp(String package, String? name) async {
     final names = {...family.appNames};

@@ -867,6 +867,96 @@ void main() {
     expect((block.arguments as Map)['message'], startsWith('À table !\n'));
   });
 
+  group('videos in the browser', () {
+    /// Videos (YouTube and the browsers' videos): 30 minutes a day, of
+    /// which [watched] already watched in Firefox.
+    Future<void> limit(int watched) async {
+      final family = await store.loadFamily();
+      await store.saveFamily(
+        family.copyWith(
+          config: family.config.copyWith(
+            appGroups: {
+              ...family.config.appGroups,
+              'video': {'youtube', browserVideoApp},
+            },
+          ),
+          groupNames: {...family.groupNames, 'video': 'Vidéos'},
+          state: family.state.copyWith(
+            rules: [
+              ...family.state.rules,
+              const Rule(
+                id: 'v',
+                childId: 'emma',
+                appTarget: AppTarget.group('video'),
+                dailyQuota: Duration(minutes: 30),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (watched > 0) {
+        final now = DateTime.now();
+        await store.appendUsage(
+          UsageSegment.device(
+            childId: 'emma',
+            deviceId: 'tablet',
+            appId: 'org.mozilla.firefox',
+            start: now.subtract(Duration(minutes: watched + 1)),
+            end: now.subtract(const Duration(minutes: 1)),
+            activity: UsageActivity.video,
+          ),
+        );
+      }
+      await send('reload', null);
+    }
+
+    Future<void> play() => send('browserMedia', {
+      'package': 'org.mozilla.firefox',
+      'playing': true,
+    });
+
+    test('out of time: the video is paused, the browser stays', () async {
+      if (DateTime.now().hour == 0 && DateTime.now().minute < 35) {
+        return markTestSkipped('too close to midnight');
+      }
+      await limit(30);
+      await send('foreground', {'package': 'org.mozilla.firefox'});
+      calls.clear();
+      await play();
+      final pause = calls.where((c) => c.method == 'pauseMedia').toList();
+      expect(pause, hasLength(1));
+      expect(
+        (pause.single.arguments as Map)['title'],
+        'Vidéos : plus de temps',
+      );
+      expect(calls.where((c) => c.method == 'block'), isEmpty);
+      // Paused: the browser goes on as before.
+      await send('browserMedia', {
+        'package': 'org.mozilla.firefox',
+        'playing': false,
+      });
+      expect(calls.where((c) => c.method == 'pauseMedia'), hasLength(1));
+    });
+
+    test('time left: counted as video, the countdown says so', () async {
+      await limit(0);
+      await send('foreground', {'package': 'org.mozilla.firefox'});
+      await play();
+      expect(calls.where((c) => c.method == 'pauseMedia'), isEmpty);
+      final countdown = calls.lastWhere((c) => c.method == 'countdown');
+      expect((countdown.arguments as Map)['title'], contains('Vidéos'));
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      await send('screen', {'on': false});
+      final usage = await store.loadUsage(since: dayOf(DateTime.now()));
+      expect(
+        usage
+            .where((u) => u.appId == 'org.mozilla.firefox')
+            .map((u) => u.activity),
+        contains(UsageActivity.video),
+      );
+    });
+  });
+
   test('a browser\'s use is recorded with what it was used for', () async {
     await send('foreground', {'package': 'com.android.chrome'});
     final now = DateTime.now();

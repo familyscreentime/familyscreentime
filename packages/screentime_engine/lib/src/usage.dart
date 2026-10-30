@@ -62,6 +62,12 @@ class UsageSegment {
       Interval(start, end).clip(from, to);
 }
 
+/// The videos played in any browser, as an app of their own: the parent
+/// puts it in a group (with the video apps, say) or limits it alone. The
+/// time a browser plays a video ([UsageActivity.video]) counts for it, as
+/// well as for the browser. Not a package name: none starts with `@`.
+const browserVideoApp = '@browser-video';
+
 /// What a browser was used for, as [UsageSegment.activity].
 abstract final class UsageActivity {
   /// A video or other media playing.

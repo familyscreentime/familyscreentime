@@ -368,13 +368,22 @@ class RuleEngine {
       return const Decision(allowed: true, reason: Reason.noRule);
     }
 
-    // 6. Schedules, unless the parent opened a rule's hours early.
-    final outside = rules.where(
-      (r) =>
-          r.schedule != null &&
-          !r.schedule!.allows(now) &&
-          hoursUnlockEnd(state, r, now) == null,
-    );
+    // 6. Schedules, unless the parent opened a rule's hours early, or gave
+    // extra time outside them: the hours are then open while it lasts.
+    final opened = <Rule, Duration>{};
+    final outside = rules.where((r) {
+      if (r.schedule == null ||
+          r.schedule!.allows(now) ||
+          hoursUnlockEnd(state, r, now) != null) {
+        return false;
+      }
+      final left = bonusOutsideHours(state, r, childId: childId, now: now);
+      if (left != null && left > Duration.zero) {
+        opened[r] = left;
+        return false;
+      }
+      return true;
+    }).toList();
     if (outside.isNotEmpty) {
       DateTime? until;
       for (final r in outside) {
@@ -488,6 +497,7 @@ class RuleEngine {
               : (open.$1, listening.id),
           rules: rules,
           breaks: breaks,
+          opened: opened,
           now: now,
         );
         return Decision(
@@ -504,6 +514,7 @@ class RuleEngine {
         grace: (graceLeft!, graceRule!),
         rules: rules,
         breaks: breaks,
+        opened: opened,
         now: now,
       );
       return Decision(
@@ -522,6 +533,7 @@ class RuleEngine {
       grace: null,
       rules: rules,
       breaks: breaks,
+      opened: opened,
       now: now,
     );
     return Decision(
@@ -638,6 +650,37 @@ class RuleEngine {
       }
     }
     return end;
+  }
+
+  /// Extra time given today for [r] while outside its hours, still left at
+  /// [now] (negative once overrun): the hours are open while it lasts.
+  /// What is used from the first of those grants counts against it.
+  /// `null` when none was given outside the hours.
+  Duration? bonusOutsideHours(
+    FamilyState state,
+    Rule r, {
+    required String childId,
+    required DateTime now,
+  }) {
+    final schedule = r.schedule;
+    if (schedule == null) return null;
+    final today = dayOf(now);
+    var amount = Duration.zero;
+    DateTime? from;
+    for (final b in state.bonuses) {
+      if (b.childId != childId || !b.isValidAt(now)) continue;
+      if (b.ruleId != r.id &&
+          (b.appTarget == null || b.appTarget != r.appTarget)) {
+        continue;
+      }
+      if (b.grantedAt.isAfter(now) || b.grantedAt.isBefore(today)) continue;
+      if (schedule.allows(b.grantedAt)) continue;
+      amount += b.amount;
+      if (from == null || b.grantedAt.isBefore(from)) from = b.grantedAt;
+    }
+    if (from == null) return null;
+    return amount -
+        consumption(state, r, childId: childId, from: from, to: now);
   }
 
   bool isDayUnlocked(FamilyState state, String childId, DateTime t) =>
@@ -1198,6 +1241,7 @@ class RuleEngine {
     required (Duration, String)? grace,
     required List<Rule> rules,
     required Map<Rule, BreakStatus> breaks,
+    Map<Rule, Duration> opened = const {},
     required DateTime now,
   }) {
     Duration? best;
@@ -1226,6 +1270,10 @@ class RuleEngine {
     }
     for (final e in breaks.entries) {
       consider(e.value.untilBreak, Limiter.breakDue, e.key.id);
+    }
+    // Outside the hours, the extra time given then.
+    for (final e in opened.entries) {
+      consider(e.value, Limiter.quota, e.key.id);
     }
     return (best, limiter, ruleId);
   }

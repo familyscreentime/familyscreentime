@@ -313,6 +313,79 @@ void main() {
     });
   });
 
+  testWidgets('outside the hours, extra time opens them while it lasts', (
+    tester,
+  ) async {
+    final evening = DateTime(2026, 10, 21, 20);
+    final hours = Rule(
+      id: 'hours',
+      childId: 'emma',
+      schedule: WeeklySchedule({
+        for (var d = DateTime.monday; d <= DateTime.sunday; d++)
+          d: [TimeRange.hm(9, 0, 18, 0)],
+      }),
+    );
+    final c = AppController(
+      LocalStore(dir),
+      const AppSettings(deviceId: 'd', language: 'fr', childId: 'emma'),
+      FamilyData(
+        children: const [Child(id: 'emma', name: 'Emma')],
+        config: const FamilyConfig(
+          appGroups: {
+            'games': {'minecraft'},
+          },
+        ),
+        state: FamilyState(rules: [games, hours]),
+        groupNames: const {'games': 'Jeux'},
+      ),
+    );
+    expect(check(c, evening).allowed, isFalse);
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: QuickActions(controller: c, clock: () => evening),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Donner du temps en plus'));
+    // The use is read from disk first.
+    for (
+      var i = 0;
+      i < 200 && find.text('Donner 15 min').evaluate().isEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    // The limit of hours, closed now, is offered and chosen.
+    expect(
+      find.text(
+        'En dehors des horaires, ce temps les ouvre jusqu\'à ce qu\'il '
+        'soit utilisé.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('30 min'));
+    await tester.pump();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Donner 30 min'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+    expect(c.family.state.bonuses.single.ruleId, 'hours');
+    final d = check(c, evening);
+    expect(d.allowed, isTrue);
+    expect(d.remaining, const Duration(minutes: 30));
+  });
+
   testWidgets('the parent gives time, lifts and blocks from one place', (
     tester,
   ) async {

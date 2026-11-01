@@ -232,30 +232,36 @@ class QuickActions extends StatelessWidget {
   }
 }
 
-/// Rules that extra time can raise for the child shown, the one closest
-/// to running out first.
+/// Rules that extra time can raise for the child shown: those outside
+/// their hours now first (extra time given then opens them while it lasts,
+/// a limit of hours only included), then the one closest to running out.
 Future<List<Rule>> _bonusRules(AppController c, DateTime now) async {
+  bool closed(Rule r) => r.schedule != null && !r.schedule!.allows(now);
   final rules = [
     // The child changes their own limits themselves.
     for (final r in c.activeChildRules)
-      if (r.hasQuota && !r.setByChild) r,
+      if (!r.setByChild && (r.hasQuota || closed(r))) r,
   ];
   if (rules.length < 2) return rules;
   final state = c.family.state.copyWith(usage: await c.recentUsage());
   final engine = RuleEngine(c.family.config);
   final left = {
     for (final r in rules)
-      r.id:
-          ruleStatus(
-            engine,
-            state,
-            r,
-            childId: c.childId!,
-            now: now,
-          ).remaining ??
-          const Duration(days: 365),
+      r.id: closed(r)
+          ? Duration.zero
+          : ruleStatus(
+                  engine,
+                  state,
+                  r,
+                  childId: c.childId!,
+                  now: now,
+                ).remaining ??
+                const Duration(days: 365),
   };
-  return rules..sort((a, b) => left[a.id]!.compareTo(left[b.id]!));
+  return rules..sort((a, b) {
+    final byHours = (closed(a) ? 0 : 1).compareTo(closed(b) ? 0 : 1);
+    return byHours != 0 ? byHours : left[a.id]!.compareTo(left[b.id]!);
+  });
 }
 
 /// Gives the child shown extra time, on the limits the parent picks.
@@ -272,9 +278,16 @@ Future<void> showBonusSheet(
         .showSnackBar(SnackBar(content: Text(s.t('bonusNoRule'))));
     return;
   }
-  // The limit closest to running out; others can be added (or it taken
-  // away): extra game time need not raise total screen time.
-  final chosen = {rules.first.id};
+  // Outside the hours, every limit closed now (all must open for the
+  // child to get in); else the limit closest to running out. Others can be
+  // added (or taken away): extra game time need not raise total screen
+  // time.
+  final now = clock();
+  final closedNow = {
+    for (final r in rules)
+      if (r.schedule != null && !r.schedule!.allows(now)) r.id,
+  };
+  final chosen = closedNow.isNotEmpty ? closedNow : {rules.first.id};
   var amount = Duration(minutes: c.presets.first);
   final ok = await showModalBottomSheet<bool>(
     context: context,
@@ -301,6 +314,14 @@ Future<void> showBonusSheet(
             s.t('bonusForHint'),
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          if (closedNow.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                s.t('bonusOutsideHours'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
           const SizedBox(height: 12),
           Text(
             s.t('bonusAmount'),

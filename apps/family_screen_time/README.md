@@ -74,6 +74,10 @@ behind the parent code.
   the end of its next range (at 9:20, open until 12:00 for hours from 10
   to 12); its time limits still apply. The opening shows in quick actions,
   with "Close", until the hours start.
+- Extra time given outside a rule's hours opens them while it lasts (a
+  rule of hours only included): 30 min at 20:00 lets the child in for 30
+  min, the day's time limit still applying. The extra-time sheet then
+  offers and preselects the rules closed at that moment.
 - Always available apps are chosen by the parent for each child, each
   either at any hour (the phone: even during blocks and on a locked device)
   or within the hours only (messages); never limited by time nor counted.

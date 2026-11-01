@@ -456,6 +456,7 @@ const _texts = <String, Map<String, String>>{
     'customDurationShort': 'Autre…',
     'hoursShort': 'h',
     'bonusForHint': 'Choisissez une ou plusieurs limites : donner du temps aux jeux n\'augmente pas forcément le temps total.',
+    'bonusOutsideHours': 'En dehors des horaires, ce temps les ouvre jusqu\'à ce qu\'il soit utilisé.',
     'awayTotalOnly': 'Temps total seulement',
     'awayTotalOnlyHint': 'Compté seulement dans le temps total d\'utilisation.',
     'awayGroupHint':
@@ -1129,6 +1130,8 @@ const _texts = <String, Map<String, String>>{
     'customDurationShort': 'Andere…',
     'hoursShort': 'u',
     'bonusForHint': 'Kies een of meer limieten: extra speeltijd hoeft de totale schermtijd niet te verhogen.',
+    'bonusOutsideHours':
+        'Buiten de uren opent deze tijd ze tot hij opgebruikt is.',
     'awayTotalOnly': 'Alleen totale schermtijd',
     'awayTotalOnlyHint': 'Alleen geteld bij de totale schermtijd.',
     'awayGroupHint': 'Geteld bij {group} en bij de totale schermtijd.',
@@ -1802,6 +1805,8 @@ const _texts = <String, Map<String, String>>{
     'customDurationShort': 'Other…',
     'hoursShort': 'h',
     'bonusForHint': 'Pick one or more limits: extra game time need not raise total screen time.',
+    'bonusOutsideHours':
+        'Outside the hours, this time opens them until it is used.',
     'awayTotalOnly': 'Total screen time only',
     'awayTotalOnlyHint': 'Counted in total screen time only.',
     'awayGroupHint': 'Counted in {group} and in total screen time.',

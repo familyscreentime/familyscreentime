@@ -40,6 +40,10 @@ class PlatformBridge(
     private val activity: Activity? = null,
 ) : MethodChannel.MethodCallHandler {
 
+    /** Biometric unlocking, from the interface only. */
+    private fun biometric(): BiometricUnlock? =
+        (activity as? androidx.fragment.app.FragmentActivity)?.let { BiometricUnlock(it) }
+
     fun attach(messenger: BinaryMessenger) {
         val channel = MethodChannel(messenger, CHANNEL)
         channel.setMethodCallHandler(this)
@@ -73,6 +77,35 @@ class PlatformBridge(
             }
             "systemPackages" -> result.success(systemPackages())
             "appVersion" -> result.success(appVersion())
+            "biometricAvailable" -> result.success(biometric()?.available() ?: false)
+            "biometricSeal", "biometricOpen" -> {
+                val unlock = biometric()
+                if (unlock == null) {
+                    result.success(mapOf("status" to BiometricUnlock.UNAVAILABLE))
+                } else {
+                    val texts = BiometricUnlock.Texts(
+                        call.argument<String>("title") ?: "",
+                        call.argument<String>("subtitle"),
+                        call.argument<String>("cancel") ?: "",
+                    )
+                    var answered = false
+                    val done = { m: Map<String, Any?> ->
+                        if (!answered) {
+                            answered = true
+                            result.success(m)
+                        }
+                    }
+                    if (call.method == "biometricSeal") {
+                        unlock.seal(call.argument<String>("code") ?: "", texts, done)
+                    } else {
+                        unlock.open(call.argument<String>("seal") ?: "", texts, done)
+                    }
+                }
+            }
+            "biometricForget" -> {
+                biometric()?.forget()
+                result.success(null)
+            }
             "usageHistory" -> {
                 val from = call.argument<Number>("from")?.toLong() ?: 0L
                 val to = call.argument<Number>("to")?.toLong() ?: System.currentTimeMillis()

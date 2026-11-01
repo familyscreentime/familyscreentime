@@ -749,6 +749,35 @@ void main() {
       },
     );
 
+    test('each child\'s own setting before the family\'s', () async {
+      Future<Map<Object?, Object?>> lockWith(bool family, bool? emma) async {
+        final f = await store.loadFamily();
+        await store.saveFamily(
+          f.copyWith(
+            settingsParentOnly: family,
+            children: [
+              for (final c in f.children)
+                c.id == 'emma'
+                    ? Child.fromJson({
+                        ...c.toJson(),
+                        'settingsParentOnly': emma,
+                      })
+                    : c,
+            ],
+          ),
+        );
+        await send('reload', null);
+        await send('foreground', {'package': 'youtube'});
+        return calls.lastWhere((c) => c.method == 'lockState').arguments
+            as Map<Object?, Object?>;
+      }
+
+      // Not set for Emma: the family's, as before 0.30.
+      expect((await lockWith(true, null))['settingsLocked'], isTrue);
+      expect((await lockWith(true, false))['settingsLocked'], isFalse);
+      expect((await lockWith(false, true))['settingsLocked'], isTrue);
+    });
+
     test(
       'the supervision\'s lock screen never counts, even recorded before',
       () async {

@@ -86,14 +86,18 @@ class QuickActions extends StatelessWidget {
               onTap: () => c.openHoursEarly(rule, end, now: clock()),
             ),
           for (final u in c.hoursOpenedEarly(now))
-            _activeLine(
-              context,
-              s.t('openEarlyActive', {
-                'label': _ruleName(u.ruleId),
-                'time': s.time(u.until),
-              }),
-              s.t('openEarlyClose'),
-              () => c.closeHoursEarly(u.id, now: clock()),
+            ListTile(
+              leading: const Icon(Icons.more_time),
+              title: Text(
+                s.t('openEarlyActive', {
+                  'label': _ruleName(u.ruleId),
+                  'time': s.time(u.until),
+                }),
+              ),
+              trailing: TextButton(
+                onPressed: () => c.closeHoursEarly(u.id, now: clock()),
+                child: Text(s.t('openEarlyClose')),
+              ),
             ),
           SwitchListTile(
             secondary: const Icon(Icons.lock_open),

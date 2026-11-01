@@ -95,4 +95,6 @@ flutter {
 dependencies {
     // FileProvider, to share exports.
     implementation("androidx.core:core:1.13.1")
+    // Fingerprint or face unlocking of parent mode, on a parent's device.
+    implementation("androidx.biometric:biometric:1.1.0")
 }

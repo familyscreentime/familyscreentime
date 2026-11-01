@@ -98,6 +98,74 @@ void main() {
     expect(p.family.state.hoursUnlocks, isEmpty);
   });
 
+  test('time today: in total and for each group with a time limit', () {
+    final family = FamilyData(
+      children: const [Child(id: 'emma', name: 'Emma')],
+      config: const FamilyConfig(
+        appGroups: {
+          'games': {'minecraft'},
+          'video': {'youtube'},
+          'art': {'paint'},
+        },
+      ),
+      groupNames: const {'games': 'Jeux', 'video': 'Vidéo', 'art': 'Dessin'},
+      state: const FamilyState(
+        rules: [
+          Rule(id: 'all', childId: 'emma', dailyQuota: Duration(hours: 1)),
+          Rule(
+            id: 'g',
+            childId: 'emma',
+            appTarget: AppTarget.group('games'),
+            dailyQuota: Duration(minutes: 20),
+          ),
+          Rule(
+            id: 'v',
+            childId: 'emma',
+            appTarget: AppTarget.group('video'),
+            dailyQuota: Duration(minutes: 30),
+          ),
+          // Turned off: not shown.
+          Rule(
+            id: 'a',
+            childId: 'emma',
+            appTarget: AppTarget.group('art'),
+            dailyQuota: Duration(minutes: 1),
+            enabled: false,
+          ),
+        ],
+      ),
+    );
+    UsageSegment use(String app, int hour, int minutes) => UsageSegment.device(
+      childId: 'emma',
+      deviceId: 'tablet',
+      appId: app,
+      start: at(hour),
+      end: at(hour).add(Duration(minutes: minutes)),
+    );
+    final t = childTimes(
+      family,
+      [use('minecraft', 9, 25), use('youtube', 10, 10), use('paint', 11, 5)],
+      'emma',
+      at(12),
+      inForce: (_) => true,
+    );
+    expect(t.total.used, const Duration(minutes: 40));
+    expect(t.total.over, isFalse);
+    expect(t.groups.keys, ['games', 'video']);
+    expect(t.groups['games']!.used, const Duration(minutes: 25));
+    expect(t.groups['games']!.over, isTrue);
+    expect(t.groups['video']!.over, isFalse);
+    // A limit not in force (another period) neither shows nor turns red.
+    final off = childTimes(
+      family,
+      [use('minecraft', 9, 25)],
+      'emma',
+      at(12),
+      inForce: (r) => r.id != 'g',
+    );
+    expect(off.groups.keys, ['video']);
+  });
+
   group('home of a parent\'s device', () {
     late Directory dir;
     late AppController c;
@@ -165,10 +233,18 @@ void main() {
         tester.getTopLeft(find.text('Emma')).dy,
         lessThan(tester.getTopLeft(find.text('Lucas')).dy),
       );
-      expect(find.byTooltip('Ses appareils sont verrouillés'), findsOneWidget);
-      expect(find.byTooltip('Ses appareils sont utilisables'), findsOneWidget);
-      expect(find.byTooltip('Donner du temps en plus'), findsOneWidget);
+      // Each child's time today, beside the name.
+      expect(find.text('0 min'), findsNWidgets(2));
+      // Extra time for everyone; the padlock says the state by the action.
+      expect(find.byTooltip('Donner du temps en plus'), findsNWidgets(2));
+      expect(find.byTooltip('Déverrouiller'), findsOneWidget);
       expect(find.byTooltip('Bloquer maintenant'), findsOneWidget);
+      // The arrows line up on the right, whatever the name's length.
+      final arrows = find.byIcon(Icons.chevron_right);
+      expect(
+        tester.getTopRight(arrows.at(0)).dx,
+        tester.getTopRight(arrows.at(1)).dx,
+      );
       // Not everyone is locked.
       expect(find.text('Tout verrouiller'), findsOneWidget);
 

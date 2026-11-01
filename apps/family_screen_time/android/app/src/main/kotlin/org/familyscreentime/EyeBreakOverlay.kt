@@ -21,14 +21,16 @@ import android.widget.TextView
  * The eye break, drawn by the app itself over every app: first a notice at
  * the top of the screen, with "now" and, while the child may still put it
  * off, "in 1 min"; then a veil over the whole screen, with a countdown and
- * an invitation to look into the distance. The veil takes the touches but
- * not the sound, and goes by itself at the end of the countdown. The
- * monitor decides when each comes; [onAnswer] tells it what the child
- * chose ("now", "later").
+ * an invitation to look into the distance. The veil takes the touches and
+ * goes by itself at the end of the countdown ([onVeilDone]); a video
+ * playing is paused by the enforcer. The monitor decides when each comes;
+ * [onAnswer] tells it what the child chose ("now", "later").
  */
 class EyeBreakOverlay(
     private val context: Context,
     private val onAnswer: (String) -> Unit,
+    /** The veil went at the end of its countdown, not cut short. */
+    private val onVeilDone: () -> Unit = {},
 ) {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -46,6 +48,7 @@ class EyeBreakOverlay(
             val left = veilEndsAt - System.currentTimeMillis()
             if (left <= 0) {
                 hideVeil()
+                onVeilDone()
                 return
             }
             countdown?.text = ((left + 999) / 1000).toString()
@@ -209,9 +212,18 @@ class EyeBreakOverlay(
         }
     }
 
-    fun hide() {
+    /**
+     * Takes the notice and the veil down. [ended]: the monitor says the
+     * break is over; a veil whose countdown is (nearly) up then counts as
+     * done. Otherwise the veil is cut short (a call, a block, the screen
+     * going off).
+     */
+    fun hide(ended: Boolean = false) {
+        val done = ended && veil != null &&
+            veilEndsAt - System.currentTimeMillis() <= END_SLACK_MS
         hideNotice()
         hideVeil()
+        if (done) onVeilDone()
     }
 
     private fun hideNotice() {
@@ -241,5 +253,8 @@ class EyeBreakOverlay(
 
     private companion object {
         const val TICK_MS = 250L
+
+        /** The monitor's clock may run a little ahead of the countdown. */
+        const val END_SLACK_MS = 1_500L
     }
 }

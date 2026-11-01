@@ -426,6 +426,16 @@ Json familyConfigToJson(FamilyConfig c) => {
   if (c.allowedInHours.isNotEmpty)
     'allowedInHours': c.allowedInHours.toList()..sort(),
   'neverBlocked': c.neverBlocked.toList()..sort(),
+  if (c.alwaysAllowedByChild.isNotEmpty)
+    'alwaysAllowedByChild': {
+      for (final e in c.alwaysAllowedByChild.entries)
+        e.key: e.value.toList()..sort(),
+    },
+  if (c.allowedInHoursByChild.isNotEmpty)
+    'allowedInHoursByChild': {
+      for (final e in c.allowedInHoursByChild.entries)
+        e.key: e.value.toList()..sort(),
+    },
   'profiles': [for (final p in c.profiles) profileToJson(p)],
   'weekStart': c.weekStart,
   'counting': c.counting.name,
@@ -446,6 +456,8 @@ FamilyConfig familyConfigFromJson(Json j) => FamilyConfig(
   alwaysAllowed: _ids(j['alwaysAllowed']),
   allowedInHours: _ids(j['allowedInHours']),
   neverBlocked: _ids(j['neverBlocked']),
+  alwaysAllowedByChild: _groups(j['alwaysAllowedByChild']),
+  allowedInHoursByChild: _groups(j['allowedInHoursByChild']),
   profiles: _list(j['profiles'], profileFromJson),
   weekStart: (j['weekStart'] as num?)?.toInt() ?? DateTime.monday,
   counting: SimultaneousCounting.values.byName(

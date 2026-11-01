@@ -190,6 +190,8 @@ class Monitor {
       final log = _log ??= await FamilySync.open(store, background: true);
       if (log == null) return;
       await log.readOthers();
+      // The other devices' system components count for no one's time.
+      _family = withNeverBlocked(_family, log.sharedSystem());
       // What concerns the other children goes (see FamilySync.tidy).
       if (await log.tidy(store) != null) {
         _family = await _familyHere();
@@ -1076,11 +1078,12 @@ class Monitor {
             now,
           )
         : null;
-    final mode = _family.outOfTime;
+    final mode = _family.outOfTimeFor(childId);
     final (title, message) = out ? _explain(probeApp, probe, now) : ('', '');
     final lock = {
       'settingsLocked':
-          _family.settingsParentOnly || (out && mode != OutOfTime.apps),
+          _family.settingsParentOnlyFor(childId) ||
+          (out && mode != OutOfTime.apps),
       'deviceLocked': out && mode == OutOfTime.device,
       'title': title,
       'message': message,
@@ -1090,8 +1093,8 @@ class Monitor {
       // Apps that stay open on a locked device: those at any hour, and
       // those within the hours while it is within the hours.
       'exempt': [
-        ..._family.config.alwaysAllowed,
-        for (final app in _family.config.allowedInHours)
+        ..._family.config.alwaysAllowedFor(childId),
+        for (final app in _family.config.allowedInHoursFor(childId))
           if (engine
               .evaluate(
                 state,
@@ -1115,7 +1118,7 @@ class Monitor {
   /// set it.
   List<Duration> _thresholds(Decision d) {
     if (d.reason == Reason.gracePeriod) {
-      final every = _family.graceReminderMinutes;
+      final every = _family.graceReminderMinutesFor(_settings?.childId);
       if (every <= 0) return const [];
       return [
         for (

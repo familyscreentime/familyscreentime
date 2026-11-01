@@ -236,6 +236,8 @@ void main() {
       expect(check(c, DateTime(2026, 10, 21, 12, 1)).allowed, isFalse);
       expect(c.openableEarly(early.add(const Duration(minutes: 5))), isEmpty);
       final u = c.hoursOpenedEarly(early).single;
+      // Once the hours have started, the opening is no longer shown.
+      expect(c.hoursOpenedEarly(DateTime(2026, 10, 21, 10, 30)), isEmpty);
       await c.closeHoursEarly(u.id, now: DateTime(2026, 10, 21, 9, 40));
       expect(check(c, DateTime(2026, 10, 21, 9, 45)).allowed, isFalse);
     });
@@ -244,15 +246,43 @@ void main() {
       final c = controller();
       await c.setAccessible('dialer', anyTime: true);
       await c.setAccessible('sms', anyTime: false);
-      expect(c.family.config.alwaysAllowed, {'dialer'});
-      expect(c.family.config.allowedInHours, {'sms'});
+      expect(c.alwaysAllowed, {'dialer'});
+      expect(c.allowedInHours, {'sms'});
       await c.setAccessible('sms', anyTime: true);
-      expect(c.family.config.alwaysAllowed, {'dialer', 'sms'});
-      expect(c.family.config.allowedInHours, isEmpty);
+      expect(c.alwaysAllowed, {'dialer', 'sms'});
+      expect(c.allowedInHours, isEmpty);
       await c.removeAccessible('dialer');
-      expect(c.family.config.alwaysAllowed, {'sms'});
+      expect(c.alwaysAllowed, {'sms'});
       final again = await LocalStore(dir).loadFamily();
-      expect(again.config.alwaysAllowed, {'sms'});
+      expect(again.config.alwaysAllowedFor('emma'), {'sms'});
+      // Emma's own: the family's lists are left as they were.
+      expect(again.config.alwaysAllowed, isEmpty);
+    });
+
+    test('each child their own always available apps', () async {
+      final dir2 = Directory.systemTemp.createTempSync('fst');
+      addTearDown(() => dir2.deleteSync(recursive: true));
+      final c = AppController(
+        LocalStore(dir2),
+        const AppSettings(deviceId: 'p', language: 'fr', parentDevice: true),
+        const FamilyData(
+          children: [
+            Child(id: 'emma', name: 'Emma'),
+            Child(id: 'leo', name: 'Léo'),
+          ],
+          config: FamilyConfig(alwaysAllowed: {'dialer', 'sms'}),
+        ),
+      );
+      c.selectChild('emma');
+      await c.removeAccessible('sms');
+      expect(c.alwaysAllowed, {'dialer'});
+      c.selectChild('leo');
+      // Léo keeps the family's lists.
+      expect(c.alwaysAllowed, {'dialer', 'sms'});
+      await c.setAccessible('whatsapp', anyTime: false);
+      expect(c.allowedInHours, {'whatsapp'});
+      c.selectChild('emma');
+      expect(c.allowedInHours, isEmpty);
     });
 
     test('old actions are dropped when new ones are added', () async {

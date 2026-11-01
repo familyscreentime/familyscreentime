@@ -1,7 +1,8 @@
 /// Home of a parent's device. Locked: the app's name and the unlock button,
-/// nothing else. Unlocked: each child, whether they can use their devices
-/// now and the actions that fit, then the linked devices and the family's
-/// settings. Nothing is limited on this device.
+/// nothing else. Unlocked: each child with their time today (total screen
+/// time, and the groups of apps with a time limit; in red with no time
+/// left), extra time and locking or unlocking in one tap, then the linked
+/// devices and the family's settings. Nothing is limited on this device.
 library;
 
 import 'dart:async';
@@ -109,6 +110,9 @@ class _ChildrenState extends State<_Children> {
   /// The children who can use none of their devices; `null` until known.
   Set<String>? _locked;
 
+  /// Each child's time today, by child; empty until known.
+  Map<String, ChildTimes> _times = const {};
+
   /// Locks change on their own (time used up, hours over).
   Timer? _refresh;
 
@@ -130,8 +134,15 @@ class _ChildrenState extends State<_Children> {
   }
 
   Future<void> _load() async {
-    final locked = await c.lockedChildren(widget.clock());
-    if (mounted) setState(() => _locked = locked);
+    final now = widget.clock();
+    final locked = await c.lockedChildren(now);
+    final times = await c.childrenTimes(now);
+    if (mounted) {
+      setState(() {
+        _locked = locked;
+        _times = times;
+      });
+    }
   }
 
   Future<void> _open(Widget page) async {
@@ -198,6 +209,11 @@ class _ChildrenState extends State<_Children> {
   Widget _childCard(Child child, bool? locked) {
     final s = c.s;
     final theme = Theme.of(context);
+    final times = _times[child.id];
+    Color? color(TimeToday t) => t.over ? theme.colorScheme.error : null;
+    final small = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -209,48 +225,78 @@ class _ChildrenState extends State<_Children> {
             children: [
               Row(
                 children: [
-                  Flexible(
-                    child: Text(
-                      child.name,
-                      style: theme.textTheme.titleMedium,
-                      overflow: TextOverflow.ellipsis,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            child.name,
+                            style: theme.textTheme.titleMedium,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (times != null) ...[
+                          const SizedBox(width: 12),
+                          // Total screen time today, red with no time left.
+                          Text(
+                            s.duration(times.total.used),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: color(times.total),
+                              fontWeight: times.total.over
+                                  ? FontWeight.bold
+                                  : null,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  if (locked != null)
-                    Tooltip(
-                      message: s.t(locked ? 'childLocked' : 'childFree'),
-                      child: Icon(
-                        locked ? Icons.lock : Icons.lock_open,
-                        size: 20,
-                        color: locked
-                            ? theme.colorScheme.error
-                            : theme.colorScheme.primary,
-                      ),
-                    ),
-                  const Spacer(),
                   const Icon(Icons.chevron_right),
                 ],
               ),
+              // The groups of apps with a time limit, in smaller type.
+              if (times != null && times.groups.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, right: 32),
+                  child: Text.rich(
+                    TextSpan(
+                      style: small,
+                      children: [
+                        for (final (i, e) in times.groups.entries.indexed) ...[
+                          if (i > 0) const TextSpan(text: ' · '),
+                          TextSpan(
+                            text:
+                                '${c.groupName(e.key)} '
+                                '${s.duration(e.value.used)}',
+                            style: e.value.over
+                                ? TextStyle(color: theme.colorScheme.error)
+                                : null,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
               const SizedBox(height: 4),
               Row(
                 children: [
-                  if (locked == true) ...[
-                    IconButton.filledTonal(
-                      tooltip: s.t('bonusAction'),
-                      icon: const Icon(Icons.more_time),
-                      onPressed: () => _giveTime(child),
-                    ),
-                    const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    tooltip: s.t('bonusAction'),
+                    icon: const Icon(Icons.more_time),
+                    onPressed: () => _giveTime(child),
+                  ),
+                  const SizedBox(width: 8),
+                  // Its state as the action that changes it.
+                  if (locked == true)
                     IconButton.filledTonal(
                       tooltip: s.t('unlockChild'),
                       icon: const Icon(Icons.lock_open),
                       onPressed: () => _unlockChild(child),
-                    ),
-                  ] else if (locked == false)
+                    )
+                  else if (locked == false)
                     IconButton.filledTonal(
                       tooltip: s.t('blockAction'),
-                      icon: const Icon(Icons.block),
+                      icon: const Icon(Icons.lock),
                       onPressed: () => _blockChild(child),
                     ),
                 ],

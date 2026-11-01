@@ -161,6 +161,13 @@ class AppController extends ChangeNotifier {
       opening
           .then((log) async {
             if (log == null) return;
+            // The other devices' system components (a child's home
+            // screen…) count for no one's time, here as on their device.
+            final shared = withNeverBlocked(family, log.sharedSystem());
+            if (!identical(shared, family)) {
+              family = shared;
+              notifyListeners();
+            }
             final version = await platform.appVersion();
             if (version != null) await recordVersion(log, version);
           })
@@ -261,6 +268,8 @@ class AppController extends ChangeNotifier {
   /// The family file changed (from another device): read it again.
   Future<void> reloadFamily() async {
     family = withKnownSystem(await store.loadFamily());
+    final log = await sync;
+    if (log != null) family = withNeverBlocked(family, log.sharedSystem());
     notifyListeners();
   }
 
@@ -276,6 +285,100 @@ class AppController extends ChangeNotifier {
     } on Object {
       return false;
     }
+  }
+
+  /// Checks a parent [code], typed or given back by the fingerprint or face
+  /// ([biometric]): this device's code, or the family's code changed on
+  /// another device. When it is right, parent mode may open (the code is
+  /// entered). A code from the biometric is the parent's own: it opens
+  /// even while typed codes are locked out, and a wrong one (changed
+  /// since) counts no failure.
+  Future<PinCheck> checkParentCode(
+    String code, {
+    bool biometric = false,
+  }) async {
+    final base = biometric ? settings.copyWith(clearLock: true) : settings;
+    var result = await checkPin(base, code);
+    // Changed on another device: the family's code opens its key.
+    if (!result.ok && result.lockedFor == null && await codeOpensFamily(code)) {
+      result = PinCheck(true, null, settings.copyWith(pinFailures: 0));
+    }
+    if (result.ok || !biometric) await updateSettings(result.settings);
+    if (result.ok) parentCodeEntered(code);
+    return result;
+  }
+
+  /// Parent mode opens with the fingerprint or face on this device.
+  bool get biometricOn =>
+      settings.parentDevice && settings.biometricSeal != null;
+
+  /// The parent code entered for this parent mode is known (needed to turn
+  /// on the fingerprint or face).
+  bool get parentCodeKnown => _enteredCode != null;
+
+  /// A parent's device with a fingerprint or face that can open parent
+  /// mode.
+  Future<bool> biometricAvailable() async =>
+      settings.parentDevice && await platform.biometricAvailable();
+
+  /// Turns on opening parent mode with the fingerprint or face, for the
+  /// right [code] (else the code entered for this parent mode): a prompt
+  /// first.
+  Future<BiometricStatus> enableBiometric([String? code]) async {
+    final c = code ?? _enteredCode;
+    if (c == null || !settings.parentDevice) return BiometricStatus.error;
+    final r = await platform.biometricSeal(
+      c,
+      BiometricTexts(title: s.t('biometricEnableTitle'), cancel: s.t('cancel')),
+    );
+    await updateSettings(
+      r.ok && r.seal != null
+          ? settings.copyWith(biometricSeal: r.seal, biometricOffered: true)
+          : settings.copyWith(biometricOffered: true),
+    );
+    return r.status;
+  }
+
+  /// Parent mode no longer opens with the fingerprint or face.
+  /// [offerAgain]: offered again the next time the code is typed (it had
+  /// to be forgotten, the parent did not choose so).
+  Future<void> disableBiometric({bool offerAgain = false}) async {
+    await platform.biometricForget();
+    await updateSettings(
+      settings.copyWith(
+        clearBiometric: true,
+        biometricOffered: offerAgain ? false : null,
+      ),
+    );
+  }
+
+  /// Opens parent mode with the fingerprint or face: [BiometricStatus.ok]
+  /// when the code it gave back is right, and entered.
+  /// [BiometricStatus.invalidated]: a finger or a face was added, or the
+  /// code changed since; the code must be typed (and the biometric is
+  /// offered again).
+  Future<BiometricStatus> biometricUnlock() async {
+    final seal = settings.biometricSeal;
+    if (!settings.parentDevice || seal == null) {
+      return BiometricStatus.unavailable;
+    }
+    final r = await platform.biometricOpen(
+      seal,
+      BiometricTexts(
+        title: s.t('biometricTitle'),
+        cancel: s.t('biometricUseCode'),
+      ),
+    );
+    if (r.status == BiometricStatus.ok) {
+      final code = r.code;
+      if (code != null && (await checkParentCode(code, biometric: true)).ok) {
+        return BiometricStatus.ok;
+      }
+    } else if (r.status != BiometricStatus.invalidated) {
+      return r.status;
+    }
+    await disableBiometric(offerAgain: true);
+    return BiometricStatus.invalidated;
   }
 
   /// Whether, joining other devices with [log], this one must choose what
@@ -604,6 +707,12 @@ class AppController extends ChangeNotifier {
   /// Saves a new parent code, here and, sealed with the parent key, for
   /// every device of the family.
   Future<void> changeParentCode(String code) async {
+    _enteredCode = code;
+    // What the fingerprint or face kept was the former code.
+    if (settings.biometricSeal != null) {
+      await platform.biometricForget();
+      await updateSettings(settings.copyWith(clearBiometric: true));
+    }
     await updateSettings(await withNewPin(settings, code));
     try {
       final log = await sync;
@@ -1021,11 +1130,24 @@ class AppController extends ChangeNotifier {
         if (nextRangeEnd(r, now) case final end?) (r, end),
   ];
 
-  /// Early openings of hours in force at [now].
+  /// Early openings of hours in force at [now], while their rule is still
+  /// outside its hours: once the hours start, an opening no longer changes
+  /// anything.
   List<HoursUnlock> hoursOpenedEarly(DateTime now, {String? forChild}) => [
     for (final u in family.state.hoursUnlocks)
-      if (u.childId == (forChild ?? childId) && u.isActiveAt(now)) u,
+      if (u.childId == (forChild ?? childId) &&
+          u.isActiveAt(now) &&
+          !_withinHours(u.ruleId, now))
+        u,
   ];
+
+  bool _withinHours(String ruleId, DateTime now) {
+    for (final r in family.state.rules) {
+      if (r.id == ruleId) return r.schedule?.allows(now) ?? true;
+    }
+    // The rule is gone: nothing left to open.
+    return true;
+  }
 
   /// Opens [r]'s hours from now until [until] (the end of its next range):
   /// its time limits still apply.
@@ -1089,6 +1211,31 @@ class AppController extends ChangeNotifier {
           for (final c in family.children)
             c.id == id
                 ? c.withVolume(headphones: headphones, speaker: speaker)
+                : c,
+        ],
+      ),
+    );
+  }
+
+  /// Sets settings of the child shown's own: minutes between reminders
+  /// during grace time, what happens without screen time left, Android
+  /// settings for the parent only. Those not given stay as they were.
+  Future<void> setChildSettings({
+    int? graceReminderMinutes,
+    OutOfTime? outOfTime,
+    bool? settingsParentOnly,
+  }) {
+    final id = childId;
+    return updateFamily(
+      family.copyWith(
+        children: [
+          for (final c in family.children)
+            c.id == id
+                ? c.withSettings(
+                    graceReminderMinutes: graceReminderMinutes,
+                    outOfTime: outOfTime,
+                    settingsParentOnly: settingsParentOnly,
+                  )
                 : c,
         ],
       ),
@@ -1175,35 +1322,43 @@ class AppController extends ChangeNotifier {
 
   // --- Always accessible apps ----------------------------------------------
 
-  /// Apps never limited by time: [anyTime] ones even outside the hours, in
-  /// blocks and on a locked device; the others only within the hours.
-  Future<void> setAccessible(String app, {required bool anyTime}) =>
-      updateFamily(
-        family.copyWith(
-          config: family.config.copyWith(
-            alwaysAllowed: {
-              ...family.config.alwaysAllowed.where((a) => a != app),
-              if (anyTime) app,
-            },
-            allowedInHours: {
-              ...family.config.allowedInHours.where((a) => a != app),
-              if (!anyTime) app,
-            },
-          ),
-        ),
-      );
+  /// The child shown's apps never limited by time, at any hour.
+  Set<String> get alwaysAllowed => family.config.alwaysAllowedFor(childId);
 
-  /// Limits [app] like any other again.
-  Future<void> removeAccessible(String app) => updateFamily(
-    family.copyWith(
-      config: family.config.copyWith(
-        alwaysAllowed: {...family.config.alwaysAllowed.where((a) => a != app)},
-        allowedInHours: {
-          ...family.config.allowedInHours.where((a) => a != app),
-        },
-      ),
-    ),
+  /// The child shown's apps never limited by time, within the hours.
+  Set<String> get allowedInHours => family.config.allowedInHoursFor(childId);
+
+  /// For the child shown, apps never limited by time: [anyTime] ones even
+  /// outside the hours, in blocks and on a locked device; the others only
+  /// within the hours. A child who still had the family's lists gets their
+  /// own, the others keep theirs.
+  Future<void> setAccessible(String app, {required bool anyTime}) => _setAccess(
+    always: {...alwaysAllowed.where((a) => a != app), if (anyTime) app},
+    inHours: {...allowedInHours.where((a) => a != app), if (!anyTime) app},
   );
+
+  /// Limits [app] like any other again, for the child shown.
+  Future<void> removeAccessible(String app) => _setAccess(
+    always: {...alwaysAllowed.where((a) => a != app)},
+    inHours: {...allowedInHours.where((a) => a != app)},
+  );
+
+  Future<void> _setAccess({
+    required Set<String> always,
+    required Set<String> inHours,
+  }) async {
+    final id = childId;
+    if (id == null) return;
+    await updateFamily(
+      family.copyWith(
+        config: family.config.withAccess(
+          id,
+          alwaysAllowed: always,
+          allowedInHours: inHours,
+        ),
+      ),
+    );
+  }
 
   // --- App names ---------------------------------------------------------------
 
@@ -1295,6 +1450,12 @@ class AppController extends ChangeNotifier {
         for (final e in log.devices.entries) {
           final name = e.value['name'];
           if (name is String && name.isNotEmpty) names[e.key] = name;
+        }
+        // Unlinked since (a new installation, say): said so.
+        for (final e in log.formerDevices().entries) {
+          names[e.key] = e.value.isEmpty
+              ? s.t('deviceFormerUnnamed')
+              : s.t('deviceFormer', {'name': e.value});
         }
       }
     } on Object {

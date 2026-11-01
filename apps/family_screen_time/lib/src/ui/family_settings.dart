@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
 import '../controller.dart';
+import '../platform.dart' show BiometricStatus;
 import '../store.dart';
 import 'periods_screen.dart';
 import 'pin_dialog.dart';
@@ -45,7 +46,10 @@ class FamilySettingsSection extends StatelessWidget {
   Future<void> _changePin(BuildContext context) async {
     final pin = await askNewPin(context, controller);
     if (pin == null) return;
+    final biometric = controller.biometricOn;
     await controller.changeParentCode(pin);
+    // The fingerprint or face kept the former code: the new one, now.
+    if (biometric) await controller.enableBiometric(pin);
     if (context.mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(controller.s.t('pinChanged'))));
@@ -134,7 +138,60 @@ class FamilySettingsSection extends StatelessWidget {
             title: Text(s.t('changePin')),
             onTap: () => _changePin(context),
           ),
+          if (c.settings.parentDevice) _BiometricTile(controller: c),
         ],
+      );
+    },
+  );
+}
+
+/// On a parent's device with a fingerprint or face: parent mode opened
+/// with them, or not.
+class _BiometricTile extends StatefulWidget {
+  final AppController controller;
+
+  const _BiometricTile({required this.controller});
+
+  @override
+  State<_BiometricTile> createState() => _BiometricTileState();
+}
+
+class _BiometricTileState extends State<_BiometricTile> {
+  late final Future<bool> _available = widget.controller.biometricAvailable();
+  bool _busy = false;
+
+  Future<void> _set(bool on) async {
+    final c = widget.controller;
+    setState(() => _busy = true);
+    if (!on) {
+      await c.disableBiometric();
+    } else if (c.parentCodeKnown ||
+        await askParentPin(context, c, offerBiometric: false)) {
+      final status = await c.enableBiometric();
+      if (mounted &&
+          status != BiometricStatus.ok &&
+          status != BiometricStatus.cancelled) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(c.s.t('biometricFailed'))));
+      }
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<bool>(
+    future: _available,
+    builder: (context, snap) {
+      final c = widget.controller;
+      // Shown while on, even if the device lost its fingerprints: it can
+      // still be turned off.
+      if (snap.data != true && !c.biometricOn) return const SizedBox.shrink();
+      return SwitchListTile(
+        secondary: const Icon(Icons.fingerprint),
+        title: Text(c.s.t('biometricSetting')),
+        subtitle: Text(c.s.t('biometricSettingHint')),
+        value: c.biometricOn,
+        onChanged: _busy ? null : _set,
       );
     },
   );

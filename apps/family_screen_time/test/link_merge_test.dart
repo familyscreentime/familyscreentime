@@ -69,6 +69,26 @@ void main() {
     expect(merged.config.alwaysAllowed, {'phone', 'maps'});
   });
 
+  test('a known child: their own lists, with this device\'s', () {
+    final merged = mergeJoining(
+      group: group.copyWith(
+        config: group.config.withAccess(
+          'emma',
+          alwaysAllowed: {'phone'},
+          allowedInHours: {'messages'},
+        ),
+      ),
+      local: local,
+      localChild: 'lucas',
+      groupChild: 'emma',
+      newChild: false,
+      keepRules: false,
+      deviceId: 'tablet2',
+    );
+    expect(merged.config.alwaysAllowedFor('emma'), {'phone', 'maps'});
+    expect(merged.config.allowedInHoursFor('emma'), {'messages'});
+  });
+
   test('a known child: this device\'s rules dropped, or kept here only', () {
     final dropped = mergeJoining(
       group: group,

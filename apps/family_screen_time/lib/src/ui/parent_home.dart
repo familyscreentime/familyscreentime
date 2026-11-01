@@ -49,8 +49,8 @@ class _ParentHomeState extends State<ParentHome> {
     final total = await controller.totalTimeToday();
     await controller.loadLabels();
     await controller.loadLabels({
-      ...controller.family.config.alwaysAllowed,
-      ...controller.family.config.allowedInHours,
+      ...controller.alwaysAllowed,
+      ...controller.allowedInHours,
     });
     final apps = {
       for (final app in singleAppTargets(controller.parentRules))
@@ -173,6 +173,7 @@ class _ParentHomeState extends State<ParentHome> {
       final c = controller;
       final s = c.s;
       final header = Theme.of(context).textTheme.titleMedium;
+      final reminders = c.family.graceReminderMinutesFor(c.childId);
       return Scaffold(
         appBar: AppBar(
           title: Text(
@@ -293,22 +294,17 @@ class _ParentHomeState extends State<ParentHome> {
               leading: const Icon(Icons.notifications_active_outlined),
               title: Text(s.t('graceReminders')),
               subtitle: DropdownButton<int>(
-                value: c.family.graceReminderMinutes,
+                value: reminders,
                 isExpanded: true,
                 items: [
-                  for (final m in {
-                    ...graceReminderChoices,
-                    c.family.graceReminderMinutes,
-                  })
+                  for (final m in {...graceReminderChoices, reminders})
                     DropdownMenuItem(
                       value: m,
                       child: Text(graceReminderLabel(s, m)),
                     ),
                 ],
                 onChanged: (m) {
-                  if (m != null) {
-                    c.updateFamily(c.family.copyWith(graceReminderMinutes: m));
-                  }
+                  if (m != null) c.setChildSettings(graceReminderMinutes: m);
                 },
               ),
             ),
@@ -322,11 +318,9 @@ class _ParentHomeState extends State<ParentHome> {
             const Divider(),
             ListTile(title: Text(s.t('outOfTimeTitle'), style: header)),
             RadioGroup<OutOfTime>(
-              groupValue: c.family.outOfTime,
+              groupValue: c.family.outOfTimeFor(c.childId),
               onChanged: (m) {
-                if (m != null) {
-                  c.updateFamily(c.family.copyWith(outOfTime: m));
-                }
+                if (m != null) c.setChildSettings(outOfTime: m);
               },
               child: Column(
                 children: [
@@ -355,10 +349,7 @@ class _ParentHomeState extends State<ParentHome> {
               leading: const Icon(Icons.phone_outlined),
               title: Text(s.t('accessibleTitle')),
               subtitle: Text(
-                [
-                      ...c.family.config.alwaysAllowed,
-                      ...c.family.config.allowedInHours,
-                    ]
+                [...c.alwaysAllowed, ...c.allowedInHours]
                     .map((a) => c.appName(a, androidLabel: c.androidLabels[a]))
                     .join(', '),
               ),
@@ -368,9 +359,8 @@ class _ParentHomeState extends State<ParentHome> {
             SwitchListTile(
               title: Text(s.t('settingsParentOnly')),
               subtitle: Text(s.t('settingsParentOnlyHint')),
-              value: c.family.settingsParentOnly,
-              onChanged: (v) =>
-                  c.updateFamily(c.family.copyWith(settingsParentOnly: v)),
+              value: c.family.settingsParentOnlyFor(c.childId),
+              onChanged: (v) => c.setChildSettings(settingsParentOnly: v),
             ),
             const Divider(),
             // On a parent's device, the linked devices are on the home.

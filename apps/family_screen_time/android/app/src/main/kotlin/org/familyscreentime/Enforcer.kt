@@ -38,6 +38,7 @@ internal object Enforcer {
     private lateinit var deviceLock: DeviceLockOverlay
     private lateinit var eyeBreak: EyeBreakOverlay
     private lateinit var browserWatch: BrowserWatch
+    private lateinit var soundSources: SoundSources
     lateinit var volume: VolumeGuard
         private set
 
@@ -47,6 +48,12 @@ internal object Enforcer {
     private var screenOn = true
 
     private var deviceLocked = false
+
+    /**
+     * The app in front when the eye break's veil paused what it played:
+     * played again when the veil ends, if nothing changed meanwhile.
+     */
+    private var resumeAfterVeil: String? = null
     private var lockTexts = DeviceLockOverlay.Texts("", "", "")
     private var lockExempt: List<String> = emptyList()
     private var settingsTitle = ""
@@ -70,9 +77,14 @@ internal object Enforcer {
         banner = WarningBanner(app)
         blockNotice = BlockOverlay(app)
         deviceLock = DeviceLockOverlay(app)
-        eyeBreak = EyeBreakOverlay(app) { choice ->
-            send("eyeBreak", Bundle().apply { putString("action", choice) })
-        }
+        eyeBreak = EyeBreakOverlay(
+            app,
+            onAnswer = { choice ->
+                send("eyeBreak", Bundle().apply { putString("action", choice) })
+            },
+            onVeilDone = { veilDone() },
+        )
+        soundSources = SoundSources(app) { lastForeground }
         browserWatch = BrowserWatch(
             app,
             send = { sample -> send("browserActivity", sample) },
@@ -300,10 +312,11 @@ internal object Enforcer {
             )
             "eyeNotice" -> eyeNotice(data)
             "eyeVeil" -> eyeVeil(data)
-            "eyeHide" -> eyeBreak.hide()
+            "eyeHide" -> eyeBreak.hide(ended = true)
             // A video in a browser with no time left: paused, and said why.
             "pauseMedia" -> {
                 if (!ProtectionGuard.allowed()) {
+                    resumeAfterVeil = null
                     pauseMedia()
                     warn(data.getString("title") ?: "", data.getString("text") ?: "")
                 }
@@ -434,7 +447,7 @@ internal object Enforcer {
      * media session in use gets the pause key.
      */
     fun pauseMedia() {
-        val audio = app.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        val audio = audio()
         for (action in listOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP)) {
             audio.dispatchMediaKeyEvent(
                 android.view.KeyEvent(action, android.view.KeyEvent.KEYCODE_MEDIA_PAUSE),
@@ -553,12 +566,47 @@ internal object Enforcer {
             send("eyeBreak", Bundle().apply { putString("action", "busy") })
             return
         }
-        eyeBreak.showVeil(
+        val endsAt = Shared.long(data, "endsAt") ?: 0L
+        val playing = audio().isMusicActive
+        val here = soundSources.fromFront(lastForeground)
+        val shown = eyeBreak.showVeil(
             data.getString("title") ?: "",
             data.getString("text") ?: "",
-            Shared.long(data, "endsAt") ?: 0L,
+            endsAt,
         )
+        resumeAfterVeil = null
+        if (!shown || endsAt <= System.currentTimeMillis()) return
+        // Music started in another app goes on: there is nothing to watch.
+        // (Game sounds too: the pause key would only reach the music.)
+        if (playing && here == false) return
+        // The eyes rest: a video under the veil would go on unseen.
+        pauseMedia()
+        if (playing) resumeAfterVeil = lastForeground
     }
+
+    /**
+     * The veil went at the end of its countdown: what it paused plays
+     * again, if the same app is still in front and nothing else came
+     * (a call, the device lock, the screen going off) and it does not
+     * play again already.
+     */
+    private fun veilDone() {
+        val pkg = resumeAfterVeil ?: return
+        resumeAfterVeil = null
+        if (!screenOn || keyguardLocked() || pkg != lastForeground) return
+        if (deviceLocked || phoneCall || Calls.anyCall(app)) return
+        val audio = audio()
+        // The app in front plays again already.
+        if (soundSources.fromFront(pkg) ?: audio.isMusicActive) return
+        for (action in listOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP)) {
+            audio.dispatchMediaKeyEvent(
+                android.view.KeyEvent(action, android.view.KeyEvent.KEYCODE_MEDIA_PLAY),
+            )
+        }
+    }
+
+    private fun audio() =
+        app.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
 
     /** A call comes in front: the block notice, the eye break and the block screen go. */
     private fun clearForCall() {

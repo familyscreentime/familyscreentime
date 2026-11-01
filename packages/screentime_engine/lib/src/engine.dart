@@ -25,7 +25,9 @@ class FamilyConfig {
   /// Device group → devices.
   final Map<String, Set<String>> deviceGroups;
 
-  /// "Always allowed" list shown to parents (phone and SMS by default).
+  /// "Always allowed" apps of the children who have no list of their own
+  /// (phone and SMS by default): the family's list before 0.30, kept for
+  /// them. See [alwaysAllowedFor].
   final Set<String> alwaysAllowed;
 
   /// System components that are never blocked (launcher, system UI,
@@ -36,6 +38,12 @@ class FamilyConfig {
   /// Apps never counted nor limited by time (messages, say), but only open
   /// within the hours and outside blocks, unlike [alwaysAllowed].
   final Set<String> allowedInHours;
+
+  /// Each child's own apps always allowed, and allowed within the hours,
+  /// by child: a child found in either has their own lists, in place of
+  /// the family's [alwaysAllowed] and [allowedInHours].
+  final Map<String, Set<String>> alwaysAllowedByChild;
+  final Map<String, Set<String>> allowedInHoursByChild;
 
   final List<Profile> profiles;
 
@@ -50,6 +58,8 @@ class FamilyConfig {
     this.alwaysAllowed = const {},
     this.neverBlocked = const {},
     this.allowedInHours = const {},
+    this.alwaysAllowedByChild = const {},
+    this.allowedInHoursByChild = const {},
     this.profiles = const [],
     this.weekStart = DateTime.monday,
     this.counting = SimultaneousCounting.sum,
@@ -61,6 +71,8 @@ class FamilyConfig {
     Set<String>? alwaysAllowed,
     Set<String>? neverBlocked,
     Set<String>? allowedInHours,
+    Map<String, Set<String>>? alwaysAllowedByChild,
+    Map<String, Set<String>>? allowedInHoursByChild,
     List<Profile>? profiles,
     int? weekStart,
     SimultaneousCounting? counting,
@@ -70,9 +82,36 @@ class FamilyConfig {
     alwaysAllowed: alwaysAllowed ?? this.alwaysAllowed,
     neverBlocked: neverBlocked ?? this.neverBlocked,
     allowedInHours: allowedInHours ?? this.allowedInHours,
+    alwaysAllowedByChild: alwaysAllowedByChild ?? this.alwaysAllowedByChild,
+    allowedInHoursByChild: allowedInHoursByChild ?? this.allowedInHoursByChild,
     profiles: profiles ?? this.profiles,
     weekStart: weekStart ?? this.weekStart,
     counting: counting ?? this.counting,
+  );
+
+  /// Whether [childId] has lists of their own.
+  bool hasOwnAccess(String? childId) =>
+      alwaysAllowedByChild.containsKey(childId) ||
+      allowedInHoursByChild.containsKey(childId);
+
+  /// The apps [childId] may use at any time, never limited by time.
+  Set<String> alwaysAllowedFor(String? childId) => hasOwnAccess(childId)
+      ? alwaysAllowedByChild[childId] ?? const {}
+      : alwaysAllowed;
+
+  /// The apps [childId] may use within the hours, never limited by time.
+  Set<String> allowedInHoursFor(String? childId) => hasOwnAccess(childId)
+      ? allowedInHoursByChild[childId] ?? const {}
+      : allowedInHours;
+
+  /// [childId] with these lists of their own.
+  FamilyConfig withAccess(
+    String childId, {
+    required Set<String> alwaysAllowed,
+    required Set<String> allowedInHours,
+  }) => copyWith(
+    alwaysAllowedByChild: {...alwaysAllowedByChild, childId: alwaysAllowed},
+    allowedInHoursByChild: {...allowedInHoursByChild, childId: allowedInHours},
   );
 }
 
@@ -276,7 +315,7 @@ class RuleEngine {
   }) {
     // 1. Always allowed, even during a family block.
     if (config.neverBlocked.contains(appId) ||
-        config.alwaysAllowed.contains(appId)) {
+        config.alwaysAllowedFor(childId).contains(appId)) {
       return const Decision(allowed: true, reason: Reason.alwaysAllowed);
     }
 
@@ -353,7 +392,7 @@ class RuleEngine {
     }
 
     // Apps open within the hours but never limited by time.
-    if (config.allowedInHours.contains(appId)) {
+    if (config.allowedInHoursFor(childId).contains(appId)) {
       return const Decision(allowed: true, reason: Reason.alwaysAllowed);
     }
 
@@ -621,8 +660,8 @@ class RuleEngine {
     }
     final app = s.appId;
     if (app != null &&
-        (config.alwaysAllowed.contains(app) ||
-            config.allowedInHours.contains(app) ||
+        (config.alwaysAllowedFor(s.childId).contains(app) ||
+            config.allowedInHoursFor(s.childId).contains(app) ||
             config.neverBlocked.contains(app))) {
       return false;
     }

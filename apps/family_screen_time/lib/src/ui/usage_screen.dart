@@ -170,7 +170,12 @@ class _UsageScreenState extends State<UsageScreen> {
                   together:
                       c.family.config.counting == SimultaneousCounting.elapsed,
                 );
-                final devices = devicesOf(history, child, _names);
+                // Only the devices used in the period: one unlinked long
+                // ago keeps its time in the totals, not a chip at 0 min.
+                final devices = [
+                  for (final d in devicesOf(history, child, _names))
+                    if (reportOf(d).total > Duration.zero) d,
+                ];
                 final device = devices.contains(_device) ? _device : null;
                 final report = reportOf(device);
                 return RefreshIndicator(
@@ -294,7 +299,7 @@ class _UsageScreenState extends State<UsageScreen> {
 List<String> appBadges(AppController c, AppUsage app) {
   final s = c.s;
   final config = c.family.config;
-  final allowed = config.alwaysAllowed.contains(app.appId);
+  final allowed = c.alwaysAllowed.contains(app.appId);
   final limited = c.activeChildRules.any(
     (r) =>
         (r.hasQuota || r.schedule != null) &&

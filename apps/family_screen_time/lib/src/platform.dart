@@ -47,6 +47,57 @@ class SystemPackages {
   });
 }
 
+/// How a biometric prompt went.
+enum BiometricStatus {
+  ok,
+
+  /// The parent chose the code instead, or left.
+  cancelled,
+
+  /// A finger or a face was added, or the screen lock removed: what was
+  /// sealed can no longer be opened.
+  invalidated,
+
+  /// Too many tries: the device's own lock must be used first.
+  lockout,
+
+  /// No strong biometric on this device (or Android before 10).
+  unavailable,
+  error,
+}
+
+/// What a biometric prompt gave: the [seal] of a code, or the [code].
+class BiometricResult {
+  final BiometricStatus status;
+  final String? seal;
+  final String? code;
+
+  const BiometricResult(this.status, {this.seal, this.code});
+
+  bool get ok => status == BiometricStatus.ok;
+}
+
+/// The words of the biometric prompt.
+class BiometricTexts {
+  final String title;
+  final String? subtitle;
+
+  /// The button that leaves the prompt (for the code).
+  final String cancel;
+
+  const BiometricTexts({
+    required this.title,
+    this.subtitle,
+    required this.cancel,
+  });
+
+  Map<String, Object?> toMap() => {
+    'title': title,
+    'subtitle': subtitle,
+    'cancel': cancel,
+  };
+}
+
 /// Permissions the monitor relies on, in the order they are asked for.
 const permissionKinds = [
   'accessibility',
@@ -142,6 +193,52 @@ class PlatformApi {
       return AppVersion(version, build.toInt());
     } on Object {
       return null;
+    }
+  }
+
+  /// A strong biometric (fingerprint, face) can open parent mode here.
+  Future<bool> biometricAvailable() async {
+    try {
+      return await _channel.invokeMethod<bool>('biometricAvailable') ?? false;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Seals [code] behind the biometric, after a prompt.
+  Future<BiometricResult> biometricSeal(String code, BiometricTexts texts) =>
+      _biometric('biometricSeal', {'code': code, ...texts.toMap()});
+
+  /// Opens a [seal], after a prompt: the code.
+  Future<BiometricResult> biometricOpen(String seal, BiometricTexts texts) =>
+      _biometric('biometricOpen', {'seal': seal, ...texts.toMap()});
+
+  /// Forgets the biometric key: no seal opens any more.
+  Future<void> biometricForget() async {
+    try {
+      await _channel.invokeMethod<void>('biometricForget');
+    } on Object {
+      // Nothing to forget.
+    }
+  }
+
+  Future<BiometricResult> _biometric(
+    String method,
+    Map<String, Object?> args,
+  ) async {
+    try {
+      final m = await _channel.invokeMapMethod<String, Object?>(method, args);
+      final status = BiometricStatus.values.firstWhere(
+        (s) => s.name == m?['status'],
+        orElse: () => BiometricStatus.unavailable,
+      );
+      return BiometricResult(
+        status,
+        seal: m?['seal'] as String?,
+        code: m?['code'] as String?,
+      );
+    } on Object {
+      return const BiometricResult(BiometricStatus.unavailable);
     }
   }
 

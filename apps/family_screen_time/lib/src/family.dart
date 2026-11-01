@@ -74,17 +74,14 @@ FamilyConfig refreshSystemLists(FamilyConfig c, SystemPackages p) => c.copyWith(
   },
 );
 
-/// [f] with the known system components among the apps never blocked nor
-/// counted, so components added in an update apply at once, to existing
-/// families and to the time already recorded.
+/// [f] with the known system components and home screens among the apps
+/// never blocked nor counted, so components added in an update apply at
+/// once, to existing families and to the time already recorded. The home
+/// screens of the usual makers count for the devices that have not shared
+/// theirs: a child's home screen is never screen time, whichever device
+/// adds up the time.
 FamilyData withKnownSystem(FamilyData f) =>
-    f.config.neverBlocked.containsAll(knownSystemPackages)
-    ? f
-    : f.copyWith(
-        config: f.config.copyWith(
-          neverBlocked: {...f.config.neverBlocked, ...knownSystemPackages},
-        ),
-      );
+    withNeverBlocked(f, {...knownSystemPackages, ...knownLaunchers});
 
 /// Name shown for a rule. An app's own name comes from [labels] (Android's
 /// names by package), unless the parent renamed it.

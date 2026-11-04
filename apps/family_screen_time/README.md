@@ -99,7 +99,10 @@ behind the parent code.
   child may put it off by a minute, three times; a later break lasts
   longer, in proportion (23 s after 23 min). Nothing is blocked, the time
   under the veil is not screen time, and the break waits for a call to end.
-  A video pauses under the veil, and plays again at the end of the
+  A video pauses under the veil: the veil takes the audio focus, as a call
+  does, so players pause by themselves and play again when it is given
+  back (the pause key does not reach every video player). Should Android
+  refuse the focus, the pause key, then the play key at the end of the
   countdown if the same app is still in front. Music started in another app
   goes on: Android does not say which app plays, but says when each player
   starts, so a sound started while the app in front was there is taken as
@@ -131,7 +134,7 @@ behind the parent code.
 - A parent's device, locked: only the app's name and the unlock button.
   Unlocked: each child by name with their total screen time today, in red
   when a limit on it has no time left, and below, smaller, each group of
-  apps with a time limit in force and its time today (red alike). Then
+  apps with a time limit in force used today, with its time (red alike). Then
   extra time, and a padlock showing the state by the action that changes
   it: unlocking (until the end of the next allowed hours today, which
   start early, or until midnight), or blocking now. With several children, "Lock everything" or

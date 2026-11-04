@@ -190,7 +190,22 @@ void main() {
             Child(id: 'lucas', name: 'Lucas'),
             Child(id: 'emma', name: 'Emma'),
           ],
+          config: const FamilyConfig(
+            appGroups: {
+              'games': {'minecraft'},
+            },
+          ),
+          groupNames: const {'games': 'Jeux'},
+          groupOwners: const {'games': 'lucas'},
           state: FamilyState(
+            rules: const [
+              Rule(
+                id: 'g',
+                childId: 'lucas',
+                appTarget: AppTarget.group('games'),
+                dailyQuota: Duration(minutes: 30),
+              ),
+            ],
             temporaryBlocks: [
               // Until lifted: locked whatever the time of the test.
               TemporaryBlock(
@@ -235,6 +250,8 @@ void main() {
       );
       // Each child's time today, beside the name.
       expect(find.text('0 min'), findsNWidgets(2));
+      // A limited group not used today is left out.
+      expect(find.textContaining('Jeux', findRichText: true), findsNothing);
       // Extra time for everyone; the padlock says the state by the action.
       expect(find.byTooltip('Donner du temps en plus'), findsNWidgets(2));
       expect(find.byTooltip('Déverrouiller'), findsOneWidget);

@@ -50,10 +50,16 @@ internal object Enforcer {
     private var deviceLocked = false
 
     /**
-     * The app in front when the eye break's veil paused what it played:
-     * played again when the veil ends, if nothing changed meanwhile.
+     * The app in front when the eye break's veil paused what it played
+     * with the pause key (see [veilPause]): played again when the veil
+     * ends, if nothing changed meanwhile.
      */
     private var resumeAfterVeil: String? = null
+
+    /** Audio focus held while the veil is shown (see [veilPause]). */
+    private var veilFocus: Any? = null
+    private val focusListener =
+        android.media.AudioManager.OnAudioFocusChangeListener { }
     private var lockTexts = DeviceLockOverlay.Texts("", "", "")
     private var lockExempt: List<String> = emptyList()
     private var settingsTitle = ""
@@ -82,7 +88,7 @@ internal object Enforcer {
             onAnswer = { choice ->
                 send("eyeBreak", Bundle().apply { putString("action", choice) })
             },
-            onVeilDone = { veilDone() },
+            onVeilEnd = { done -> veilEnd(done) },
         )
         soundSources = SoundSources(app) { lastForeground }
         browserWatch = BrowserWatch(
@@ -574,28 +580,92 @@ internal object Enforcer {
             data.getString("text") ?: "",
             endsAt,
         )
-        resumeAfterVeil = null
         if (!shown || endsAt <= System.currentTimeMillis()) return
         // Music started in another app goes on: there is nothing to watch.
-        // (Game sounds too: the pause key would only reach the music.)
+        // (Game sounds too: nothing is paused for them.)
         if (playing && here == false) return
         // The eyes rest: a video under the veil would go on unseen.
+        veilPause(playing)
+    }
+
+    /**
+     * Pauses what plays under the veil. The audio focus first, as a call
+     * or a spoken direction takes it: players pause by themselves, and
+     * play again by themselves once it is given back, the pause key not
+     * reaching every one (video players without a media session). Without
+     * the focus (refused from the background on some versions), the pause
+     * key, and the play key after.
+     */
+    private fun veilPause(playing: Boolean) {
+        if (veilFocus != null) return
+        val audio = audio()
+        val attributes = android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        val granted = try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                val request = android.media.AudioFocusRequest.Builder(
+                    android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT,
+                )
+                    .setAudioAttributes(attributes)
+                    .setOnAudioFocusChangeListener(focusListener)
+                    .build()
+                if (audio.requestAudioFocus(request) ==
+                    android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                ) {
+                    veilFocus = request
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                if (audio.requestAudioFocus(
+                        focusListener,
+                        android.media.AudioManager.STREAM_MUSIC,
+                        android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT,
+                    ) == android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                ) {
+                    veilFocus = focusListener
+                }
+            }
+            veilFocus != null
+        } catch (e: Exception) {
+            false
+        }
+        resumeAfterVeil = null
+        if (granted) return
         pauseMedia()
         if (playing) resumeAfterVeil = lastForeground
     }
 
     /**
-     * The veil went at the end of its countdown: what it paused plays
-     * again, if the same app is still in front and nothing else came
-     * (a call, the device lock, the screen going off) and it does not
-     * play again already.
+     * The veil went: the audio focus is given back (players paused for it
+     * play again by themselves). Paused with the pause key instead, what
+     * it paused plays again when its countdown was over ([done]), if the
+     * same app is still in front and nothing else came (a call, the device
+     * lock, the screen going off) and it does not play again already.
      */
-    private fun veilDone() {
+    private fun veilEnd(done: Boolean) {
+        val audio = audio()
+        veilFocus?.let { focus ->
+            veilFocus = null
+            try {
+                if (Build.VERSION.SDK_INT >= 26 &&
+                    focus is android.media.AudioFocusRequest
+                ) {
+                    audio.abandonAudioFocusRequest(focus)
+                } else {
+                    @Suppress("DEPRECATION")
+                    audio.abandonAudioFocus(focusListener)
+                }
+            } catch (e: Exception) {
+                // Taken back with the process anyway.
+            }
+        }
         val pkg = resumeAfterVeil ?: return
         resumeAfterVeil = null
+        if (!done) return
         if (!screenOn || keyguardLocked() || pkg != lastForeground) return
         if (deviceLocked || phoneCall || Calls.anyCall(app)) return
-        val audio = audio()
         // The app in front plays again already.
         if (soundSources.fromFront(pkg) ?: audio.isMusicActive) return
         for (action in listOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP)) {

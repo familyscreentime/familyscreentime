@@ -1,7 +1,7 @@
 /// Home of a parent's device. Locked: the app's name and the unlock button,
 /// nothing else. Unlocked: each child with their time today (total screen
-/// time, and the groups of apps with a time limit; in red with no time
-/// left), extra time and locking or unlocking in one tap, then the linked
+/// time, and the groups of apps with a time limit used today; in red with
+/// no time left), extra time and locking or unlocking in one tap, then the linked
 /// devices and the family's settings. Nothing is limited on this device.
 library;
 
@@ -210,6 +210,12 @@ class _ChildrenState extends State<_Children> {
     final s = c.s;
     final theme = Theme.of(context);
     final times = _times[child.id];
+    // The groups used today only: one at 0 min says nothing.
+    final groups = [
+      for (final e
+          in times?.groups.entries ?? const <MapEntry<String, TimeToday>>[])
+        if (e.value.used > Duration.zero) e,
+    ];
     Color? color(TimeToday t) => t.over ? theme.colorScheme.error : null;
     final small = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
@@ -255,14 +261,14 @@ class _ChildrenState extends State<_Children> {
                 ],
               ),
               // The groups of apps with a time limit, in smaller type.
-              if (times != null && times.groups.isNotEmpty)
+              if (groups.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 2, right: 32),
                   child: Text.rich(
                     TextSpan(
                       style: small,
                       children: [
-                        for (final (i, e) in times.groups.entries.indexed) ...[
+                        for (final (i, e) in groups.indexed) ...[
                           if (i > 0) const TextSpan(text: ' · '),
                           TextSpan(
                             text:

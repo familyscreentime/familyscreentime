@@ -27,15 +27,19 @@ internal class SoundSources(
     private val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val packages = context.packageManager
 
-    /** The media players playing, with the app in front when each started. */
+    /**
+     * The media players playing, with the app in front when each started
+     * ([UNKNOWN]: already playing when this began watching, after a
+     * restart of the process, say).
+     */
     private val started = HashMap<Any, String?>()
 
     init {
         if (Build.VERSION.SDK_INT >= 26) {
             try {
-                // Already playing: started before, by some other app.
+                // Already playing: by which app, no one knows.
                 for (c in audio.activePlaybackConfigurations) {
-                    if (media(c)) started[c] = null
+                    if (media(c)) started[c] = UNKNOWN
                 }
                 audio.registerAudioPlaybackCallback(
                     object : AudioManager.AudioPlaybackCallback() {
@@ -63,14 +67,15 @@ internal class SoundSources(
      * Whether media sound plays from [pkg], the app in front: `true` when a
      * player started while it was in front (and it is no music app),
      * `false` when what plays started elsewhere (music in the background)
-     * or nothing plays, `null` when Android cannot tell.
+     * or nothing plays, `null` when Android cannot tell (before Android 8,
+     * or a player already playing when this began watching).
      */
     fun fromFront(pkg: String?): Boolean? {
         if (Build.VERSION.SDK_INT < 26) return null
         if (pkg == null || started.isEmpty()) return false
-        if (pkg !in started.values) return false
         // A music app in front (it says so itself): music, not a video.
-        return !musicApp(pkg)
+        if (pkg in started.values) return !musicApp(pkg)
+        return if (UNKNOWN in started.values) null else false
     }
 
     private fun musicApp(pkg: String): Boolean = Build.VERSION.SDK_INT >= 26 && try {
@@ -86,4 +91,9 @@ internal class SoundSources(
     private fun media(c: AudioPlaybackConfiguration): Boolean =
         Build.VERSION.SDK_INT >= 26 &&
             c.audioAttributes.usage == AudioAttributes.USAGE_MEDIA
+
+    private companion object {
+        /** A player whose start was not seen. */
+        const val UNKNOWN = "?"
+    }
 }

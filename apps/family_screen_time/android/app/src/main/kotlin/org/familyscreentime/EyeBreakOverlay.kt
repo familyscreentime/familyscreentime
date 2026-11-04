@@ -22,15 +22,19 @@ import android.widget.TextView
  * the top of the screen, with "now" and, while the child may still put it
  * off, "in 1 min"; then a veil over the whole screen, with a countdown and
  * an invitation to look into the distance. The veil takes the touches and
- * goes by itself at the end of the countdown ([onVeilDone]); a video
- * playing is paused by the enforcer. The monitor decides when each comes;
+ * goes by itself at the end of the countdown; [onVeilEnd] says when it
+ * goes, and whether its countdown was over. A video playing is paused by
+ * the enforcer meanwhile. The monitor decides when each comes;
  * [onAnswer] tells it what the child chose ("now", "later").
  */
 class EyeBreakOverlay(
     private val context: Context,
     private val onAnswer: (String) -> Unit,
-    /** The veil went at the end of its countdown, not cut short. */
-    private val onVeilDone: () -> Unit = {},
+    /**
+     * The veil went: at the end of its countdown ([done]), or cut short (a
+     * call, a block, the screen going off).
+     */
+    private val onVeilEnd: (done: Boolean) -> Unit = {},
 ) {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -48,7 +52,7 @@ class EyeBreakOverlay(
             val left = veilEndsAt - System.currentTimeMillis()
             if (left <= 0) {
                 hideVeil()
-                onVeilDone()
+                onVeilEnd(true)
                 return
             }
             countdown?.text = ((left + 999) / 1000).toString()
@@ -216,14 +220,15 @@ class EyeBreakOverlay(
      * Takes the notice and the veil down. [ended]: the monitor says the
      * break is over; a veil whose countdown is (nearly) up then counts as
      * done. Otherwise the veil is cut short (a call, a block, the screen
-     * going off).
+     * going off). Either way, [onVeilEnd] hears of it.
      */
     fun hide(ended: Boolean = false) {
-        val done = ended && veil != null &&
+        val shown = veil != null
+        val done = ended && shown &&
             veilEndsAt - System.currentTimeMillis() <= END_SLACK_MS
         hideNotice()
         hideVeil()
-        if (done) onVeilDone()
+        if (shown) onVeilEnd(done)
     }
 
     private fun hideNotice() {

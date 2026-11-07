@@ -12,7 +12,11 @@ import 'ui/parent_device_home.dart';
 import 'ui/setup.dart';
 
 class FamilyScreenTimeApp extends StatefulWidget {
-  const FamilyScreenTimeApp({super.key});
+  /// Loads the settings and the family: from this device's storage, or
+  /// the demonstration's made-up family.
+  final Future<AppController> Function() load;
+
+  const FamilyScreenTimeApp({super.key, this.load = AppController.load});
 
   @override
   State<FamilyScreenTimeApp> createState() => _FamilyScreenTimeAppState();
@@ -26,7 +30,7 @@ class _FamilyScreenTimeAppState extends State<FamilyScreenTimeApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    AppController.load().then((c) {
+    widget.load().then((c) {
       // "Leave parent mode" from the notification.
       PlatformApi.listen(
         onLeaveParentMode: c.leaveParentMode,

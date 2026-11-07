@@ -1,5 +1,5 @@
-/// Apps the child can always use, never limited by time: the phone at any
-/// hour, messages only within the hours…
+/// Apps the child shown can always use, never limited by time: the phone
+/// at any hour, messages only within the hours… Each child has their own.
 library;
 
 import 'package:flutter/material.dart';
@@ -22,10 +22,7 @@ class _AccessibleAppsScreenState extends State<AccessibleAppsScreen> {
   @override
   void initState() {
     super.initState();
-    c.loadLabels({
-      ...c.family.config.alwaysAllowed,
-      ...c.family.config.allowedInHours,
-    });
+    c.loadLabels({...c.alwaysAllowed, ...c.allowedInHours});
   }
 
   Future<void> _add() async {
@@ -40,12 +37,12 @@ class _AccessibleAppsScreenState extends State<AccessibleAppsScreen> {
     listenable: c,
     builder: (context, _) {
       final s = c.s;
-      final config = c.family.config;
+      final always = c.alwaysAllowed;
       String name(String app) =>
           c.appName(app, androidLabel: c.androidLabels[app]);
       final apps = [
-        ...config.alwaysAllowed,
-        ...config.allowedInHours,
+        ...always,
+        ...c.allowedInHours,
       ]..sort((a, b) => name(a).toLowerCase().compareTo(name(b).toLowerCase()));
       return Scaffold(
         appBar: AppBar(title: Text(s.t('accessibleTitle'))),
@@ -59,18 +56,21 @@ class _AccessibleAppsScreenState extends State<AccessibleAppsScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text(s.t('accessibleHint')),
+              child: Text(
+                '${s.t('accessibleFor', {'name': c.child?.name ?? ''})} '
+                '${s.t('accessibleHint')}',
+              ),
             ),
             for (final app in apps)
               ListTile(
                 title: Text(name(app)),
                 subtitle: Text(
-                  config.alwaysAllowed.contains(app)
+                  always.contains(app)
                       ? s.t('accessibleAnyTime')
                       : s.t('accessibleInHours'),
                 ),
                 leading: Switch(
-                  value: config.alwaysAllowed.contains(app),
+                  value: always.contains(app),
                   onChanged: (v) => c.setAccessible(app, anyTime: v),
                 ),
                 trailing: IconButton(

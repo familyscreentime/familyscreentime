@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:family_screen_time/src/controller.dart';
+import 'package:family_screen_time/src/family.dart';
 import 'package:family_screen_time/src/platform.dart';
 import 'package:family_screen_time/src/self_limits.dart';
 import 'package:family_screen_time/src/store.dart';
@@ -25,6 +26,12 @@ FamilyData richFamily() => FamilyData(
     },
     alwaysAllowed: const {'dialer'},
     allowedInHours: const {'sms'},
+    alwaysAllowedByChild: const {
+      'emma': {'dialer', 'sms'},
+    },
+    allowedInHoursByChild: const {
+      'emma': {'whatsapp'},
+    },
     neverBlocked: const {'launcher'},
     profiles: [
       Profile(
@@ -92,6 +99,54 @@ void main() {
     expect(back.config.profiles.map((p) => p.id), ['z', 'a']);
     // What belongs to this device only is not shared.
     expect(canonicalJson(familyEntities(f)), isNot(contains('launcher')));
+  });
+
+  test('a child\'s own always available apps: an entity of theirs', () {
+    final entities = familyEntities(richFamily());
+    expect(entities['${FamilyKeys.access}emma'], {
+      'childId': 'emma',
+      'alwaysAllowed': ['dialer', 'sms'],
+      'allowedInHours': ['whatsapp'],
+    });
+    // Lucas keeps the family's lists: no entity.
+    expect(entities.containsKey('${FamilyKeys.access}lucas'), isFalse);
+    // Sent to Emma's devices and the parents' only.
+    expect(
+      const FamilySyncPolicy().scopeOf(
+        '${FamilyKeys.access}emma',
+        entities['${FamilyKeys.access}emma']!,
+        Replica(),
+      ),
+      'emma',
+    );
+    // A child's device does not change it alone.
+    expect(
+      const FamilySyncPolicy().deviceMay(
+        SyncEvent(
+          origin: 'tablet~ui',
+          seq: 1,
+          hlc: Hlc.zero,
+          type: EventType.put,
+          key: '${FamilyKeys.access}emma',
+          data: const {
+            'childId': 'emma',
+            'alwaysAllowed': ['youtube'],
+          },
+          signer: Signer.device,
+          sig: '',
+        ),
+        const {'childId': 'emma', 'signKey': 'k'},
+        Replica(),
+      ),
+      isFalse,
+    );
+    // Before 0.30, without the entity: the family's lists.
+    final old = familyFromEntities({
+      for (final e in entities.entries)
+        if (!e.key.startsWith(FamilyKeys.access)) e.key: e.value,
+    }, richFamily());
+    expect(old.config.alwaysAllowedFor('emma'), {'dialer'});
+    expect(old.config.allowedInHoursFor('emma'), {'sms'});
   });
 
   group('what a child device may sign alone', () {
@@ -289,6 +344,69 @@ void main() {
         ),
       ]);
       expect((await sync.readOthers()).single.type, 'usage');
+    });
+
+    test(
+      'the system components every device shared count for no one',
+      () async {
+        final (sync, _) = await FamilySync.create(
+          store: store,
+          settings: settings,
+          family: richFamily(),
+          parentCode: '123456',
+          deviceName: 'Tablette',
+        );
+        await sync.publishSystem({'com.maker.home', 'com.maker.lockscreen'});
+        final family = sync.compose(richFamily());
+        expect(
+          family.config.neverBlocked,
+          containsAll(['launcher', 'com.maker.home', 'com.maker.lockscreen']),
+        );
+        // The usual makers' home screens too, even if never shared.
+        expect(
+          withKnownSystem(const FamilyData()).config.neverBlocked,
+          containsAll(['com.miui.home', 'com.sec.android.app.launcher']),
+        );
+        // The tablet's home screen, recorded there, is not screen time here.
+        final engine = RuleEngine(family.config);
+        final usage = [
+          for (final (app, minutes) in [
+            ('com.maker.home', 300),
+            ('minecraft', 20),
+          ])
+            UsageSegment.device(
+              childId: 'emma',
+              deviceId: 'tablet',
+              appId: app,
+              start: _now,
+              end: _now.add(Duration(minutes: minutes)),
+            ),
+        ];
+        expect(
+          engine.consumption(
+            FamilyState(usage: usage),
+            const Rule(id: '', childId: 'emma'),
+            childId: 'emma',
+            from: _now,
+            to: _now.add(const Duration(hours: 6)),
+          ),
+          const Duration(minutes: 20),
+        );
+      },
+    );
+
+    test('a device unlinked keeps its name, said so', () async {
+      final (sync, key) = await FamilySync.create(
+        store: store,
+        settings: settings,
+        family: richFamily(),
+        parentCode: '123456',
+        deviceName: 'Tablette',
+      );
+      expect(sync.formerDevices(), isEmpty);
+      await sync.removeDevice(sync.deviceId, key);
+      expect(sync.formerDevices(), {sync.deviceId: 'Tablette'});
+      expect(sync.devices.containsKey(sync.deviceId), isFalse);
     });
 
     test('installed apps are shared, only what changed', () async {

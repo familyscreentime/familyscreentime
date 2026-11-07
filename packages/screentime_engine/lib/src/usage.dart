@@ -20,12 +20,18 @@ class UsageSegment {
   /// End, excluded. For ongoing use, the caller passes the current instant.
   final DateTime end;
 
+  /// What the app was used for, when the device could tell: in a browser,
+  /// [UsageActivity.video], [UsageActivity.scroll] or [UsageActivity.other].
+  /// The rules do not look at it.
+  final String? activity;
+
   UsageSegment.device({
     required this.childId,
     required String this.deviceId,
     required String this.appId,
     required this.start,
     required this.end,
+    this.activity,
   }) : injectedTarget = null {
     _check();
   }
@@ -36,7 +42,8 @@ class UsageSegment {
     required this.start,
     required this.end,
   }) : deviceId = null,
-       appId = null {
+       appId = null,
+       activity = null {
     _check();
   }
 
@@ -53,6 +60,26 @@ class UsageSegment {
   /// Part of the segment within [from, to), or `null` when empty.
   Interval? clip(DateTime from, DateTime to) =>
       Interval(start, end).clip(from, to);
+}
+
+/// The videos played in any browser, as an app of their own: the parent
+/// puts it in a group (with the video apps, say) or limits it alone. The
+/// time a browser plays a video ([UsageActivity.video]) counts for it, as
+/// well as for the browser. Not a package name: none starts with `@`.
+const browserVideoApp = '@browser-video';
+
+/// What a browser was used for, as [UsageSegment.activity].
+abstract final class UsageActivity {
+  /// A video or other media playing.
+  static const video = 'video';
+
+  /// Scrolling in quick bursts, as through a feed.
+  static const scroll = 'scroll';
+
+  /// Anything else: reading, searching, writing…
+  static const other = 'other';
+
+  static const all = [video, scroll, other];
 }
 
 /// Interval [start, end).

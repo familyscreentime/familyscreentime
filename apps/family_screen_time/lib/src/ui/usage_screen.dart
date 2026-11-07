@@ -2,9 +2,13 @@
 /// flags that help spot apps worth a closer look, and a detail per app.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
+import '../browser_activity.dart';
 import '../controller.dart';
 import '../family.dart';
 import '../ordering.dart';
@@ -166,7 +170,12 @@ class _UsageScreenState extends State<UsageScreen> {
                   together:
                       c.family.config.counting == SimultaneousCounting.elapsed,
                 );
-                final devices = devicesOf(history, child, _names);
+                // Only the devices used in the period: one unlinked long
+                // ago keeps its time in the totals, not a chip at 0 min.
+                final devices = [
+                  for (final d in devicesOf(history, child, _names))
+                    if (reportOf(d).total > Duration.zero) d,
+                ];
                 final device = devices.contains(_device) ? _device : null;
                 final report = reportOf(device);
                 return RefreshIndicator(
@@ -290,7 +299,7 @@ class _UsageScreenState extends State<UsageScreen> {
 List<String> appBadges(AppController c, AppUsage app) {
   final s = c.s;
   final config = c.family.config;
-  final allowed = config.alwaysAllowed.contains(app.appId);
+  final allowed = c.alwaysAllowed.contains(app.appId);
   final limited = c.activeChildRules.any(
     (r) =>
         (r.hasQuota || r.schedule != null) &&
@@ -304,10 +313,13 @@ List<String> appBadges(AppController c, AppUsage app) {
   ];
 }
 
-Widget appIcon(AppInfo? info, {double size = 40}) {
+Widget appIcon(AppInfo? info, {double size = 40, String? package}) {
   final icon = info?.icon;
   if (icon != null) {
     return Image.memory(icon, width: size, height: size, gaplessPlayback: true);
+  }
+  if (package == browserVideoApp) {
+    return Icon(Icons.ondemand_video, size: size);
   }
   return Icon(Icons.android, size: size);
 }
@@ -398,6 +410,41 @@ class AppUsageScreen extends StatelessWidget {
     required this.info,
     required this.parent,
   });
+
+  /// Shares what the browsers measured, for the calibration of the
+  /// thresholds. To be removed once they are set.
+  Future<void> _exportBrowserSamples(BuildContext context) async {
+    final c = controller;
+    final messenger = ScaffoldMessenger.of(context);
+    final samples = await c.store.loadBrowserSamples(
+      since: addDays(dayOf(DateTime.now()), -365),
+    );
+    if (samples.isEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(c.s.t('exportEmpty'))));
+      return;
+    }
+    await c.loadLabels({for (final b in samples) b.package});
+    final csv = browserSamplesCsv(
+      samples,
+      (p) => c.appName(p, androidLabel: c.androidLabels[p]),
+    );
+    final dir = Directory('${(await getTemporaryDirectory()).path}/exports');
+    await dir.create(recursive: true);
+    final file = File(
+      '${dir.path}/browser-measures-${dayToJson(DateTime.now())}.csv',
+    );
+    await file.writeAsString(csv, flush: true);
+    final shared = await c.platform.shareFile(
+      file.path,
+      'text/csv',
+      c.s.t('browserExport'),
+    );
+    if (!shared) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(c.s.t('exportSaved', {'path': file.path}))),
+      );
+    }
+  }
 
   Future<void> _rename(BuildContext context) async {
     final c = controller;
@@ -574,6 +621,42 @@ class AppUsageScreen extends StatelessWidget {
               Text(s.t('appByDay'), style: theme.textTheme.titleSmall),
               const SizedBox(height: 8),
               dayChart(context, s, days, app.byDay),
+            ],
+            if (app.byActivity.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text(s.t('appByActivity'), style: theme.textTheme.titleSmall),
+              const SizedBox(height: 4),
+              for (final kind in UsageActivity.all)
+                if (app.byActivity[kind] case final time?)
+                  Text(
+                    s.t('activityLine', {
+                      'kind': s.t('activity_$kind'),
+                      'time': s.duration(time),
+                    }),
+                  ),
+              Text(
+                s.t('appByActivityHint', {
+                  'time': s.duration(
+                    app.total -
+                        app.byActivity.values.fold(
+                          Duration.zero,
+                          (a, b) => a + b,
+                        ),
+                  ),
+                }),
+                style: theme.textTheme.bodySmall,
+              ),
+              // For the calibration only: the raw measures are kept on the
+              // child's device.
+              if (parent && !c.settings.parentDevice)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.file_download_outlined),
+                    label: Text(s.t('browserExport')),
+                    onPressed: () => _exportBrowserSamples(context),
+                  ),
+                ),
             ],
             const SizedBox(height: 20),
             Text(s.t('appByHour'), style: theme.textTheme.titleSmall),

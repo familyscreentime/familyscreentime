@@ -107,12 +107,34 @@ FamilyData mergeJoining({
   g['groupOwners'] = gOwners;
 
   // Apps always allowed, or within the hours: either device's choice.
+  // The child's own lists, when either has some, from both.
+  final gAccess = familyConfigFromJson(gConfig);
+  final lAccess = familyConfigFromJson(lConfig);
   for (final k in ['alwaysAllowed', 'allowedInHours']) {
     final both = {
       ...?(gConfig[k] as List<Object?>?)?.cast<String>(),
       ...?(lConfig[k] as List<Object?>?)?.cast<String>(),
     };
     if (both.isNotEmpty) gConfig[k] = both.toList()..sort();
+  }
+  if (gAccess.hasOwnAccess(groupChild) || lAccess.hasOwnAccess(localChild)) {
+    final always = {
+      ...gAccess.alwaysAllowedFor(groupChild),
+      ...lAccess.alwaysAllowedFor(localChild),
+    };
+    final inHours = {
+      ...gAccess.allowedInHoursFor(groupChild),
+      ...lAccess.allowedInHoursFor(localChild),
+    }..removeAll(always);
+    for (final (k, apps) in [
+      ('alwaysAllowedByChild', always),
+      ('allowedInHoursByChild', inHours),
+    ]) {
+      gConfig[k] = {
+        ...Map<String, Object?>.from(gConfig[k] as Map? ?? const {}),
+        groupChild: apps.toList()..sort(),
+      };
+    }
   }
 
   // Names given to apps here, unless the others named them already.

@@ -25,7 +25,9 @@ class FamilyConfig {
   /// Device group → devices.
   final Map<String, Set<String>> deviceGroups;
 
-  /// "Always allowed" list shown to parents (phone and SMS by default).
+  /// "Always allowed" apps of the children who have no list of their own
+  /// (phone and SMS by default): the family's list before 0.30, kept for
+  /// them. See [alwaysAllowedFor].
   final Set<String> alwaysAllowed;
 
   /// System components that are never blocked (launcher, system UI,
@@ -36,6 +38,12 @@ class FamilyConfig {
   /// Apps never counted nor limited by time (messages, say), but only open
   /// within the hours and outside blocks, unlike [alwaysAllowed].
   final Set<String> allowedInHours;
+
+  /// Each child's own apps always allowed, and allowed within the hours,
+  /// by child: a child found in either has their own lists, in place of
+  /// the family's [alwaysAllowed] and [allowedInHours].
+  final Map<String, Set<String>> alwaysAllowedByChild;
+  final Map<String, Set<String>> allowedInHoursByChild;
 
   final List<Profile> profiles;
 
@@ -50,6 +58,8 @@ class FamilyConfig {
     this.alwaysAllowed = const {},
     this.neverBlocked = const {},
     this.allowedInHours = const {},
+    this.alwaysAllowedByChild = const {},
+    this.allowedInHoursByChild = const {},
     this.profiles = const [],
     this.weekStart = DateTime.monday,
     this.counting = SimultaneousCounting.sum,
@@ -61,6 +71,8 @@ class FamilyConfig {
     Set<String>? alwaysAllowed,
     Set<String>? neverBlocked,
     Set<String>? allowedInHours,
+    Map<String, Set<String>>? alwaysAllowedByChild,
+    Map<String, Set<String>>? allowedInHoursByChild,
     List<Profile>? profiles,
     int? weekStart,
     SimultaneousCounting? counting,
@@ -70,9 +82,36 @@ class FamilyConfig {
     alwaysAllowed: alwaysAllowed ?? this.alwaysAllowed,
     neverBlocked: neverBlocked ?? this.neverBlocked,
     allowedInHours: allowedInHours ?? this.allowedInHours,
+    alwaysAllowedByChild: alwaysAllowedByChild ?? this.alwaysAllowedByChild,
+    allowedInHoursByChild: allowedInHoursByChild ?? this.allowedInHoursByChild,
     profiles: profiles ?? this.profiles,
     weekStart: weekStart ?? this.weekStart,
     counting: counting ?? this.counting,
+  );
+
+  /// Whether [childId] has lists of their own.
+  bool hasOwnAccess(String? childId) =>
+      alwaysAllowedByChild.containsKey(childId) ||
+      allowedInHoursByChild.containsKey(childId);
+
+  /// The apps [childId] may use at any time, never limited by time.
+  Set<String> alwaysAllowedFor(String? childId) => hasOwnAccess(childId)
+      ? alwaysAllowedByChild[childId] ?? const {}
+      : alwaysAllowed;
+
+  /// The apps [childId] may use within the hours, never limited by time.
+  Set<String> allowedInHoursFor(String? childId) => hasOwnAccess(childId)
+      ? allowedInHoursByChild[childId] ?? const {}
+      : allowedInHours;
+
+  /// [childId] with these lists of their own.
+  FamilyConfig withAccess(
+    String childId, {
+    required Set<String> alwaysAllowed,
+    required Set<String> allowedInHours,
+  }) => copyWith(
+    alwaysAllowedByChild: {...alwaysAllowedByChild, childId: alwaysAllowed},
+    allowedInHoursByChild: {...allowedInHoursByChild, childId: allowedInHours},
   );
 }
 
@@ -276,7 +315,7 @@ class RuleEngine {
   }) {
     // 1. Always allowed, even during a family block.
     if (config.neverBlocked.contains(appId) ||
-        config.alwaysAllowed.contains(appId)) {
+        config.alwaysAllowedFor(childId).contains(appId)) {
       return const Decision(allowed: true, reason: Reason.alwaysAllowed);
     }
 
@@ -329,13 +368,22 @@ class RuleEngine {
       return const Decision(allowed: true, reason: Reason.noRule);
     }
 
-    // 6. Schedules, unless the parent opened a rule's hours early.
-    final outside = rules.where(
-      (r) =>
-          r.schedule != null &&
-          !r.schedule!.allows(now) &&
-          hoursUnlockEnd(state, r, now) == null,
-    );
+    // 6. Schedules, unless the parent opened a rule's hours early, or gave
+    // extra time outside them: the hours are then open while it lasts.
+    final opened = <Rule, Duration>{};
+    final outside = rules.where((r) {
+      if (r.schedule == null ||
+          r.schedule!.allows(now) ||
+          hoursUnlockEnd(state, r, now) != null) {
+        return false;
+      }
+      final left = bonusOutsideHours(state, r, childId: childId, now: now);
+      if (left != null && left > Duration.zero) {
+        opened[r] = left;
+        return false;
+      }
+      return true;
+    }).toList();
     if (outside.isNotEmpty) {
       DateTime? until;
       for (final r in outside) {
@@ -353,7 +401,7 @@ class RuleEngine {
     }
 
     // Apps open within the hours but never limited by time.
-    if (config.allowedInHours.contains(appId)) {
+    if (config.allowedInHoursFor(childId).contains(appId)) {
       return const Decision(allowed: true, reason: Reason.alwaysAllowed);
     }
 
@@ -449,6 +497,7 @@ class RuleEngine {
               : (open.$1, listening.id),
           rules: rules,
           breaks: breaks,
+          opened: opened,
           now: now,
         );
         return Decision(
@@ -465,6 +514,7 @@ class RuleEngine {
         grace: (graceLeft!, graceRule!),
         rules: rules,
         breaks: breaks,
+        opened: opened,
         now: now,
       );
       return Decision(
@@ -483,6 +533,7 @@ class RuleEngine {
       grace: null,
       rules: rules,
       breaks: breaks,
+      opened: opened,
       now: now,
     );
     return Decision(
@@ -601,20 +652,59 @@ class RuleEngine {
     return end;
   }
 
+  /// Extra time given today for [r] while outside its hours, still left at
+  /// [now] (negative once overrun): the hours are open while it lasts.
+  /// What is used from the first of those grants counts against it.
+  /// `null` when none was given outside the hours.
+  Duration? bonusOutsideHours(
+    FamilyState state,
+    Rule r, {
+    required String childId,
+    required DateTime now,
+  }) {
+    final schedule = r.schedule;
+    if (schedule == null) return null;
+    final today = dayOf(now);
+    var amount = Duration.zero;
+    DateTime? from;
+    for (final b in state.bonuses) {
+      if (b.childId != childId || !b.isValidAt(now)) continue;
+      if (b.ruleId != r.id &&
+          (b.appTarget == null || b.appTarget != r.appTarget)) {
+        continue;
+      }
+      if (b.grantedAt.isAfter(now) || b.grantedAt.isBefore(today)) continue;
+      if (schedule.allows(b.grantedAt)) continue;
+      amount += b.amount;
+      if (from == null || b.grantedAt.isBefore(from)) from = b.grantedAt;
+    }
+    if (from == null) return null;
+    return amount -
+        consumption(state, r, childId: childId, from: from, to: now);
+  }
+
   bool isDayUnlocked(FamilyState state, String childId, DateTime t) =>
       state.dayUnlocks.any((u) => u.childId == childId && u.coversDay(t));
 
   /// True when the segment counts towards the rule.
   ///
-  /// Time in "always allowed" apps and never-blocked system components does
+  /// A browser's video time also counts for the rules covering
+  /// [browserVideoApp]. Time in "always allowed" apps and never-blocked system components does
   /// not count. Injected time has no device: it counts towards rules that
   /// target all devices and whose app target is "All", the same target, or a
   /// group containing the injected app.
   bool segmentCounts(Rule r, UsageSegment s) {
+    // A video in a browser counts for the rules naming the browser's
+    // videos, even when the browser itself is never limited.
+    if (s.activity == UsageActivity.video &&
+        r.appTarget.kind != TargetKind.all &&
+        r.appTarget.covers(browserVideoApp, config.appGroups)) {
+      return r.deviceTarget.covers(s.deviceId!, config.deviceGroups);
+    }
     final app = s.appId;
     if (app != null &&
-        (config.alwaysAllowed.contains(app) ||
-            config.allowedInHours.contains(app) ||
+        (config.alwaysAllowedFor(s.childId).contains(app) ||
+            config.allowedInHoursFor(s.childId).contains(app) ||
             config.neverBlocked.contains(app))) {
       return false;
     }
@@ -757,6 +847,13 @@ class RuleEngine {
   /// Day-by-day account of the rule's daily limit, from the earliest
   /// relevant day up to today (last element, stopped at [now]).
   ///
+  /// Each past day is judged by the daily limit in force that day
+  /// ([Rule.history]): the limit at the end of the day sets the time
+  /// allowed (today: the current limit, always); a day when the limit changed only overruns the most generous
+  /// of its limits, and a day with no limit for part of it overruns
+  /// nothing. A stricter limit is thus never applied to the time used
+  /// before it.
+  ///
   /// Days are simulated in order because carry-over and savings depend on
   /// it: a day's carry-over comes from the previous days' overruns, and
   /// savings build up and are spent over time. The oldest savings are
@@ -813,7 +910,12 @@ class RuleEngine {
       final end = isToday ? now : addDays(day, 1);
       pots.removeWhere((p) => p.index < i - keep);
 
-      final quota = r.dailyQuotaOn(day);
+      // Today: the rule as it is now, whatever the clock says (a clock set
+      // back to before a change does not bring the former limit back).
+      final quota = isToday
+          ? r.dailyQuotaOn(day)
+          : r.dailyQuotaAt(end.subtract(_instant));
+      final overrunQuota = _overrunQuota(r, day, end);
       if (quota == null || !_ruleActiveOn(r, day)) {
         overruns.add(Duration.zero);
         ledger.add(DayLedger.inactive(day));
@@ -871,8 +973,10 @@ class RuleEngine {
       }
 
       // Overrun is measured against the nominal quota so that carry-overs
-      // do not snowball.
-      var over = used - (quota + bonus) - drawn;
+      // do not snowball, and against the most generous limit of the day.
+      var over = overrunQuota == null
+          ? Duration.zero
+          : used - (overrunQuota + bonus) - drawn;
       if (unlocked || over < Duration.zero) over = Duration.zero;
       overruns.add(over);
 
@@ -917,6 +1021,20 @@ class RuleEngine {
   bool _ruleActiveOn(Rule r, DateTime day) =>
       _profileMatches(r, activeProfileId(config.profiles, day));
 
+  static const _instant = Duration(microseconds: 1);
+
+  /// The limit a day's overrun is measured against: the most generous of
+  /// those in force from [day] to [end]; `null` when there was no limit
+  /// for part of it.
+  Duration? _overrunQuota(Rule r, DateTime day, DateTime end) {
+    Duration? most;
+    for (final q in r.dailyQuotasDuring(day, end)) {
+      if (q == null) return null;
+      if (most == null || q > most) most = q;
+    }
+    return most;
+  }
+
   /// A day's overrun computed on its own (without savings), for days before
   /// the start of the simulation.
   Duration _standaloneOverrun(
@@ -925,10 +1043,10 @@ class RuleEngine {
     String childId,
     DateTime day,
   ) {
-    final quota = r.dailyQuotaOn(day);
+    final end = addDays(day, 1);
+    final quota = _overrunQuota(r, day, end);
     if (quota == null || !_ruleActiveOn(r, day)) return Duration.zero;
     if (isDayUnlocked(state, childId, day)) return Duration.zero;
-    final end = addDays(day, 1);
     final used = consumption(state, r, childId: childId, from: day, to: end);
     final b = bonuses(
       state,
@@ -1123,6 +1241,7 @@ class RuleEngine {
     required (Duration, String)? grace,
     required List<Rule> rules,
     required Map<Rule, BreakStatus> breaks,
+    Map<Rule, Duration> opened = const {},
     required DateTime now,
   }) {
     Duration? best;
@@ -1151,6 +1270,10 @@ class RuleEngine {
     }
     for (final e in breaks.entries) {
       consider(e.value.untilBreak, Limiter.breakDue, e.key.id);
+    }
+    // Outside the hours, the extra time given then.
+    for (final e in opened.entries) {
+      consider(e.value, Limiter.quota, e.key.id);
     }
     return (best, limiter, ruleId);
   }

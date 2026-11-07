@@ -146,6 +146,33 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
             }
             "visible" -> visible(data.getStringArrayList("packages") ?: arrayListOf())
             "reload" -> reload()
+            // What a browser in front measured (see BrowserWatch).
+            "browserActivity" -> {
+                val sample = mapOf(
+                    "package" to data.getString("package"),
+                    "start" to data.getLong("start"),
+                    "end" to data.getLong("end"),
+                    "scrolls" to data.getInt("scrolls"),
+                    "bursts" to data.getInt("bursts"),
+                    "scrollDistance" to data.getLong("scrollDistance"),
+                    "mediaMs" to data.getLong("mediaMs"),
+                    "otherMediaMs" to data.getLong("otherMediaMs"),
+                )
+                main.post { channel?.invokeMethod("browserActivity", sample) }
+            }
+            // The child's answer to an eye break's notice, or "busy".
+            "browserMedia" -> main.post {
+                channel?.invokeMethod(
+                    "browserMedia",
+                    mapOf(
+                        "package" to data.getString("package"),
+                        "playing" to data.getBoolean("playing"),
+                    ),
+                )
+            }
+            "eyeBreak" -> main.post {
+                channel?.invokeMethod("eyeBreak", mapOf("action" to data.getString("action")))
+            }
         }
     }
 
@@ -326,6 +353,8 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
     /** From the main process, or this process's poller ([fromEnforcer] false). */
     private fun onForegroundApp(pkg: String, fromEnforcer: Boolean = false) {
         main.post {
+            // Nothing is in use while the screen is off or locked.
+            if (!screenOn) return@post
             if (pkg == lastForeground) return@post
             lastForeground = pkg
             if (!fromEnforcer) toEnforcer(Bundle().apply {
@@ -383,8 +412,24 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
                 Shared.notificationManager(this).notify(Shared.MONITOR_ID, n)
                 result.success(null)
             }
+            // Rules a parent changed on another device: one notification,
+            // replaced by the next.
+            "rulesChanged" -> {
+                val text = call.argument<String>("text") ?: ""
+                val n = Shared.builder(this, Shared.RULES_CHANNEL)
+                    .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                    .setContentTitle(call.argument<String>("title") ?: "")
+                    .setContentText(text)
+                    .setStyle(Notification.BigTextStyle().bigText(text))
+                    .setContentIntent(Shared.openAppIntent(this))
+                    .setAutoCancel(true)
+                    .build()
+                Shared.notificationManager(this).notify(Shared.RULES_ID, n)
+                result.success(null)
+            }
             "block", "unblock", "warn", "overlay", "overlayHide", "lockState",
-            "volumeCap", "familyChanged" -> {
+            "volumeCap", "familyChanged", "eyeNotice", "eyeVeil", "eyeHide",
+            "pauseMedia" -> {
                 forward(call.method, call.arguments as? Map<*, *>)
                 result.success(null)
             }

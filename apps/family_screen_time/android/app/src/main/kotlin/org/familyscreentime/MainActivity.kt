@@ -1,10 +1,13 @@
 package org.familyscreentime
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 
-/** Hosts the Flutter interface (child and parent screens). */
-class MainActivity : FlutterActivity() {
+/**
+ * Hosts the Flutter interface (child and parent screens). A fragment
+ * activity, for the biometric prompt.
+ */
+class MainActivity : FlutterFragmentActivity() {
     override fun onResume() {
         super.onResume()
         visible = true

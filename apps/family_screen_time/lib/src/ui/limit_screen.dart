@@ -280,7 +280,13 @@ class _AppPickerState extends State<_AppPicker> {
           c.appName(a.package, androidLabel: a.label).toLowerCase();
       if (!mounted) return;
       setState(
-        () => _apps = [...apps]..sort((a, b) => name(a).compareTo(name(b))),
+        () => _apps = [...apps]
+          ..sort((a, b) {
+            // The browsers' videos, then the apps by name.
+            final va = a.package == browserVideoApp;
+            if (va != (b.package == browserVideoApp)) return va ? -1 : 1;
+            return name(a).compareTo(name(b));
+          }),
       );
       // Then the icons, from here or the other devices.
       try {
@@ -330,7 +336,11 @@ class _AppPickerState extends State<_AppPicker> {
                     itemBuilder: (context, i) {
                       final app = shown[i];
                       return ListTile(
-                        leading: appIcon(_info[app.package], size: 36),
+                        leading: appIcon(
+                          _info[app.package],
+                          size: 36,
+                          package: app.package,
+                        ),
                         title: Text(
                           c.appName(app.package, androidLabel: app.label),
                         ),

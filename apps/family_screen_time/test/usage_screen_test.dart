@@ -169,6 +169,17 @@ void main() {
           ),
         );
       }
+      // A device unlinked since, used three days ago.
+      final before = addDays(today, -3);
+      await store.appendUsage(
+        UsageSegment.device(
+          childId: 'emma',
+          deviceId: 'old12345678',
+          appId: 'minecraft',
+          start: before,
+          end: before.add(const Duration(minutes: 30)),
+        ),
+      );
     });
     await tester.pumpWidget(
       MaterialApp(home: UsageScreen(controller: controller, parent: true)),
@@ -183,6 +194,13 @@ void main() {
     expect(find.text('Tous les appareils · 55 min'), findsOneWidget);
     expect(find.text('Tablette · 40 min'), findsOneWidget);
     expect(find.text('phone123 · 15 min'), findsOneWidget);
+    // Not used today: no chip at 0 min.
+    expect(find.textContaining('old12345'), findsNothing);
+    await tester.tap(find.text('7 jours'));
+    await tester.pumpAndSettle();
+    expect(find.text('old12345 · 30 min'), findsOneWidget);
+    await tester.tap(find.text('Aujourd\'hui'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('phone123 · 15 min'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('phone123 · 15 min'));

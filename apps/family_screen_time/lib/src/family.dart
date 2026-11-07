@@ -60,8 +60,24 @@ const knownLaunchers = {
 /// Configuration for a new family on this device.
 FamilyConfig initialConfig(SystemPackages p) => FamilyConfig(
   alwaysAllowed: {?p.dialer, ?p.sms},
-  neverBlocked: {p.self, ...p.launchers, ...knownSystemPackages},
+  neverBlocked: {
+    p.self,
+    ...p.launchers,
+    ...p.callScreens,
+    ...knownSystemPackages,
+  },
 );
+
+/// [f] with [apps] among those never blocked nor counted: the screens of a
+/// phone call on this device, say.
+FamilyData withNeverBlocked(FamilyData f, Iterable<String> apps) =>
+    f.config.neverBlocked.containsAll(apps)
+    ? f
+    : f.copyWith(
+        config: f.config.copyWith(
+          neverBlocked: {...f.config.neverBlocked, ...apps},
+        ),
+      );
 
 /// Keeps the list of system components up to date (launchers can change).
 /// The always-allowed apps are the parent's choice: set once at setup, then
@@ -71,21 +87,19 @@ FamilyConfig refreshSystemLists(FamilyConfig c, SystemPackages p) => c.copyWith(
     ...c.neverBlocked,
     p.self,
     ...p.launchers,
+    ...p.callScreens,
     ...knownSystemPackages,
   },
 );
 
-/// [f] with the known system components among the apps never blocked nor
-/// counted, so components added in an update apply at once, to existing
-/// families and to the time already recorded.
+/// [f] with the known system components and home screens among the apps
+/// never blocked nor counted, so components added in an update apply at
+/// once, to existing families and to the time already recorded. The home
+/// screens of the usual makers count for the devices that have not shared
+/// theirs: a child's home screen is never screen time, whichever device
+/// adds up the time.
 FamilyData withKnownSystem(FamilyData f) =>
-    f.config.neverBlocked.containsAll(knownSystemPackages)
-    ? f
-    : f.copyWith(
-        config: f.config.copyWith(
-          neverBlocked: {...f.config.neverBlocked, ...knownSystemPackages},
-        ),
-      );
+    withNeverBlocked(f, {...knownSystemPackages, ...knownLaunchers});
 
 /// Name shown for a rule. An app's own name comes from [labels] (Android's
 /// names by package), unless the parent renamed it.
@@ -98,7 +112,11 @@ String ruleLabel(
   TargetKind.all => s.t('allScreens'),
   TargetKind.group => f.groupNames[r.appTarget.id] ?? r.appTarget.id!,
   TargetKind.single =>
-    f.appNames[r.appTarget.id] ?? labels[r.appTarget.id] ?? r.appTarget.id!,
+    f.appNames[r.appTarget.id] ??
+        labels[r.appTarget.id] ??
+        (r.appTarget.id == browserVideoApp
+            ? s.t('browserVideos')
+            : r.appTarget.id!),
 };
 
 /// Packages of the apps limited on their own.
@@ -109,6 +127,55 @@ Set<String> singleAppTargets(Iterable<Rule> rules) => {
 
 /// Usage history the engine may need: weekly quota, carry-over, savings.
 const usageHistoryDays = 40;
+
+/// The rules of [after], each with its daily limit's earlier versions
+/// (`Rule.history`): those it had in [before], and the version [before]
+/// held when its daily limit, or whether it is on, changed at [now]. A
+/// rule new at [now] had none before. Versions older than the usage looked
+/// at are dropped. Past days are thus judged by the limit in force then.
+FamilyData withRuleVersions(FamilyData before, FamilyData after, DateTime now) {
+  final was = {for (final r in before.state.rules) r.id: r};
+  final oldest = now.subtract(const Duration(days: usageHistoryDays + 7));
+  var changed = false;
+  final rules = [
+    for (final r in after.state.rules)
+      () {
+        final old = was[r.id];
+        final versions = old == null
+            // New here: none before, unless it came with its own (a rule
+            // put back, say).
+            ? (r.history.isEmpty ? [RuleVersion.none(now)] : [...r.history])
+            : [
+                ...old.history,
+                if (_limitChanged(old, r)) RuleVersion.of(old, now),
+              ];
+        versions.removeWhere((v) => !v.until.isAfter(oldest));
+        if (_sameVersions(versions, r.history)) return r;
+        changed = true;
+        return r.withHistory(versions);
+      }(),
+  ];
+  if (!changed) return after;
+  return after.copyWith(state: after.state.copyWith(rules: rules));
+}
+
+bool _limitChanged(Rule a, Rule b) =>
+    a.enabled != b.enabled ||
+    a.dailyQuota != b.dailyQuota ||
+    !_sameQuotas(a.dailyQuotaByWeekday, b.dailyQuotaByWeekday);
+
+bool _sameQuotas(Map<int, Duration> a, Map<int, Duration> b) =>
+    a.length == b.length && a.entries.every((e) => b[e.key] == e.value);
+
+bool _sameVersions(List<RuleVersion> a, List<RuleVersion> b) =>
+    a.length == b.length &&
+    [
+      for (var i = 0; i < a.length; i++)
+        a[i].until == b[i].until &&
+            a[i].active == b[i].active &&
+            a[i].dailyQuota == b[i].dailyQuota &&
+            _sameQuotas(a[i].dailyQuotaByWeekday, b[i].dailyQuotaByWeekday),
+    ].every((same) => same);
 
 /// One-line summary of a rule: daily and weekly time, set hours.
 ///

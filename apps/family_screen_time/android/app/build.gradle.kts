@@ -14,6 +14,15 @@ val keyProperties = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// The demonstration build (-P demo=true, with lib/main_demo.dart): its own
+// app beside the real one, with a made-up family and nothing kept.
+val demo = (project.findProperty("demo") as String?) == "true"
+
+// The calibration build (-P calibration=true): the full app, as its own app
+// beside the one from Google Play, to measure browser use on a few devices.
+// To be removed once the thresholds are set.
+val calibration = (project.findProperty("calibration") as String?) == "true"
+
 android {
     namespace = "org.familyscreentime"
     compileSdk = flutter.compileSdkVersion
@@ -36,6 +45,19 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLabel"] = "Family Screen Time"
+        manifestPlaceholders["serviceLabel"] = "@string/accessibility_label"
+        if (calibration) {
+            applicationIdSuffix = ".calibration"
+            versionNameSuffix = "-calibration"
+            manifestPlaceholders["appLabel"] = "FST calibrage"
+            manifestPlaceholders["serviceLabel"] = "FST calibrage"
+        }
+        if (demo) {
+            applicationIdSuffix = ".demo"
+            versionNameSuffix = "-demo"
+            manifestPlaceholders["appLabel"] = "FST démo"
+        }
     }
 
     signingConfigs {
@@ -73,4 +95,6 @@ flutter {
 dependencies {
     // FileProvider, to share exports.
     implementation("androidx.core:core:1.13.1")
+    // Fingerprint or face unlocking of parent mode, on a parent's device.
+    implementation("androidx.biometric:biometric:1.1.0")
 }

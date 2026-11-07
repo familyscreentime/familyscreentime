@@ -12,6 +12,7 @@ import 'dart:math';
 import 'package:path_provider/path_provider.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
+import 'browser_activity.dart';
 import 'family.dart' show usageHistoryDays;
 import 'self_limits.dart';
 
@@ -47,6 +48,17 @@ class AppSettings {
   /// child's choice. Warnings and closing still follow every limit.
   final Set<String> hiddenCountdowns;
 
+  /// Messages the parent wrote with a block on this device, latest first,
+  /// offered again in one tap.
+  final List<String> blockMessages;
+
+  /// On a parent's device: the parent code, sealed by a key that only this
+  /// device's fingerprint or face opens (parent mode opened with them).
+  final String? biometricSeal;
+
+  /// Opening parent mode with the fingerprint or face was offered once.
+  final bool biometricOffered;
+
   const AppSettings({
     required this.deviceId,
     required this.language,
@@ -62,6 +74,9 @@ class AppSettings {
     this.overlay = 'off',
     this.warningMinutes = defaultWarningMinutes,
     this.hiddenCountdowns = const {},
+    this.blockMessages = const [],
+    this.biometricSeal,
+    this.biometricOffered = false,
   });
 
   AppSettings copyWith({
@@ -79,6 +94,10 @@ class AppSettings {
     String? overlay,
     List<int>? warningMinutes,
     Set<String>? hiddenCountdowns,
+    List<String>? blockMessages,
+    String? biometricSeal,
+    bool clearBiometric = false,
+    bool? biometricOffered,
   }) => AppSettings(
     deviceId: deviceId,
     language: language ?? this.language,
@@ -94,6 +113,9 @@ class AppSettings {
     overlay: overlay ?? this.overlay,
     warningMinutes: warningMinutes ?? this.warningMinutes,
     hiddenCountdowns: hiddenCountdowns ?? this.hiddenCountdowns,
+    blockMessages: blockMessages ?? this.blockMessages,
+    biometricSeal: clearBiometric ? null : biometricSeal ?? this.biometricSeal,
+    biometricOffered: biometricOffered ?? this.biometricOffered,
   );
 
   Json toJson() => {
@@ -113,6 +135,9 @@ class AppSettings {
     'warningMinutes': warningMinutes,
     if (hiddenCountdowns.isNotEmpty)
       'hiddenCountdowns': hiddenCountdowns.toList()..sort(),
+    if (blockMessages.isNotEmpty) 'blockMessages': blockMessages,
+    if (biometricSeal != null) 'biometricSeal': biometricSeal,
+    if (biometricOffered) 'biometricOffered': true,
   };
 
   factory AppSettings.fromJson(Json j) => AppSettings(
@@ -128,10 +153,16 @@ class AppSettings {
     historyImported: j['historyImported'] as bool? ?? false,
     parentDevice: j['parentDevice'] as bool? ?? false,
     overlay: j['overlay'] as String? ?? 'off',
+    biometricSeal: j['biometricSeal'] as String?,
+    biometricOffered: j['biometricOffered'] as bool? ?? false,
     hiddenCountdowns: {
       for (final k in j['hiddenCountdowns'] as List<Object?>? ?? const [])
         k as String,
     },
+    blockMessages: [
+      for (final m in j['blockMessages'] as List<Object?>? ?? const [])
+        m as String,
+    ],
     warningMinutes: j['warningMinutes'] == null
         ? defaultWarningMinutes
         : [
@@ -176,29 +207,70 @@ class Child {
   /// Media volume cap on the speaker, in percent; `null`: no cap.
   final int? volumeSpeaker;
 
+  /// Breaks to look into the distance, on by default.
+  final EyeBreakPolicy eyeBreak;
+
+  /// Minutes between reminders during grace time (0: at the start only);
+  /// `null`: the family's setting, from before 0.30 (see
+  /// [FamilyData.graceReminderMinutesFor]). Likewise for the next two.
+  final int? graceReminderMinutes;
+
+  /// What happens when there is no screen time left at all.
+  final OutOfTime? outOfTime;
+
+  /// The Android settings are for the parent only, at all times.
+  final bool? settingsParentOnly;
+
   const Child({
     required this.id,
     required this.name,
     this.presets = defaultPresets,
     this.volumeHeadphones,
     this.volumeSpeaker,
+    this.eyeBreak = const EyeBreakPolicy(),
+    this.graceReminderMinutes,
+    this.outOfTime,
+    this.settingsParentOnly,
   });
 
-  Child withPresets(List<int> presets) => Child(
+  Child _with({
+    List<int>? presets,
+    (int?, int?)? volume,
+    EyeBreakPolicy? eyeBreak,
+    int? graceReminderMinutes,
+    OutOfTime? outOfTime,
+    bool? settingsParentOnly,
+  }) => Child(
     id: id,
     name: name,
-    presets: presets,
-    volumeHeadphones: volumeHeadphones,
-    volumeSpeaker: volumeSpeaker,
+    presets: presets ?? this.presets,
+    volumeHeadphones: volume == null ? volumeHeadphones : volume.$1,
+    volumeSpeaker: volume == null ? volumeSpeaker : volume.$2,
+    eyeBreak: eyeBreak ?? this.eyeBreak,
+    graceReminderMinutes: graceReminderMinutes ?? this.graceReminderMinutes,
+    outOfTime: outOfTime ?? this.outOfTime,
+    settingsParentOnly: settingsParentOnly ?? this.settingsParentOnly,
   );
 
+  Child withPresets(List<int> presets) => _with(presets: presets);
+
   /// The same child with new volume caps (`null`: no cap).
-  Child withVolume({int? headphones, int? speaker}) => Child(
-    id: id,
-    name: name,
-    presets: presets,
-    volumeHeadphones: headphones,
-    volumeSpeaker: speaker,
+  Child withVolume({int? headphones, int? speaker}) =>
+      _with(volume: (headphones, speaker));
+
+  /// The same child with new eye-break settings.
+  Child withEyeBreak(EyeBreakPolicy policy) => _with(eyeBreak: policy);
+
+  /// The same child with these settings of their own; those not given
+  /// stay as they were.
+  Child withSettings({
+    int? graceReminderMinutes,
+    OutOfTime? outOfTime,
+    bool? settingsParentOnly,
+  }) => _with(
+    graceReminderMinutes: graceReminderMinutes,
+    outOfTime: outOfTime,
+    settingsParentOnly: settingsParentOnly,
   );
 
   Json toJson() => {
@@ -207,6 +279,10 @@ class Child {
     'presets': presets,
     'volumeHeadphones': ?volumeHeadphones,
     'volumeSpeaker': ?volumeSpeaker,
+    'eyeBreak': eyeBreak.toJson(),
+    'graceReminderMinutes': ?graceReminderMinutes,
+    'outOfTime': ?outOfTime?.name,
+    'settingsParentOnly': ?settingsParentOnly,
   };
 
   factory Child.fromJson(Json j) => Child(
@@ -217,6 +293,15 @@ class Child {
         : [for (final m in j['presets'] as List<Object?>) (m as num).toInt()],
     volumeHeadphones: (j['volumeHeadphones'] as num?)?.toInt(),
     volumeSpeaker: (j['volumeSpeaker'] as num?)?.toInt(),
+    eyeBreak: j['eyeBreak'] == null
+        ? const EyeBreakPolicy()
+        : EyeBreakPolicy.fromJson(j['eyeBreak'] as Json),
+    graceReminderMinutes: (j['graceReminderMinutes'] as num?)?.toInt(),
+    outOfTime: switch (j['outOfTime']) {
+      final String name => OutOfTime.values.asNameMap()[name],
+      _ => null,
+    },
+    settingsParentOnly: j['settingsParentOnly'] as bool?,
   );
 }
 
@@ -237,6 +322,9 @@ class FamilyData {
   final Map<String, String> appNames;
 
   /// Minutes between reminders during grace time; 0: at the start only.
+  /// Before 0.30, for the whole family; now for the children who have no
+  /// setting of their own ([Child.graceReminderMinutes]), as are the next
+  /// two.
   final int graceReminderMinutes;
 
   /// Time spent away from the devices (console, TV), entered by the parent.
@@ -301,6 +389,19 @@ class FamilyData {
     settingsParentOnly: settingsParentOnly ?? this.settingsParentOnly,
     usageKeptDays: usageKeptDays ?? this.usageKeptDays,
   );
+
+  /// [childId]'s minutes between reminders during grace time: their own,
+  /// else the family's (before 0.30, a family setting).
+  int graceReminderMinutesFor(String? childId) =>
+      child(childId)?.graceReminderMinutes ?? graceReminderMinutes;
+
+  /// What happens when [childId] has no screen time left at all.
+  OutOfTime outOfTimeFor(String? childId) =>
+      child(childId)?.outOfTime ?? outOfTime;
+
+  /// Whether [childId]'s Android settings are for the parent only.
+  bool settingsParentOnlyFor(String? childId) =>
+      child(childId)?.settingsParentOnly ?? settingsParentOnly;
 
   Child? child(String? id) {
     for (final c in children) {
@@ -388,18 +489,23 @@ class OpenSegment {
   final DateTime start;
   final DateTime lastSeen;
 
-  const OpenSegment(this.appId, this.start, this.lastSeen);
+  /// What the app is used for, when known (see [UsageSegment.activity]).
+  final String? activity;
+
+  const OpenSegment(this.appId, this.start, this.lastSeen, {this.activity});
 
   Json toJson() => {
     'appId': appId,
     'start': instantToJson(start),
     'lastSeen': instantToJson(lastSeen),
+    'activity': ?activity,
   };
 
   factory OpenSegment.fromJson(Json j) => OpenSegment(
     j['appId'] as String,
     instantFromJson(j['start']),
     instantFromJson(j['lastSeen']),
+    activity: j['activity'] as String?,
   );
 }
 
@@ -547,7 +653,7 @@ class LocalStore {
     final days = keptDays < usageHistoryDays ? usageHistoryDays : keptDays;
     final before = '${dayToJson(addDays(today, -days))}.jsonl';
     var removed = 0;
-    for (final d in [_usageDir, _importedDir]) {
+    for (final d in [_usageDir, _importedDir, _browserDir]) {
       if (!await d.exists()) continue;
       await for (final f in d.list()) {
         final name = f.uri.pathSegments.last;
@@ -577,6 +683,39 @@ class LocalStore {
     }
     if (first == null) return null;
     return DateTime.tryParse(first.substring(0, first.length - 6));
+  }
+
+  Directory get _browserDir => Directory('${dir.path}/browser');
+
+  /// What the browsers measured, from [since] (a day): kept on this device
+  /// only, to check how their use is classed.
+  Future<List<BrowserSample>> loadBrowserSamples({
+    required DateTime since,
+  }) async {
+    final result = <BrowserSample>[];
+    final today = dayOf(DateTime.now());
+    for (var day = dayOf(since); !day.isAfter(today); day = addDays(day, 1)) {
+      final f = File('${_browserDir.path}/${dayToJson(day)}.jsonl');
+      if (!await f.exists()) continue;
+      for (final line in await f.readAsLines()) {
+        if (line.trim().isEmpty) continue;
+        try {
+          result.add(BrowserSample.fromJson(jsonDecode(line) as Json));
+        } on Object {
+          // A line cut short by a crash is skipped.
+        }
+      }
+    }
+    return result;
+  }
+
+  Future<void> appendBrowserSample(BrowserSample b) async {
+    await _browserDir.create(recursive: true);
+    await File('${_browserDir.path}/${dayToJson(b.start)}.jsonl').writeAsString(
+      '${jsonEncode(b.toJson())}\n',
+      mode: FileMode.append,
+      flush: true,
+    );
   }
 
   /// Appends a closed segment to the file of the day it starts on.
@@ -621,6 +760,7 @@ Iterable<UsageSegment> splitByDay(UsageSegment s) sync* {
             appId: s.appId!,
             start: from,
             end: to,
+            activity: s.activity,
           );
     from = to;
   }

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:family_screen_time/src/controller.dart';
+import 'package:family_screen_time/src/platform.dart' show AppVersion;
 import 'package:family_screen_time/src/store.dart';
 import 'package:family_screen_time/src/sync/family_sync.dart';
 import 'package:family_screen_time/src/sync/receipts.dart';
@@ -163,5 +164,65 @@ void main() {
     expect(find.text('Papa : en attente'), findsWidgets);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
+  });
+
+  test('each device says its version, accepted by every version', () async {
+    final dirT = await Directory.systemTemp.createTemp('fst-t');
+    final dirP = await Directory.systemTemp.createTemp('fst-p');
+    addTearDown(() => dirT.delete(recursive: true));
+    addTearDown(() => dirP.delete(recursive: true));
+    const family = FamilyData(
+      children: [Child(id: 'emma', name: 'Emma')],
+    );
+    final (tablet, key) = await FamilySync.create(
+      store: LocalStore(dirT),
+      settings: const AppSettings(
+        deviceId: 'tablet',
+        language: 'fr',
+        setupDone: true,
+        childId: 'emma',
+      ),
+      family: family,
+      parentCode: '123456',
+      deviceName: 'Tablette',
+    );
+    final phoneId = await DeviceIdentity.generate('phone');
+    await tablet.node.emit([
+      EventDraft.put(SyncKeys.device('phone'), {
+        'name': 'Papa',
+        'role': 'parent',
+        'signKey': phoneId.signing.publicKey,
+      }),
+    ], parentKey: key);
+    final phone = await FamilySync.join(
+      store: LocalStore(dirP),
+      identity: phoneId,
+      welcome: Welcome(
+        tablet.node.root,
+        tablet.node.store.missingFor(const {}, limit: 1 << 30),
+      ),
+    );
+    await phone.commit();
+
+    // Once per version.
+    expect(await recordVersion(tablet, const AppVersion('0.28.0', 54)), isTrue);
+    expect(
+      await recordVersion(tablet, const AppVersion('0.28.0', 54)),
+      isFalse,
+    );
+    // The parent's phone, which may sign nothing else alone, says its own.
+    expect(await recordVersion(phone, const AppVersion('0.28.1', 55)), isTrue);
+    // Receipts after the version: both kept.
+    await recordReceipts(phone);
+    await pass(phone, tablet);
+    await pass(tablet, phone);
+    expect(versionOf(phone, 'tablet')?.name, '0.28.0');
+    expect(versionOf(tablet, 'phone')?.build, 55);
+    expect(versionOf(phone, 'phone')?.name, '0.28.1');
+    // The receipts are still read by origin, the version field aside.
+    expect(
+      phone.node.replica[seenKey('phone')]!.keys.where((k) => k != 'app'),
+      isNotEmpty,
+    );
   });
 }

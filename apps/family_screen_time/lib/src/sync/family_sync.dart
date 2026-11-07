@@ -105,6 +105,7 @@ class FamilySyncPolicy extends SyncPolicy {
 
   /// Entities that concern one child (their `childId`).
   static const childKeys = [
+    FamilyKeys.access,
     FamilyKeys.rule,
     FamilyKeys.group,
     FamilyKeys.bonus,
@@ -122,7 +123,9 @@ String appsOf(String deviceId) => 'app/$deviceId/';
 
 /// Key of a device's system components in the log (`packages`): its home
 /// screen and the like, never counted in the statistics.
-String systemOf(String deviceId) => 'system/$deviceId';
+String systemOf(String deviceId) => '$_systemPrefix$deviceId';
+
+const _systemPrefix = 'system/';
 
 /// Width of the icons shared with the family's devices, in pixels.
 const sharedIconSize = 48;
@@ -389,6 +392,15 @@ class FamilySync {
         e.key.substring(SyncKeys.devicePrefix.length): e.value,
   };
 
+  /// Devices removed from the family, with the name they had (empty when
+  /// none): their use of apps stays in the statistics.
+  Map<String, String> formerDevices() => {
+    for (final e in node.replica.withPrefix(SyncKeys.devicePrefix).entries)
+      if (e.value['revoked'] == true)
+        e.key.substring(SyncKeys.devicePrefix.length):
+            e.value['name'] as String? ?? '',
+  };
+
   /// Removes [id] from the family: its events are refused from now on.
   Future<void> removeDevice(String id, SigningKey parentKey) => node.emit([
     EventDraft.patch(SyncKeys.device(id), {'revoked': true}),
@@ -433,7 +445,12 @@ class FamilySync {
     if (tidied != null) return tidied;
     // The family file is written again only if the family's data changed
     // (not for a device's apps or registration).
-    if (!a.replicaChanged || !a.events.any((e) => isFamilyKey(e.key))) {
+    // A device's system components count too: they are left out of
+    // everyone's time.
+    if (!a.replicaChanged ||
+        !a.events.any(
+          (e) => isFamilyKey(e.key) || e.key.startsWith(_systemPrefix),
+        )) {
       return null;
     }
     final family = compose(await store.loadFamily());
@@ -554,7 +571,7 @@ class FamilySync {
 
   /// The system components the family's devices shared.
   Set<String> sharedSystem() => {
-    for (final e in node.replica.withPrefix('system/').values)
+    for (final e in node.replica.withPrefix(_systemPrefix).values)
       for (final p in e['packages'] as List? ?? const []) p as String,
   };
 
@@ -812,13 +829,15 @@ class FamilySync {
   /// children are not shown.
   FamilyData compose(FamilyData local) {
     // Groups given to each child as on every device, with every child.
-    final all = ownGroups(_composed(local));
+    // The system components every device shared are never counted: the
+    // time of a child's other device adds up here as it does there.
+    final all = withNeverBlocked(ownGroups(_composed(local)), sharedSystem());
     final reg = registration;
     if (reg == null || Audience.of(reg).all) return all;
     return familyFromEntities({
       for (final e in familyEntities(all).entries)
         if (!_hidden(e.key, e.value)) e.key: e.value,
-    }, local);
+    }, all);
   }
 
   FamilyData _composed(FamilyData local) => familyFromEntities({
@@ -840,6 +859,7 @@ class FamilySync {
   static final familyPrefixes = [
     FamilyKeys.family,
     FamilyKeys.child,
+    FamilyKeys.access,
     FamilyKeys.group,
     FamilyKeys.deviceGroup,
     FamilyKeys.appName,

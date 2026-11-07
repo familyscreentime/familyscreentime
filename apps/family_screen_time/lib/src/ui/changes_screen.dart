@@ -73,6 +73,9 @@ String describeEvent(AppController c, SyncEvent e) {
   if (key.startsWith(FamilyKeys.injected)) {
     return '${childPrefix(e.data['childId'])}${s.t('changeAway')}';
   }
+  if (key.startsWith(FamilyKeys.access)) {
+    return '${childPrefix(e.data['childId'] ?? id)}${s.t('changeAccess')}';
+  }
   if (key.startsWith(FamilyKeys.child)) {
     final name = e.data['name'] as String? ?? c.family.child(id)?.name ?? '';
     return s.t('changeChild', {'name': name});

@@ -40,6 +40,10 @@ class PlatformBridge(
     private val activity: Activity? = null,
 ) : MethodChannel.MethodCallHandler {
 
+    /** Biometric unlocking, from the interface only. */
+    private fun biometric(): BiometricUnlock? =
+        (activity as? androidx.fragment.app.FragmentActivity)?.let { BiometricUnlock(it) }
+
     fun attach(messenger: BinaryMessenger) {
         val channel = MethodChannel(messenger, CHANNEL)
         channel.setMethodCallHandler(this)
@@ -72,6 +76,36 @@ class PlatformBridge(
                 }
             }
             "systemPackages" -> result.success(systemPackages())
+            "appVersion" -> result.success(appVersion())
+            "biometricAvailable" -> result.success(biometric()?.available() ?: false)
+            "biometricSeal", "biometricOpen" -> {
+                val unlock = biometric()
+                if (unlock == null) {
+                    result.success(mapOf("status" to BiometricUnlock.UNAVAILABLE))
+                } else {
+                    val texts = BiometricUnlock.Texts(
+                        call.argument<String>("title") ?: "",
+                        call.argument<String>("subtitle"),
+                        call.argument<String>("cancel") ?: "",
+                    )
+                    var answered = false
+                    val done = { m: Map<String, Any?> ->
+                        if (!answered) {
+                            answered = true
+                            result.success(m)
+                        }
+                    }
+                    if (call.method == "biometricSeal") {
+                        unlock.seal(call.argument<String>("code") ?: "", texts, done)
+                    } else {
+                        unlock.open(call.argument<String>("seal") ?: "", texts, done)
+                    }
+                }
+            }
+            "biometricForget" -> {
+                biometric()?.forget()
+                result.success(null)
+            }
             "usageHistory" -> {
                 val from = call.argument<Number>("from")?.toLong() ?: 0L
                 val to = call.argument<Number>("to")?.toLong() ?: System.currentTimeMillis()
@@ -376,6 +410,18 @@ class PlatformBridge(
         return out
     }
 
+    /** This app's version: its name (0.28.1) and its number (55). */
+    private fun appVersion(): Map<String, Any?> {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        val build = if (Build.VERSION.SDK_INT >= 28) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
+        return mapOf("version" to info.versionName, "build" to build)
+    }
+
     /** Packages with a special role: dialer, SMS, home screens, this app. */
     private fun systemPackages(): Map<String, Any?> {
         val pm = context.packageManager
@@ -395,6 +441,7 @@ class PlatformBridge(
             "dialer" to dialer,
             "sms" to Telephony.Sms.getDefaultSmsPackage(context),
             "launchers" to launchers,
+            "callScreens" to Calls.screens(context).toList(),
         )
     }
 

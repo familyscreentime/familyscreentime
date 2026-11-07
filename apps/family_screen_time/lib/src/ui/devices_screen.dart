@@ -14,6 +14,7 @@ import '../store.dart';
 import '../strings.dart';
 import '../sync/bonsoir_directory.dart';
 import '../sync/family_sync.dart';
+import '../sync/receipts.dart' show versionOf;
 import 'changes_screen.dart';
 import 'join_screen.dart';
 import 'widgets.dart';
@@ -300,7 +301,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     };
     return Scaffold(
       appBar: AppBar(title: Text(s.t('devicesTitle'))),
-      floatingActionButton: !_loaded || !_linked
+      floatingActionButton: !_loaded || !_linked || c.demo
           ? null
           : FloatingActionButton.extended(
               onPressed: _add,
@@ -312,7 +313,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
-                if (!_linked) ...[
+                if (c.demo)
+                  Text(s.t('demoNoLinking'))
+                else if (!_linked) ...[
                   Text(s.t('devicesAlone')),
                   const SizedBox(height: 24),
                   FilledButton.icon(
@@ -350,6 +353,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       childNames[devices[id]!['childId']],
                       now,
                     ),
+                  ?_pendingHint(context, s, devices, childNames),
                   Card(
                     child: ListTile(
                       leading: const Icon(Icons.fact_check_outlined),
@@ -384,6 +388,57 @@ class _DevicesScreenState extends State<DevicesScreen> {
             ),
     );
   }
+
+  /// Whether the last pass with the relay server went through.
+  static bool _serverOk(RelayState relay) {
+    final ok = relay.lastOk;
+    final error = relay.errorAt;
+    return ok != null && (error == null || !error.isAfter(ok));
+  }
+
+  /// What to do when devices have not received the latest changes; `null`
+  /// when they all have.
+  Widget? _pendingHint(
+    BuildContext context,
+    S s,
+    Map<String, Map<String, Object?>> devices,
+    Map<String, String> childNames,
+  ) {
+    final waiting = [
+      for (final id in devicesInOrder(
+        devices,
+        here: _log?.deviceId,
+        childName: (id) => childNames[id],
+      ))
+        if ((_pending[id] ?? 0) > 0) devices[id]?['name'] as String? ?? id,
+    ];
+    if (waiting.isEmpty) return null;
+    final relay = _relayKey ? _relay?.$2 : null;
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      child: Text(
+        s.t(
+          // With the relay server, the Wi-Fi does not matter: once on the
+          // server, the changes reach them wherever they are.
+          relay == null
+              ? 'parentDevicePending'
+              : _serverOk(relay)
+              ? 'parentDevicePendingServer'
+              : 'parentDevicePendingOffline',
+          {'devices': waiting.join(', ')},
+        ),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.error,
+        ),
+      ),
+    );
+  }
+
+  /// The newest version the family's devices run, by number.
+  int _newest(FamilySync log) =>
+      [for (final id in log.devices.keys) versionOf(log, id)?.build ?? 0]
+          .fold(0, (a, b) => a > b ? a : b);
 
   Widget _deviceTile(
     BuildContext context,
@@ -423,6 +478,11 @@ class _DevicesScreenState extends State<DevicesScreen> {
             else if (d['role'] == 'parent')
               s.t('deviceParent'),
             status,
+            if (versionOf(log, id) case final v?)
+              s.t(
+                v.build < _newest(log) ? 'deviceVersionOld' : 'deviceVersion',
+                {'version': v.name},
+              ),
             if ((_pending[id] ?? 0) > 0)
               s.t('devicePending', {'n': '${_pending[id]}'}),
           ].join(' · '),

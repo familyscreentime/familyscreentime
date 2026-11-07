@@ -130,6 +130,39 @@ String usedApp(String usageId) => usageId.endsWith(listenOnlySuffix)
     ? usageId.substring(0, usageId.length - listenOnlySuffix.length)
     : usageId;
 
+/// A rule's daily limit as it stood until [until], kept when the parent
+/// changes it: past days are judged by the limit in force at the time, not
+/// by today's. [active] false: the rule did not exist yet, or was off.
+class RuleVersion {
+  final DateTime until;
+  final bool active;
+  final Duration? dailyQuota;
+  final Map<int, Duration> dailyQuotaByWeekday;
+
+  const RuleVersion({
+    required this.until,
+    this.active = true,
+    this.dailyQuota,
+    this.dailyQuotaByWeekday = const {},
+  });
+
+  /// The rule as it stood before the change made at [until].
+  RuleVersion.of(Rule r, this.until)
+    : active = r.enabled,
+      dailyQuota = r.dailyQuota,
+      dailyQuotaByWeekday = r.dailyQuotaByWeekday;
+
+  /// No rule before [until]: one created then.
+  const RuleVersion.none(this.until)
+    : active = false,
+      dailyQuota = null,
+      dailyQuotaByWeekday = const {};
+
+  /// Daily limit on [day] under this version; `null`: none.
+  Duration? quotaOn(DateTime day) =>
+      active ? dailyQuotaByWeekday[day.weekday] ?? dailyQuota : null;
+}
+
 /// Rule applied to a child.
 ///
 /// It applies to an app A on a device D when [appTarget] covers A,
@@ -166,6 +199,9 @@ class Rule {
   final bool setByChild;
   final bool enabled;
 
+  /// Its daily limit before the latest changes, oldest first.
+  final List<RuleVersion> history;
+
   const Rule({
     required this.id,
     required this.childId,
@@ -184,6 +220,7 @@ class Rule {
     this.listenOnly,
     this.setByChild = false,
     this.enabled = true,
+    this.history = const [],
   });
 
   /// The same rule, turned on or off.
@@ -205,6 +242,29 @@ class Rule {
     listenOnly: listenOnly,
     setByChild: setByChild,
     enabled: enabled,
+    history: history,
+  );
+
+  /// The same rule, with [history].
+  Rule withHistory(List<RuleVersion> history) => Rule(
+    id: id,
+    childId: childId,
+    profileId: profileId,
+    appTarget: appTarget,
+    deviceTarget: deviceTarget,
+    schedule: schedule,
+    dailyQuota: dailyQuota,
+    dailyQuotaByWeekday: dailyQuotaByWeekday,
+    weeklyQuota: weeklyQuota,
+    rollingQuota: rollingQuota,
+    breakPolicy: breakPolicy,
+    grace: grace,
+    carryOver: carryOver,
+    rollover: rollover,
+    listenOnly: listenOnly,
+    setByChild: setByChild,
+    enabled: enabled,
+    history: history,
   );
 
   bool get hasDailyQuota =>
@@ -216,4 +276,29 @@ class Rule {
   /// Daily limit on [day], or `null` when there is none that day.
   Duration? dailyQuotaOn(DateTime day) =>
       dailyQuotaByWeekday[day.weekday] ?? dailyQuota;
+
+  /// Daily limit in force at [t] on [t]'s day, from [history]; the current
+  /// one after the latest change.
+  Duration? dailyQuotaAt(DateTime t) {
+    for (final v in history) {
+      if (t.isBefore(v.until)) return v.quotaOn(t);
+    }
+    return dailyQuotaOn(t);
+  }
+
+  /// The daily limits in force at some time between [from] and [to] (a
+  /// day): one, or several when the limit changed that day. `null` in the
+  /// list: no limit for part of the day.
+  List<Duration?> dailyQuotasDuring(DateTime from, DateTime to) {
+    final out = <Duration?>[];
+    var start = from;
+    for (final v in history) {
+      if (!v.until.isAfter(start)) continue;
+      if (!to.isAfter(start)) break;
+      out.add(v.quotaOn(from));
+      start = v.until;
+    }
+    if (to.isAfter(start)) out.add(dailyQuotaOn(from));
+    return out;
+  }
 }

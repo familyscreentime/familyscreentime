@@ -162,7 +162,30 @@ Json ruleToJson(Rule r) => {
     },
   if (r.setByChild) 'setByChild': true,
   if (!r.enabled) 'enabled': false,
+  if (r.history.isNotEmpty)
+    'history': [for (final v in r.history) ruleVersionToJson(v)],
 };
+
+Json ruleVersionToJson(RuleVersion v) => {
+  'until': instantToJson(v.until),
+  if (!v.active) 'active': false,
+  if (v.dailyQuota != null) 'dailyQuota': durationToJson(v.dailyQuota!),
+  if (v.dailyQuotaByWeekday.isNotEmpty)
+    'dailyQuotaByWeekday': {
+      for (final e in v.dailyQuotaByWeekday.entries)
+        '${e.key}': durationToJson(e.value),
+    },
+};
+
+RuleVersion ruleVersionFromJson(Json j) => RuleVersion(
+  until: instantFromJson(j['until']),
+  active: j['active'] as bool? ?? true,
+  dailyQuota: optionalDuration(j['dailyQuota']),
+  dailyQuotaByWeekday: {
+    for (final e in (j['dailyQuotaByWeekday'] as Json? ?? const {}).entries)
+      int.parse(e.key): durationFromJson(e.value),
+  },
+);
 
 Rule ruleFromJson(Json j) {
   final rolling = j['rollingQuota'] as Json?;
@@ -227,6 +250,10 @@ Rule ruleFromJson(Json j) {
           ),
     setByChild: j['setByChild'] as bool? ?? false,
     enabled: j['enabled'] as bool? ?? true,
+    history: [
+      for (final v in j['history'] as List<Object?>? ?? const [])
+        ruleVersionFromJson(v as Json),
+    ],
   );
 }
 
@@ -299,6 +326,7 @@ Json temporaryBlockToJson(TemporaryBlock b) => {
   'from': instantToJson(b.from),
   if (b.until != null) 'until': instantToJson(b.until!),
   if (b.voluntary) 'voluntary': true,
+  if (b.message != null) 'message': b.message,
 };
 
 TemporaryBlock temporaryBlockFromJson(Json j) => TemporaryBlock(
@@ -309,6 +337,7 @@ TemporaryBlock temporaryBlockFromJson(Json j) => TemporaryBlock(
   from: instantFromJson(j['from']),
   until: optionalInstant(j['until']),
   voluntary: j['voluntary'] as bool? ?? false,
+  message: j['message'] as String?,
 );
 
 Json hoursUnlockToJson(HoursUnlock u) => {
@@ -361,6 +390,7 @@ Json usageSegmentToJson(UsageSegment s) => {
     'injectedTarget': appTargetToJson(s.injectedTarget!),
   'start': instantToJson(s.start),
   'end': instantToJson(s.end),
+  if (s.activity != null) 'activity': s.activity,
 };
 
 UsageSegment usageSegmentFromJson(Json j) {
@@ -379,6 +409,7 @@ UsageSegment usageSegmentFromJson(Json j) {
     appId: j['appId'] as String,
     start: instantFromJson(j['start']),
     end: instantFromJson(j['end']),
+    activity: j['activity'] as String?,
   );
 }
 
@@ -395,6 +426,16 @@ Json familyConfigToJson(FamilyConfig c) => {
   if (c.allowedInHours.isNotEmpty)
     'allowedInHours': c.allowedInHours.toList()..sort(),
   'neverBlocked': c.neverBlocked.toList()..sort(),
+  if (c.alwaysAllowedByChild.isNotEmpty)
+    'alwaysAllowedByChild': {
+      for (final e in c.alwaysAllowedByChild.entries)
+        e.key: e.value.toList()..sort(),
+    },
+  if (c.allowedInHoursByChild.isNotEmpty)
+    'allowedInHoursByChild': {
+      for (final e in c.allowedInHoursByChild.entries)
+        e.key: e.value.toList()..sort(),
+    },
   'profiles': [for (final p in c.profiles) profileToJson(p)],
   'weekStart': c.weekStart,
   'counting': c.counting.name,
@@ -415,6 +456,8 @@ FamilyConfig familyConfigFromJson(Json j) => FamilyConfig(
   alwaysAllowed: _ids(j['alwaysAllowed']),
   allowedInHours: _ids(j['allowedInHours']),
   neverBlocked: _ids(j['neverBlocked']),
+  alwaysAllowedByChild: _groups(j['alwaysAllowedByChild']),
+  allowedInHoursByChild: _groups(j['allowedInHoursByChild']),
   profiles: _list(j['profiles'], profileFromJson),
   weekStart: (j['weekStart'] as num?)?.toInt() ?? DateTime.monday,
   counting: SimultaneousCounting.values.byName(

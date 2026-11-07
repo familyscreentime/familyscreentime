@@ -114,6 +114,7 @@ void main() {
             deviceTarget: const DeviceTarget.group('tablets'),
             from: at(4, 9),
             until: at(4, 10),
+            message: 'À table !',
           ),
           TemporaryBlock(
             id: 'p',
@@ -138,6 +139,8 @@ void main() {
       expect(check(copy, at(5, 16)).remaining, min(25));
       expect(copy.temporaryBlocks.last.voluntary, isTrue);
       expect(copy.temporaryBlocks.first.voluntary, isFalse);
+      expect(copy.temporaryBlocks.first.message, 'À table !');
+      expect(copy.temporaryBlocks.last.message, isNull);
     });
 
     test('calendar days are written as YYYY-MM-DD', () {

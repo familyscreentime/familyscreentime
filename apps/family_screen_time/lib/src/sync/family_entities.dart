@@ -13,6 +13,11 @@ abstract final class FamilyKeys {
   /// Family-wide settings.
   static const family = 'family';
   static const child = 'child/';
+
+  /// A child's own apps always accessible (`childId`, `alwaysAllowed`,
+  /// `allowedInHours`), from 0.30. Without it, the child keeps the
+  /// family's lists, which the versions before still use.
+  static const access = 'access/';
   static const group = 'group/';
   static const deviceGroup = 'deviceGroup/';
   static const appName = 'appName/';
@@ -73,6 +78,15 @@ Map<String, Map<String, Object?>> familyEntities(FamilyData f) {
     },
     for (final (i, c) in children.indexed)
       '${FamilyKeys.child}${c['id']}': {...c, 'order': i},
+    for (final id in {
+      ..._map(config['alwaysAllowedByChild']).keys,
+      ..._map(config['allowedInHoursByChild']).keys,
+    })
+      '${FamilyKeys.access}$id': {
+        'childId': id,
+        'alwaysAllowed': _map(config['alwaysAllowedByChild'])[id] ?? const [],
+        'allowedInHours': _map(config['allowedInHoursByChild'])[id] ?? const [],
+      },
     for (final id in {...groups.keys, ...names.keys})
       '${FamilyKeys.group}$id': {
         'apps': groups[id] ?? const <String>[],
@@ -136,6 +150,14 @@ FamilyData familyFromEntities(
       'alwaysAllowed':
           family['alwaysAllowed'] ?? defaultConfig['alwaysAllowed'],
       'allowedInHours': family['allowedInHours'] ?? const [],
+      'alwaysAllowedByChild': {
+        for (final e in kind(FamilyKeys.access).entries)
+          e.key: e.value['alwaysAllowed'] ?? const [],
+      },
+      'allowedInHoursByChild': {
+        for (final e in kind(FamilyKeys.access).entries)
+          e.key: e.value['allowedInHours'] ?? const [],
+      },
       'neverBlocked': localConfig['neverBlocked'],
       'profiles': ordered(FamilyKeys.profile),
       'weekStart': family['weekStart'] ?? defaultConfig['weekStart'],

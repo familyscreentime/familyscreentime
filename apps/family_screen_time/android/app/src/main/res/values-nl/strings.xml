@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="accessibility_label">Family Screen Time</string>
-    <string name="accessibility_description">Detecteert welke app op het scherm staat, zodat de limieten van de ouder kunnen worden toegepast. Scherminhoud wordt alleen gelezen op de beveiligings- en toestemmingspagina\'s van Android, als de beveiliging tegen verwijderen aan staat, zodat de app niet zonder de ouder kan worden uitgeschakeld.</string>
+    <string name="accessibility_description">Detecteert welke app op het scherm staat, zodat de limieten van de ouder kunnen worden toegepast. Scherminhoud wordt alleen gelezen op de beveiligings- en toestemmingspagina\'s van Android, als de beveiliging tegen verwijderen aan staat, zodat de app niet zonder de ouder kan worden uitgeschakeld. In browsers wordt het scrollen geteld, zonder de pagina\'s te lezen, om lezen van snel scrollen te onderscheiden.</string>
     <string name="admin_description">Voorkomt dat Family Screen Time zonder de ouder wordt verwijderd.</string>
     <string name="monitor_channel">Schermtijd</string>
+    <string name="rules_channel">Gewijzigde regels</string>
     <string name="warning_channel">Tijdswaarschuwingen</string>
     <string name="shown_warning_channel">Op het scherm getoonde waarschuwingen</string>
     <string name="monitor_starting">De schermtijd wordt gevolgd</string>

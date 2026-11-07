@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="accessibility_label">Family Screen Time</string>
-    <string name="accessibility_description">Detects which app is on screen so the limits set by the parent can be applied. Screen content is only read on Android\'s security and permission pages, while uninstall protection is on, so the app cannot be switched off without the parent.</string>
+    <string name="accessibility_description">Detects which app is on screen so the limits set by the parent can be applied. Screen content is only read on Android\'s security and permission pages, while uninstall protection is on, so the app cannot be switched off without the parent. In browsers, scrolls are counted, without reading the pages, to tell reading from quick scrolling.</string>
     <string name="admin_description">Prevents uninstalling Family Screen Time without the parent.</string>
     <string name="monitor_channel">Screen time</string>
+    <string name="rules_channel">Rule changes</string>
     <string name="warning_channel">Time warnings</string>
     <string name="shown_warning_channel">Time warnings shown on screen</string>
     <string name="monitor_starting">Screen time is being monitored</string>

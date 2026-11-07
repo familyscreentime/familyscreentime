@@ -55,12 +55,14 @@ behind the parent code.
   exists.
 - When there is no screen time left at all, the message says when it comes
   back ("Your time for today is up. See you tomorrow from 9.", "in 3 days"),
-  on the block notice and the child's home screen. The parent chooses what
-  happens then: the apps close; the Android settings and wallpaper close
+  on the block notice and the child's home screen. The parent chooses, for
+  each child, what happens then: the apps close; the Android settings and wallpaper close
   too (default); or the whole device is locked, behind a
   screen that only opens the phone, messages and this app (never over the
   lock screen or a call). The settings can also be kept for the parent only
-  at all times.
+  at all times, and reminders during grace time come as often as set; both
+  for each child too. A child whose settings were never changed keeps the
+  family's ones from earlier versions (older versions still use those).
 - A rule belongs to the kind of time it was created for (total screen
   time, a group or an app). Its time per day can be 0 min: the apps are then
   only open with extra time from the parent.
@@ -70,10 +72,18 @@ behind the parent code.
   "Other…" choice for any length.
 - Outside its hours, a rule can be opened early from quick actions until
   the end of its next range (at 9:20, open until 12:00 for hours from 10
-  to 12); its time limits still apply.
-- Always available apps are chosen by the parent, each either at any hour
-  (the phone: even during blocks and on a locked device) or within the
-  hours only (messages); never limited by time nor counted.
+  to 12); its time limits still apply. The opening shows in quick actions,
+  with "Close", until the hours start.
+- Extra time given outside a rule's hours opens them while it lasts (a
+  rule of hours only included): 30 min at 20:00 lets the child in for 30
+  min, the day's time limit still applying. The extra-time sheet then
+  offers and preselects the rules closed at that moment.
+- Always available apps are chosen by the parent for each child, each
+  either at any hour (the phone: even during blocks and on a locked device)
+  or within the hours only (messages); never limited by time nor counted.
+  A child whose list was never changed keeps the family's list of earlier
+  versions (synced as `access/<child>` from 0.30; older versions still use
+  the family's list).
 - Outside the hours set for all apps, this app itself only opens parent
   mode.
 - A notification shows while parent mode is on, with a button to leave it.
@@ -83,6 +93,20 @@ behind the parent code.
 - The child can take a break of their own: every app is blocked (phone and
   messages aside) for the chosen time, which only a parent can cut short;
   messages say "break" rather than "blocked".
+- Eye breaks, on by default and set per child: every 20 minutes of screen
+  on a device, a notice at the top of the screen, then a veil with a
+  countdown asking the child to look into the distance for 20 seconds. The
+  child may put it off by a minute, three times; a later break lasts
+  longer, in proportion (23 s after 23 min). Nothing is blocked, the time
+  under the veil is not screen time, and the break waits for a call to end.
+  A video pauses under the veil: the veil takes the audio focus, as a call
+  does, so players pause by themselves and play again when it is given
+  back (the pause key does not reach every video player). Should Android
+  refuse the focus, the pause key, then the play key at the end of the
+  countdown if the same app is still in front. Music started in another app
+  goes on: Android does not say which app plays, but says when each player
+  starts, so a sound started while the app in front was there is taken as
+  that app's (unless it is a music app); before Android 8, any sound pauses.
 - Time away from the devices (console, TV), entered by the parent in quick
   actions, counts for total screen time or a group.
 - Rule settings for grace time (with an optional firm limit after repeated
@@ -107,6 +131,53 @@ behind the parent code.
   parent mode, an app can be put in groups straight from its detail.
   On first use, Android's own usage history is imported (it keeps about ten
   days in detail), for statistics only: the rules never see it.
+- A parent's device, locked: only the app's name and the unlock button.
+  Unlocked: each child by name with their total screen time today, in red
+  when a limit on it has no time left, and below, smaller, each group of
+  apps with a time limit in force used today, with its time (red alike). Then
+  extra time, and a padlock showing the state by the action that changes
+  it: unlocking (until the end of the next allowed hours today, which
+  start early, or until midnight), or blocking now. With several children, "Lock everything" or
+  "Unlock everything". Then the linked devices and the family's settings.
+- On a parent's device, parent mode can open with a fingerprint or the
+  face (Android 10 and later, strong biometrics only), offered once after
+  the code is typed and turned on or off in the family's settings. The
+  code itself is kept encrypted by a key of Android's keystore that only
+  the biometric opens, each time; a finger or face added to the device
+  makes it unusable and the code is asked again, as it is after the code
+  changed. The device's own screen lock never replaces the biometric, and
+  a child's device never offers it.
+- Browsers (any app that opens every web link: Chrome and those built on
+  it, Firefox…) measured without reading the pages: every 15 seconds, the
+  scroll events the accessibility service receives and the sound playing.
+  Their time is classed as video, quick scrolling or reading and other,
+  shown in the app's usage detail. Measured only for now: nothing is
+  limited by it.
+- Videos in the browser, as an app of their own ("Videos in the
+  browser", listed first among the apps): the parent puts them in a group
+  (with YouTube, say) or limits them alone. The time a browser plays a
+  video counts for them, from the moment it starts. Out of time, the video
+  is paused and the child told; the browser stays open for the rest. A
+  site that ignores the pause has the browser left after three tries.
+  Not seen: a video playing without sound.
+- On a child's device, a notification says which of the child's rules a
+  parent added, changed or removed on another device (one notification,
+  replaced by the next; the child's own limits are left out).
+- Phone calls are never covered nor closed: the screens of a call are
+  found whatever the maker (every app providing Android's in-call screen,
+  and the phone app), and the device lock steps aside while a phone call
+  rings or goes on.
+- Nothing is counted while the screen is off or locked, whatever windows
+  Android reports then (an alarm getting ready, say).
+- Each device says which version of the app it runs, in its receipts
+  (the one entry every version lets a device write about itself); the
+  linked devices list shows it, and flags a device behind the newest. A
+  child's device gets only its own receipts, so shows only its own.
+- A block can carry a short message for the child ("Dinner's ready!"),
+  shown on the block screen; the messages written before are offered again.
+- Family settings (special periods, devices used at the same time, how long
+  use is kept, parent code): their own page on a parent's device, at the
+  end of parent mode's settings on a child's device.
 - Interface in French, Dutch and English.
 
 This completes the features planned for phase 1 on Android; the next step
@@ -137,7 +208,13 @@ ForegroundAccessibilityService            overlays (notice, banner, countdown),
   settings, Google's parental supervision and its lock screen, Google Play
   services, this
   app) is never blocked and never counted; nor is the time the lock screen
-  is shown (counting starts at unlock).
+  is shown (counting starts at unlock). Each device shares its own system
+  components, and the usual makers' home screens are known, so the time of
+  a child's device is counted alike on every device: the child's, the
+  others of that child, and the parent's.
+- The usage statistics show a chip per device used in the period; a device
+  unlinked since keeps its time, under its last name followed by
+  "(unlinked)".
 
 ## Permissions
 
@@ -149,6 +226,7 @@ ForegroundAccessibilityService            overlays (notice, banner, countdown),
 | No battery optimisation | Keeps the monitor alive | Strongly advised |
 | Usage access | Fallback detection when accessibility is off; with uninstall protection, closes the safety center | Advised |
 | Device administrator | Uninstall protection: see below | Optional |
+| Biometrics | Opens parent mode with a fingerprint or the face, on a parent's device | Optional |
 
 On Android 13+, a sideloaded app needs "Allow restricted settings" before
 its accessibility service can be turned on.
@@ -163,6 +241,25 @@ flutter build apk --release --split-per-abi
 ```
 
 `flutter run` with a phone connected installs a debug build.
+
+The demonstration build is an app of its own (`org.familyscreentime.demo`),
+beside the real one: a parent's device with a made-up family of two
+children, linked to nothing and started afresh at each launch, to check
+the screens and take screenshots. Its parent code is 1234.
+
+```sh
+flutter build apk --release -t lib/main_demo.dart -P demo=true
+```
+
+The calibration build, for checking how browser use is classed on a few
+devices, is the full app as an app of its own (`org.familyscreentime.calibration`,
+"FST calibrage"), installed beside the one from Google Play. A browser's
+usage page then offers an export of the raw measures. To be removed once
+the thresholds are set.
+
+```sh
+flutter build apk --release -P calibration=true
+```
 
 Release builds are signed with the upload key named in `android/key.properties`
 (not in the repository: `storePassword`, `keyPassword`, `keyAlias`, and

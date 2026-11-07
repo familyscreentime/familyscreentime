@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="accessibility_label">Family Screen Time</string>
-    <string name="accessibility_description">Détecte l\'appli affichée à l\'écran pour appliquer les limites fixées par le parent. Le contenu de l\'écran n\'est lu que dans les pages de sécurité et d\'autorisations d\'Android, quand la protection contre la désinstallation est activée, pour que l\'appli ne puisse pas être coupée sans le parent.</string>
+    <string name="accessibility_description">Détecte l\'appli affichée à l\'écran pour appliquer les limites fixées par le parent. Le contenu de l\'écran n\'est lu que dans les pages de sécurité et d\'autorisations d\'Android, quand la protection contre la désinstallation est activée, pour que l\'appli ne puisse pas être coupée sans le parent. Dans les navigateurs, les défilements sont comptés, sans lire les pages, pour distinguer la lecture du défilement rapide.</string>
     <string name="admin_description">Empêche de désinstaller Family Screen Time sans le parent.</string>
     <string name="monitor_channel">Temps d\'écran</string>
+    <string name="rules_channel">Changements de règles</string>
     <string name="warning_channel">Avertissements de temps</string>
     <string name="shown_warning_channel">Avertissements affichés à l\'écran</string>
     <string name="monitor_starting">Le temps d\'écran est suivi</string>

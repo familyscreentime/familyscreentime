@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:screentime_engine/screentime_engine.dart' show browserVideoApp;
 
 import '../controller.dart';
 import '../platform.dart';
@@ -48,6 +49,9 @@ class _GroupEditorState extends State<GroupEditor> {
           final ma = members.contains(a.package);
           final mb = members.contains(b.package);
           if (ma != mb) return ma ? -1 : 1;
+          // The browsers' videos, then the apps by name.
+          final va = a.package == browserVideoApp;
+          if (va != (b.package == browserVideoApp)) return va ? -1 : 1;
           return name(a).compareTo(name(b));
         });
       if (!mounted) return;
@@ -139,7 +143,11 @@ class _GroupEditorState extends State<GroupEditor> {
                     itemBuilder: (context, i) {
                       final app = shown[i];
                       return CheckboxListTile(
-                        secondary: appIcon(_info[app.package], size: 36),
+                        secondary: appIcon(
+                          _info[app.package],
+                          size: 36,
+                          package: app.package,
+                        ),
                         value: _selected.contains(app.package),
                         title: Text(name(app)),
                         subtitle: Column(

@@ -30,6 +30,10 @@ class AppUsage {
   /// First used recently, and the history goes back further than that.
   final bool isNew;
 
+  /// Time of the period by what the app was used for, when the device
+  /// could tell (a browser: video, quick scrolling, other).
+  final Map<String, Duration> byActivity;
+
   const AppUsage({
     required this.appId,
     required this.total,
@@ -39,6 +43,7 @@ class AppUsage {
     required this.firstSeen,
     required this.lastSeen,
     required this.isNew,
+    this.byActivity = const {},
   });
 
   Duration get night {
@@ -142,6 +147,7 @@ UsageReport buildUsageReport(
           appId: usedApp(s.appId!),
           start: s.start,
           end: s.end,
+          activity: s.activity,
         );
   final segments =
       history
@@ -164,6 +170,7 @@ UsageReport buildUsageReport(
   final byDay = <String, Map<DateTime, Duration>>{};
   final byHour = <String, List<Duration>>{};
   final sessions = <String, int>{};
+  final activities = <String, Map<String, Duration>>{};
   final lastEnd = <String, DateTime>{};
   final totalByDay = {for (final d in periodDays) d: Duration.zero};
   final totalByHour = List.filled(24, Duration.zero);
@@ -178,6 +185,11 @@ UsageReport buildUsageReport(
     }
     if (previous == null || part.end.isAfter(previous)) lastEnd[app] = part.end;
     totals[app] = (totals[app] ?? Duration.zero) + part.length;
+    final activity = s.activity;
+    if (activity != null) {
+      final a = activities.putIfAbsent(app, () => {});
+      a[activity] = (a[activity] ?? Duration.zero) + part.length;
+    }
     final appDays = byDay.putIfAbsent(app, () => {});
     final appHours = byHour.putIfAbsent(
       app,
@@ -223,6 +235,7 @@ UsageReport buildUsageReport(
             isNew:
                 now.difference(first[app]!) < newAppWindow &&
                 first[app]!.difference(historyStart!) > const Duration(days: 1),
+            byActivity: activities[app] ?? const {},
           ),
       ]..sort((a, b) {
         final byTime = b.total.compareTo(a.total);

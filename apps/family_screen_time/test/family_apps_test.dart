@@ -5,6 +5,7 @@ import 'package:family_screen_time/src/store.dart';
 import 'package:family_screen_time/src/sync/family_sync.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:screentime_engine/screentime_engine.dart' show browserVideoApp;
 import 'package:screentime_sync/screentime_sync.dart';
 
 void main() {
@@ -60,9 +61,16 @@ void main() {
     final c = AppController(store, settings, family);
     await c.openSync();
     c.selectChild('emma');
-    expect((await c.familyApps()).map((a) => a.package), ['minecraft']);
+    // The browsers' videos first, then the child's own apps.
+    expect((await c.familyApps()).map((a) => a.package), [
+      browserVideoApp,
+      'minecraft',
+    ]);
     c.selectChild('lucas');
-    expect((await c.familyApps()).map((a) => a.package), ['roblox']);
+    expect((await c.familyApps()).map((a) => a.package), [
+      browserVideoApp,
+      'roblox',
+    ]);
     c.dispose();
   });
 }

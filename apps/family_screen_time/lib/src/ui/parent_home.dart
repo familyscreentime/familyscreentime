@@ -11,15 +11,15 @@ import '../strings.dart';
 import 'accessible_apps_screen.dart';
 import 'group_editor.dart';
 import 'permissions.dart';
-import 'pin_dialog.dart';
 import 'quick_actions.dart';
 import 'self_limit_report_screen.dart';
 import 'limit_screen.dart';
 import '../family.dart';
-import 'periods_screen.dart';
 import 'trends_screen.dart';
 import 'devices_screen.dart';
 import 'usage_screen.dart';
+import 'eye_break_screen.dart';
+import 'family_settings.dart';
 import 'volume_screen.dart';
 
 class ParentHome extends StatefulWidget {
@@ -49,8 +49,8 @@ class _ParentHomeState extends State<ParentHome> {
     final total = await controller.totalTimeToday();
     await controller.loadLabels();
     await controller.loadLabels({
-      ...controller.family.config.alwaysAllowed,
-      ...controller.family.config.allowedInHours,
+      ...controller.alwaysAllowed,
+      ...controller.allowedInHours,
     });
     final apps = {
       for (final app in singleAppTargets(controller.parentRules))
@@ -62,16 +62,6 @@ class _ParentHomeState extends State<ParentHome> {
         _totalTime = total;
         _appTimes = apps;
       });
-    }
-  }
-
-  Future<void> _changePin(BuildContext context) async {
-    final pin = await askNewPin(context, controller);
-    if (pin == null) return;
-    await controller.changeParentCode(pin);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(controller.s.t('pinChanged'))));
     }
   }
 
@@ -113,32 +103,6 @@ class _ParentHomeState extends State<ParentHome> {
         await _loadTimes();
       },
     );
-  }
-
-  /// The special period now running, else the next one, if any.
-  String _periodsSummary() {
-    final c = controller;
-    final s = c.s;
-    final now = DateTime.now();
-    final running = c.activePeriod(now);
-    if (running != null) {
-      return '${c.periodName(running)} · ${nextDates(s, running, now)}';
-    }
-    (Profile, DateTime)? next;
-    for (final p in c.specialPeriods) {
-      for (final r in p.periods) {
-        if (r.first.isAfter(now) &&
-            (next == null || r.first.isBefore(next.$2))) {
-          next = (p, r.first);
-        }
-      }
-    }
-    if (next != null) {
-      return '${c.periodName(next.$1)} · ${nextDates(s, next.$1, now)}';
-    }
-    return c.specialPeriods.isEmpty
-        ? s.t('periodsNone')
-        : c.specialPeriods.map(c.periodName).join(', ');
   }
 
   Future<void> _open(BuildContext context, Widget page) async {
@@ -209,6 +173,7 @@ class _ParentHomeState extends State<ParentHome> {
       final c = controller;
       final s = c.s;
       final header = Theme.of(context).textTheme.titleMedium;
+      final reminders = c.family.graceReminderMinutesFor(c.childId);
       return Scaffold(
         appBar: AppBar(
           title: Text(
@@ -323,96 +288,23 @@ class _ParentHomeState extends State<ParentHome> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _open(context, SelfLimitReportScreen(controller: c)),
             ),
-            ListTile(
-              leading: const Icon(Icons.event_outlined),
-              title: Text(s.t('periodsTitle')),
-              subtitle: Text(_periodsSummary()),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _open(context, PeriodsScreen(controller: c)),
-            ),
-            const Divider(),
-            ListTile(title: Text(s.t('countingTitle'), style: header)),
-            RadioGroup<SimultaneousCounting>(
-              groupValue: c.family.config.counting,
-              onChanged: (v) {
-                if (v != null) {
-                  c.updateFamily(
-                    c.family.copyWith(
-                      config: c.family.config.copyWith(counting: v),
-                    ),
-                  );
-                }
-              },
-              child: Column(
-                children: [
-                  for (final (mode, title, hint) in [
-                    (
-                      SimultaneousCounting.sum,
-                      'countingSum',
-                      'countingSumHint',
-                    ),
-                    (
-                      SimultaneousCounting.elapsed,
-                      'countingOnce',
-                      'countingOnceHint',
-                    ),
-                  ])
-                    RadioListTile<SimultaneousCounting>(
-                      value: mode,
-                      title: Text(s.t(title)),
-                      subtitle: Text(s.t(hint)),
-                    ),
-                ],
-              ),
-            ),
-            const Divider(),
-            ListTile(title: Text(s.t('historyTitle'), style: header)),
-            ListTile(
-              leading: const Icon(Icons.history),
-              title: Text(s.t('usageKept')),
-              subtitle: DropdownButton<int>(
-                value: c.family.usageKeptDays,
-                isExpanded: true,
-                items: [
-                  for (final d in {...usageKeptChoices, c.family.usageKeptDays})
-                    DropdownMenuItem(value: d, child: Text(keptLabel(s, d))),
-                ],
-                onChanged: (d) {
-                  if (d != null) {
-                    c.updateFamily(c.family.copyWith(usageKeptDays: d));
-                  }
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(72, 0, 16, 8),
-              child: Text(
-                s.t('usageKeptHint'),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
             const Divider(),
             ListTile(title: Text(s.t('remindersTitle'), style: header)),
             ListTile(
               leading: const Icon(Icons.notifications_active_outlined),
               title: Text(s.t('graceReminders')),
               subtitle: DropdownButton<int>(
-                value: c.family.graceReminderMinutes,
+                value: reminders,
                 isExpanded: true,
                 items: [
-                  for (final m in {
-                    ...graceReminderChoices,
-                    c.family.graceReminderMinutes,
-                  })
+                  for (final m in {...graceReminderChoices, reminders})
                     DropdownMenuItem(
                       value: m,
                       child: Text(graceReminderLabel(s, m)),
                     ),
                 ],
                 onChanged: (m) {
-                  if (m != null) {
-                    c.updateFamily(c.family.copyWith(graceReminderMinutes: m));
-                  }
+                  if (m != null) c.setChildSettings(graceReminderMinutes: m);
                 },
               ),
             ),
@@ -426,11 +318,9 @@ class _ParentHomeState extends State<ParentHome> {
             const Divider(),
             ListTile(title: Text(s.t('outOfTimeTitle'), style: header)),
             RadioGroup<OutOfTime>(
-              groupValue: c.family.outOfTime,
+              groupValue: c.family.outOfTimeFor(c.childId),
               onChanged: (m) {
-                if (m != null) {
-                  c.updateFamily(c.family.copyWith(outOfTime: m));
-                }
+                if (m != null) c.setChildSettings(outOfTime: m);
               },
               child: Column(
                 children: [
@@ -459,10 +349,7 @@ class _ParentHomeState extends State<ParentHome> {
               leading: const Icon(Icons.phone_outlined),
               title: Text(s.t('accessibleTitle')),
               subtitle: Text(
-                [
-                      ...c.family.config.alwaysAllowed,
-                      ...c.family.config.allowedInHours,
-                    ]
+                [...c.alwaysAllowed, ...c.allowedInHours]
                     .map((a) => c.appName(a, androidLabel: c.androidLabels[a]))
                     .join(', '),
               ),
@@ -472,18 +359,19 @@ class _ParentHomeState extends State<ParentHome> {
             SwitchListTile(
               title: Text(s.t('settingsParentOnly')),
               subtitle: Text(s.t('settingsParentOnlyHint')),
-              value: c.family.settingsParentOnly,
-              onChanged: (v) =>
-                  c.updateFamily(c.family.copyWith(settingsParentOnly: v)),
+              value: c.family.settingsParentOnlyFor(c.childId),
+              onChanged: (v) => c.setChildSettings(settingsParentOnly: v),
             ),
             const Divider(),
-            ListTile(
-              leading: const Icon(Icons.devices_outlined),
-              title: Text(s.t('devicesTitle')),
-              subtitle: Text(s.t('devicesSubtitle')),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _open(context, DevicesScreen(controller: c)),
-            ),
+            // On a parent's device, the linked devices are on the home.
+            if (!c.settings.parentDevice)
+              ListTile(
+                leading: const Icon(Icons.devices_outlined),
+                title: Text(s.t('devicesTitle')),
+                subtitle: Text(s.t('devicesSubtitle')),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _open(context, DevicesScreen(controller: c)),
+              ),
             ListTile(
               leading: const Icon(Icons.volume_down_outlined),
               title: Text(s.t('volumeTitle')),
@@ -501,6 +389,15 @@ class _ParentHomeState extends State<ParentHome> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _open(context, VolumeScreen(controller: c)),
             ),
+            ListTile(
+              leading: const Icon(Icons.visibility_outlined),
+              title: Text(s.t('eyeBreakTitle')),
+              subtitle: Text(
+                eyeBreakSummary(s, c.child?.eyeBreak ?? const EyeBreakPolicy()),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(context, EyeBreakScreen(controller: c)),
+            ),
             // This device's permissions: none needed on a parent's device.
             if (!c.settings.parentDevice) ...[
               const Divider(),
@@ -511,11 +408,6 @@ class _ParentHomeState extends State<ParentHome> {
               ),
             ],
             const Divider(),
-            ListTile(
-              leading: const Icon(Icons.password),
-              title: Text(s.t('changePin')),
-              onTap: () => _changePin(context),
-            ),
             ListTile(
               leading: const Icon(Icons.language),
               title: Text(s.t('language')),
@@ -535,6 +427,13 @@ class _ParentHomeState extends State<ParentHome> {
                 },
               ),
             ),
+            // On a parent's device, the family's settings have their own
+            // page, from the home.
+            if (!c.settings.parentDevice) ...[
+              const Divider(),
+              ListTile(title: Text(s.t('familySettingsTitle'), style: header)),
+              FamilySettingsSection(controller: c),
+            ],
           ],
         ),
       );

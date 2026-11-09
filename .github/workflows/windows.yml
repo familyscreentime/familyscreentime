@@ -33,7 +33,7 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          flutter build windows --release 2>&1 | Tee-Object -FilePath build.log
+          flutter build windows --release --split-debug-info=build/symbols 2>&1 | Tee-Object -FilePath build.log
           if ($LASTEXITCODE -ne 0) {
             Select-String -Path build.log -Pattern ': (fatal )?error ' |
               Select-Object -First 40 |
@@ -62,5 +62,7 @@ jobs:
       - uses: actions/upload-artifact@v6
         with:
           name: windows-dart-aot
-          path: apps/family_screen_time/build/windows/x64/runner/Release/data/app.so
+          path: |
+            apps/family_screen_time/build/windows/x64/runner/Release/data/app.so
+            apps/family_screen_time/build/symbols/
 

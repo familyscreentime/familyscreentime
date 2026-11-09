@@ -38,7 +38,7 @@ Duration warningTime(Duration d) {
 }
 
 class Monitor {
-  static const _channel = MethodChannel('org.familyscreentime/monitor');
+  static const _channel = LoggedMethodChannel('org.familyscreentime/monitor');
 
   final LocalStore store;
 

@@ -4,6 +4,7 @@ library;
 
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Name and icon (PNG) of an installed app.
@@ -124,8 +125,31 @@ Set<String> get requiredPermissions => onWindows
     ? const {'autostartWindows', 'monitorRunning'}
     : const {'accessibility', 'overlay', 'notifications'};
 
+/// A method channel that, on Windows, writes each call and its outcome to
+/// the log: after a crash, the last call without an outcome says where.
+class LoggedMethodChannel extends MethodChannel {
+  const LoggedMethodChannel(super.name);
+
+  @override
+  Future<T?> invokeMethod<T>(String method, [dynamic arguments]) async {
+    if (!onWindows) return super.invokeMethod<T>(method, arguments);
+    final short = name.substring(name.lastIndexOf('/') + 1);
+    debugPrint('${_now()} → $short.$method');
+    var outcome = 'failed';
+    try {
+      final result = await super.invokeMethod<T>(method, arguments);
+      outcome = 'ok';
+      return result;
+    } finally {
+      debugPrint('${_now()} ← $short.$method $outcome');
+    }
+  }
+
+  static String _now() => DateTime.now().toIso8601String().substring(11, 23);
+}
+
 class PlatformApi {
-  static const _channel = MethodChannel('org.familyscreentime/platform');
+  static const _channel = LoggedMethodChannel('org.familyscreentime/platform');
 
   const PlatformApi();
 

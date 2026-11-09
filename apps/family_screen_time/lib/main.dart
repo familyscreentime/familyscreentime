@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'src/app.dart';
@@ -12,6 +13,7 @@ import 'src/strings.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   S.windows = Platform.isWindows;
+  _logErrors();
   runApp(const FamilyScreenTimeApp());
 }
 
@@ -23,6 +25,22 @@ Future<void> monitorMain() async {
   WidgetsFlutterBinding.ensureInitialized();
   S.windows = Platform.isWindows;
   DartPluginRegistrant.ensureInitialized();
+  _logErrors();
   final monitor = Monitor(await LocalStore.open());
   await monitor.start();
+}
+
+/// Errors nothing caught go to the log too (a file on Windows), with their
+/// stack, rather than only to a debugger.
+void _logErrors() {
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint(
+      'Flutter error: ${details.exceptionAsString()}\n${details.stack}',
+    );
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Uncaught error: $error\n$stack');
+    return true;
+  };
 }

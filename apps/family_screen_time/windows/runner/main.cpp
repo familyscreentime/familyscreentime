@@ -13,13 +13,16 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
 
   auto command_line_arguments = GetCommandLineArguments();
+  bool monitor = false;
+  for (const auto& arg : command_line_arguments) {
+    if (arg == "--monitor") monitor = true;
+  }
+  StartLog(monitor ? L"monitor" : L"ui");
 
   // Aiguillage vers le processus moniteur.
-  for (const auto& arg : command_line_arguments) {
-    if (arg == "--monitor") {
-      RunMonitorProcess(instance);
-      return EXIT_SUCCESS;
-    }
+  if (monitor) {
+    RunMonitorProcess(instance);
+    return EXIT_SUCCESS;
   }
 
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);

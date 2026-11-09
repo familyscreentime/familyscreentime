@@ -4,8 +4,14 @@
 #include <io.h>
 #include <stdio.h>
 #include <windows.h>
+// clang-format off
+#include <dbghelp.h>
+#include <shlobj.h>
+// clang-format on
 
 #include <iostream>
+
+#pragma comment(lib, "dbghelp.lib")
 
 void CreateAndAttachConsole() {
   if (::AllocConsole()) {
@@ -19,6 +25,84 @@ void CreateAndAttachConsole() {
     std::ios::sync_with_stdio();
     FlutterDesktopResyncOutputStreams();
   }
+}
+
+namespace {
+
+std::wstring g_log_dir;
+std::wstring g_log_name;
+
+// Says what crashed in the log, and writes a minidump next to it.
+LONG WINAPI OnCrash(EXCEPTION_POINTERS* info) {
+  const EXCEPTION_RECORD* record = info->ExceptionRecord;
+  SYSTEMTIME now;
+  ::GetLocalTime(&now);
+  fprintf(stderr, "\n*** Crash at %02d:%02d:%02d: exception 0x%08lx at %p\n",
+          now.wHour, now.wMinute, now.wSecond,
+          static_cast<unsigned long>(record->ExceptionCode),
+          record->ExceptionAddress);
+  if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
+      record->NumberParameters >= 2) {
+    ULONG_PTR kind = record->ExceptionInformation[0];
+    fprintf(stderr, "*** %s %p\n",
+            kind == 8u ? "executing" : kind == 1u ? "writing" : "reading",
+            reinterpret_cast<void*>(record->ExceptionInformation[1]));
+  }
+  fflush(stderr);
+  std::wstring path = g_log_dir + L"\\" + g_log_name + L".dmp";
+  HANDLE file = ::CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file != INVALID_HANDLE_VALUE) {
+    MINIDUMP_EXCEPTION_INFORMATION exception = {::GetCurrentThreadId(), info,
+                                                FALSE};
+    ::MiniDumpWriteDump(
+        ::GetCurrentProcess(), ::GetCurrentProcessId(), file,
+        static_cast<MINIDUMP_TYPE>(MiniDumpWithIndirectlyReferencedMemory |
+                                   MiniDumpWithFullMemoryInfo |
+                                   MiniDumpWithThreadInfo),
+        &exception, nullptr, nullptr);
+    ::CloseHandle(file);
+  }
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+
+}  // namespace
+
+void StartLog(const wchar_t* name) {
+  PWSTR local = nullptr;
+  if (FAILED(::SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr,
+                                    &local))) {
+    ::CoTaskMemFree(local);
+    return;
+  }
+  std::wstring dir = std::wstring(local) + L"\\FamilyScreenTime";
+  ::CoTaskMemFree(local);
+  ::CreateDirectoryW(dir.c_str(), nullptr);
+  dir += L"\\logs";
+  ::CreateDirectoryW(dir.c_str(), nullptr);
+  g_log_dir = dir;
+  g_log_name = name;
+  std::wstring path = dir + L"\\" + name + L".log";
+  // Started afresh past 1 MB.
+  WIN32_FILE_ATTRIBUTE_DATA data = {};
+  bool big = ::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard,
+                                    &data) &&
+             (data.nFileSizeHigh > 0 || data.nFileSizeLow > (1u << 20));
+  FILE* unused = nullptr;
+  if (_wfreopen_s(&unused, path.c_str(), big ? L"w" : L"a", stdout) != 0 ||
+      _wfreopen_s(&unused, path.c_str(), L"a", stderr) != 0) {
+    return;
+  }
+  setvbuf(stdout, nullptr, _IONBF, 0);
+  setvbuf(stderr, nullptr, _IONBF, 0);
+  std::ios::sync_with_stdio();
+  FlutterDesktopResyncOutputStreams();
+  SYSTEMTIME now;
+  ::GetLocalTime(&now);
+  fprintf(stdout, "\n--- %ls started %04d-%02d-%02d %02d:%02d:%02d, process %lu\n",
+          name, now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute,
+          now.wSecond, static_cast<unsigned long>(::GetCurrentProcessId()));
+  ::SetUnhandledExceptionFilter(OnCrash);
 }
 
 std::vector<std::string> GetCommandLineArguments() {

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'src/app.dart';
+import 'src/log.dart';
 import 'src/monitor.dart';
 import 'src/store.dart';
 import 'src/strings.dart';
@@ -13,6 +14,7 @@ import 'src/strings.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   S.windows = Platform.isWindows;
+  startLog('ui');
   _logErrors();
   runApp(const FamilyScreenTimeApp());
 }
@@ -25,6 +27,7 @@ Future<void> monitorMain() async {
   WidgetsFlutterBinding.ensureInitialized();
   S.windows = Platform.isWindows;
   DartPluginRegistrant.ensureInitialized();
+  startLog('monitor');
   _logErrors();
   final monitor = Monitor(await LocalStore.open());
   await monitor.start();

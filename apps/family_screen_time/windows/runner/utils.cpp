@@ -9,6 +9,7 @@
 #include <shlobj.h>
 // clang-format on
 
+#include <cstring>
 #include <iostream>
 
 #pragma comment(lib, "dbghelp.lib")
@@ -32,23 +33,43 @@ namespace {
 std::wstring g_log_dir;
 std::wstring g_log_name;
 
+// Adds [line] at the end of the log, straight to the file: nothing is
+// held in a buffer that a crash would lose.
+void AppendLog(const char* line) {
+  if (g_log_dir.empty()) return;
+  std::wstring path = g_log_dir + L"\\" + g_log_name + L".log";
+  HANDLE file = ::CreateFileW(path.c_str(), FILE_APPEND_DATA,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE |
+                                  FILE_SHARE_DELETE,
+                              nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                              nullptr);
+  if (file == INVALID_HANDLE_VALUE) return;
+  DWORD written = 0;
+  ::WriteFile(file, line, static_cast<DWORD>(strlen(line)), &written,
+              nullptr);
+  ::CloseHandle(file);
+}
+
 // Says what crashed in the log, and writes a minidump next to it.
 LONG WINAPI OnCrash(EXCEPTION_POINTERS* info) {
   const EXCEPTION_RECORD* record = info->ExceptionRecord;
   SYSTEMTIME now;
   ::GetLocalTime(&now);
-  fprintf(stderr, "\n*** Crash at %02d:%02d:%02d: exception 0x%08lx at %p\n",
-          now.wHour, now.wMinute, now.wSecond,
-          static_cast<unsigned long>(record->ExceptionCode),
-          record->ExceptionAddress);
+  char line[256];
+  snprintf(line, sizeof(line),
+           "%02d:%02d:%02d *** Crash: exception 0x%08lx at %p\n", now.wHour,
+           now.wMinute, now.wSecond,
+           static_cast<unsigned long>(record->ExceptionCode),
+           record->ExceptionAddress);
+  AppendLog(line);
   if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
       record->NumberParameters >= 2) {
     ULONG_PTR kind = record->ExceptionInformation[0];
-    fprintf(stderr, "*** %s %p\n",
-            kind == 8u ? "executing" : kind == 1u ? "writing" : "reading",
-            reinterpret_cast<void*>(record->ExceptionInformation[1]));
+    snprintf(line, sizeof(line), "*** %s %p\n",
+             kind == 8u ? "executing" : kind == 1u ? "writing" : "reading",
+             reinterpret_cast<void*>(record->ExceptionInformation[1]));
+    AppendLog(line);
   }
-  fflush(stderr);
   std::wstring path = g_log_dir + L"\\" + g_log_name + L".dmp";
   HANDLE file = ::CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -82,26 +103,22 @@ void StartLog(const wchar_t* name) {
   ::CreateDirectoryW(dir.c_str(), nullptr);
   g_log_dir = dir;
   g_log_name = name;
+  // Past 1 MB, the log becomes <name>.old.log and starts afresh.
   std::wstring path = dir + L"\\" + name + L".log";
-  // Started afresh past 1 MB.
   WIN32_FILE_ATTRIBUTE_DATA data = {};
-  bool big = ::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard,
-                                    &data) &&
-             (data.nFileSizeHigh > 0 || data.nFileSizeLow > (1u << 20));
-  FILE* unused = nullptr;
-  if (_wfreopen_s(&unused, path.c_str(), big ? L"w" : L"a", stdout) != 0 ||
-      _wfreopen_s(&unused, path.c_str(), L"a", stderr) != 0) {
-    return;
+  if (::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data) &&
+      (data.nFileSizeHigh > 0 || data.nFileSizeLow > (1u << 20))) {
+    std::wstring old = dir + L"\\" + name + L".old.log";
+    ::MoveFileExW(path.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING);
   }
-  setvbuf(stdout, nullptr, _IONBF, 0);
-  setvbuf(stderr, nullptr, _IONBF, 0);
-  std::ios::sync_with_stdio();
-  FlutterDesktopResyncOutputStreams();
   SYSTEMTIME now;
   ::GetLocalTime(&now);
-  fprintf(stdout, "\n--- %ls started %04d-%02d-%02d %02d:%02d:%02d, process %lu\n",
-          name, now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute,
-          now.wSecond, static_cast<unsigned long>(::GetCurrentProcessId()));
+  char line[128];
+  snprintf(line, sizeof(line),
+           "\n%02d:%02d:%02d --- Started %04d-%02d-%02d, process %lu\n",
+           now.wHour, now.wMinute, now.wSecond, now.wYear, now.wMonth,
+           now.wDay, static_cast<unsigned long>(::GetCurrentProcessId()));
+  AppendLog(line);
   ::SetUnhandledExceptionFilter(OnCrash);
 }
 

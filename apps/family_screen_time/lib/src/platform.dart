@@ -134,18 +134,16 @@ class LoggedMethodChannel extends MethodChannel {
   Future<T?> invokeMethod<T>(String method, [dynamic arguments]) async {
     if (!onWindows) return super.invokeMethod<T>(method, arguments);
     final short = name.substring(name.lastIndexOf('/') + 1);
-    debugPrint('${_now()} → $short.$method');
+    debugPrint('→ $short.$method');
     var outcome = 'failed';
     try {
       final result = await super.invokeMethod<T>(method, arguments);
       outcome = 'ok';
       return result;
     } finally {
-      debugPrint('${_now()} ← $short.$method $outcome');
+      debugPrint('← $short.$method $outcome');
     }
   }
-
-  static String _now() => DateTime.now().toIso8601String().substring(11, 23);
 }
 
 class PlatformApi {

@@ -57,3 +57,10 @@ jobs:
         with:
           name: windows-installer
           path: installer/windows/Output/*.exe
+      # The compiled Dart code, to find where a crash happened (see the
+      # address in %LOCALAPPDATA%\FamilyScreenTime\logs).
+      - uses: actions/upload-artifact@v6
+        with:
+          name: windows-dart-aot
+          path: apps/family_screen_time/build/windows/x64/runner/Release/data/app.so
+

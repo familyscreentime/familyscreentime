@@ -887,6 +887,11 @@ class RuleEngine {
         hardening != null &&
         hardening.deductOverruns &&
         r.carryOver.mode == CarryOverMode.none;
+    // Read here, once: in the loop, the AOT compiler for x64 (Dart 3.13)
+    // hoisted these reads above the `deduct` test, reading the fields of
+    // null when the rule has no hardening, and the app crashed on Windows.
+    final hardDays = hardening?.days ?? 0;
+    final hardThreshold = hardening?.threshold ?? Duration.zero;
     // Enough days for the days we look at to no longer depend on where the
     // simulation starts.
     final needed = window * (deduct ? 3 : 1) + carryDays + 4 * keep + 1;
@@ -940,11 +945,11 @@ class RuleEngine {
         // When the limit turns firm, the overruns of its window become a
         // debt, each one once, paid from the following days' time.
         var count = 0;
-        for (var k = 1; k <= hardening.window && i - k >= 0; k++) {
-          if (overruns[i - k] > hardening.threshold) count++;
+        for (var k = 1; k <= window && i - k >= 0; k++) {
+          if (overruns[i - k] > hardThreshold) count++;
         }
-        if (count >= hardening.days) {
-          for (var k = 1; k <= hardening.window && i - k >= 0; k++) {
+        if (count >= hardDays) {
+          for (var k = 1; k <= window && i - k >= 0; k++) {
             if (overruns[i - k] > Duration.zero && billed.add(i - k)) {
               debt += overruns[i - k];
             }

@@ -2,6 +2,7 @@
 
 // clang-format off
 #include <windows.h>
+#include <appmodel.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <tlhelp32.h>
@@ -9,10 +10,12 @@
 // clang-format on
 
 #include <algorithm>
+#include <cctype>
 #include <cwctype>
 #include <fstream>
 #include <iterator>
 #include <sstream>
+#include <vector>
 
 #include "ipc.h"
 
@@ -192,6 +195,153 @@ void ScanShortcuts(const std::wstring& dir, int depth,
   ::FindClose(find);
 }
 
+// --- Apps of the Store ------------------------------------------------------
+//
+// They have no shortcut in the Start menu folders (Notepad, Paint and the
+// Calculator on Windows 11, apps installed from the Store). The Start
+// menu's own list (the Applications folder) names them by their
+// application user model id, "<package family>!<app>": their program is in
+// their package's manifest.
+
+// System.AppUserModel.ID.
+const PROPERTYKEY kAppUserModelId = {
+    {0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}},
+    5};
+
+// The folder of the installed package of [family], or an empty string.
+std::wstring PackageFolder(const std::wstring& family) {
+  UINT32 count = 0;
+  UINT32 length = 0;
+  if (::GetPackagesByPackageFamily(family.c_str(), &count, nullptr, &length,
+                                   nullptr) != ERROR_INSUFFICIENT_BUFFER ||
+      count == 0 || length == 0) {
+    return std::wstring();
+  }
+  std::vector<PWSTR> names(count);
+  std::vector<wchar_t> buffer(length);
+  if (::GetPackagesByPackageFamily(family.c_str(), &count, names.data(),
+                                   &length, buffer.data()) != ERROR_SUCCESS ||
+      count == 0) {
+    return std::wstring();
+  }
+  UINT32 path_length = 0;
+  if (::GetPackagePathByFullName(names[0], &path_length, nullptr) !=
+          ERROR_INSUFFICIENT_BUFFER ||
+      path_length == 0) {
+    return std::wstring();
+  }
+  std::vector<wchar_t> path(path_length);
+  if (::GetPackagePathByFullName(names[0], &path_length, path.data()) !=
+      ERROR_SUCCESS) {
+    return std::wstring();
+  }
+  return std::wstring(path.data());
+}
+
+std::string ReadAll(const std::wstring& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return std::string();
+  return std::string(std::istreambuf_iterator<char>(in),
+                     std::istreambuf_iterator<char>());
+}
+
+// The value of attribute [name] in the start tag [tag], or an empty string.
+std::string Attribute(const std::string& tag, const std::string& name) {
+  std::string key = name + "=\"";
+  size_t at = 0;
+  while ((at = tag.find(key, at)) != std::string::npos) {
+    // A whole attribute name, not the end of another ("AppId").
+    if (at > 0 && std::isspace(static_cast<unsigned char>(tag[at - 1]))) {
+      size_t start = at + key.size();
+      size_t end = tag.find('"', start);
+      if (end == std::string::npos) return std::string();
+      return tag.substr(start, end - start);
+    }
+    at += key.size();
+  }
+  return std::string();
+}
+
+// The program of application [app] in a package's [manifest]: its
+// Executable, relative to the package's folder.
+std::wstring ManifestProgram(const std::string& manifest,
+                             const std::string& app) {
+  std::string first;
+  size_t at = 0;
+  while ((at = manifest.find("<Application ", at)) != std::string::npos) {
+    size_t end = manifest.find('>', at);
+    if (end == std::string::npos) break;
+    std::string tag = manifest.substr(at, end - at);
+    std::string program = Attribute(tag, "Executable");
+    if (!program.empty()) {
+      if (Attribute(tag, "Id") == app) return Utf16FromUtf8(program);
+      if (first.empty()) first = program;
+    }
+    at = end;
+  }
+  // A package with one application only: that one.
+  return Utf16FromUtf8(first);
+}
+
+// Adds the Start menu's app [item], when an app of the Store.
+void AddStoreApp(IShellItem* item, std::map<std::wstring, std::wstring>& folders,
+                 std::map<std::string, KnownApp>& apps) {
+  IShellItem2* item2 = nullptr;
+  if (FAILED(item->QueryInterface(IID_PPV_ARGS(&item2)))) return;
+  PWSTR aumid = nullptr;
+  if (SUCCEEDED(item2->GetString(kAppUserModelId, &aumid)) && aumid) {
+    std::wstring id = aumid;
+    size_t bang = id.find(L'!');
+    if (bang != std::wstring::npos) {
+      std::wstring family = id.substr(0, bang);
+      auto known = folders.find(family);
+      if (known == folders.end()) {
+        known = folders.emplace(family, PackageFolder(family)).first;
+      }
+      const std::wstring& folder = known->second;
+      if (!folder.empty()) {
+        std::wstring program = ManifestProgram(
+            ReadAll(folder + L"\\AppxManifest.xml"), Utf8(id.substr(bang + 1)));
+        std::replace(program.begin(), program.end(), L'/', L'\\');
+        if (!program.empty() && program.find(L'$') == std::wstring::npos) {
+          std::wstring path = folder + L"\\" + program;
+          std::string app_id = AppIdOfPath(path);
+          PWSTR name = nullptr;
+          if (app_id != kSelfAppId && apps.find(app_id) == apps.end() &&
+              SUCCEEDED(item->GetDisplayName(SIGDN_NORMALDISPLAY, &name)) &&
+              name) {
+            apps[app_id] = {path, name};
+          }
+          ::CoTaskMemFree(name);
+        }
+      }
+    }
+  }
+  ::CoTaskMemFree(aumid);
+  item2->Release();
+}
+
+// Adds the apps of the Store in the Start menu not already in [apps].
+void ScanStoreApps(std::map<std::string, KnownApp>& apps) {
+  IShellItem* folder = nullptr;
+  if (FAILED(::SHGetKnownFolderItem(FOLDERID_AppsFolder, KF_FLAG_DEFAULT,
+                                    nullptr, IID_PPV_ARGS(&folder)))) {
+    return;
+  }
+  IEnumShellItems* items = nullptr;
+  if (SUCCEEDED(folder->BindToHandler(nullptr, BHID_EnumItems,
+                                      IID_PPV_ARGS(&items)))) {
+    std::map<std::wstring, std::wstring> folders;
+    IShellItem* item = nullptr;
+    while (items->Next(1, &item, nullptr) == S_OK) {
+      AddStoreApp(item, folders, apps);
+      item->Release();
+    }
+    items->Release();
+  }
+  folder->Release();
+}
+
 }  // namespace
 
 std::string AppIdOfPath(const std::wstring& path) {
@@ -288,6 +438,7 @@ std::map<std::string, KnownApp> InstalledApps() {
   std::map<std::string, KnownApp> shortcuts;
   ScanShortcuts(KnownFolder(FOLDERID_CommonPrograms), 0, shortcuts);
   ScanShortcuts(KnownFolder(FOLDERID_Programs), 0, shortcuts);
+  ScanStoreApps(shortcuts);
   auto known = LoadKnownApps();
   bool changed = false;
   for (const auto& [id, app] : shortcuts) {

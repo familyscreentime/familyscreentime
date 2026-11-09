@@ -47,7 +47,8 @@ std::map<std::string, KnownApp> LoadKnownApps();
 void RememberApp(const std::string& id, const std::wstring& path,
                  const std::wstring& label = L"");
 
-// The apps of the Start menu (this account's and every account's), and
+// The apps of the Start menu (this account's and every account's, apps of
+// the Store included), and
 // those already seen in use here.
 std::map<std::string, KnownApp> InstalledApps();
 

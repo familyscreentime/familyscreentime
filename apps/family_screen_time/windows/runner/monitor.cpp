@@ -415,7 +415,7 @@ void HandleCall(const flutter::MethodCall<EncodableValue>& call,
             if (it != map->end()) {
                 int cap = 100;
                 if (auto* v = std::get_if<int32_t>(&it->second)) cap = *v;
-                else if (auto* v = std::get_if<int64_t>(&it->second)) cap = (int)*v;
+                else if (auto* w = std::get_if<int64_t>(&it->second)) cap = (int)*w;
                 g_volume->SetCap(cap);
             } else {
                 g_volume->SetCap(-1);

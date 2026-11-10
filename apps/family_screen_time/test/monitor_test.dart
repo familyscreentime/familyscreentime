@@ -694,6 +694,47 @@ void main() {
       expect(lock['message'], args['message']);
     });
 
+    test('the lock screen offers only the apps installed here', () async {
+      if (!todayOnly) return markTestSkipped('too close to midnight');
+      const platform = MethodChannel('org.familyscreentime/platform');
+      messenger.setMockMethodCallHandler(platform, (call) async {
+        if (call.method != 'appInfo') return null;
+        final wanted = (call.arguments as Map)['packages'] as List;
+        return {
+          // The dialer of the child's tablet is not on this PC.
+          for (final a in wanted)
+            if (a == 'notepad.exe') a: {'label': 'Bloc-notes'},
+        };
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(platform, null));
+      final family = await store.loadFamily();
+      await store.saveFamily(
+        family.copyWith(
+          outOfTime: OutOfTime.device,
+          config: family.config.copyWith(
+            alwaysAllowed: {'com.google.android.dialer', 'notepad.exe'},
+          ),
+          state: const FamilyState(
+            rules: [
+              Rule(
+                id: 'all',
+                childId: 'emma',
+                dailyQuota: Duration(minutes: 30),
+              ),
+            ],
+          ),
+        ),
+      );
+      await use(31);
+      await send('reload', null);
+      await send('foreground', {'package': 'youtube'});
+      final lock =
+          calls.lastWhere((c) => c.method == 'lockState').arguments
+              as Map<Object?, Object?>;
+      expect(lock['deviceLocked'], isTrue);
+      expect(lock['exempt'], ['notepad.exe']);
+    });
+
     test('the device locks only once the app in grace is left', () async {
       if (!todayOnly) return markTestSkipped('too close to midnight');
       final family = await store.loadFamily();

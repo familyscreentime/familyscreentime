@@ -516,6 +516,7 @@ class Monitor {
         }
         await _evaluate();
       case 'reload':
+        _installedAsked = null;
         // Became a parent's device, by joining others.
         if ((await store.loadSettings()).parentDevice) {
           await _closeLog();
@@ -542,6 +543,7 @@ class Monitor {
           BrowserSample.fromPlatform(call.arguments as Map<Object?, Object?>),
         );
       case 'appsChanged':
+        _installedAsked = null;
         // Installed or removed just now: the family's devices know at once,
         // so the parent can limit a new app straight away.
         final log = _log;
@@ -1095,25 +1097,53 @@ class Monitor {
       'open': _s.t('lockOpen'),
       // Apps that stay open on a locked device: those at any hour, and
       // those within the hours while it is within the hours.
-      'exempt': [
-        ..._family.config.alwaysAllowedFor(childId),
-        for (final app in _family.config.allowedInHoursFor(childId))
-          if (engine
-              .evaluate(
-                state,
-                childId: childId,
-                deviceId: settings.deviceId,
-                appId: app,
-                now: now,
-              )
-              .allowed)
-            app,
-      ]..sort(),
+      // Only those installed here: the lock screen has no button for an
+      // app it cannot open (the dialer of the child's tablet, on their PC).
+      'exempt': await _installedHere(
+        [
+          ..._family.config.alwaysAllowedFor(childId),
+          for (final app in _family.config.allowedInHoursFor(childId))
+            if (engine
+                .evaluate(
+                  state,
+                  childId: childId,
+                  deviceId: settings.deviceId,
+                  appId: app,
+                  now: now,
+                )
+                .allowed)
+              app,
+        ]..sort(),
+      ),
     };
     final key = lock.toString();
     if (key == _lockSent) return;
     _lockSent = key;
     await _channel.invokeMethod('lockState', lock);
+  }
+
+  /// The apps of the last [_installedHere] question, and those of them
+  /// installed here.
+  String? _installedAsked;
+  Set<String> _installed = const {};
+
+  /// Of [apps], those installed on this device, asked once for each set of
+  /// apps (again after a reload or an app installed). All of them when the
+  /// device cannot say.
+  Future<List<String>> _installedHere(List<String> apps) async {
+    final key = apps.join('|');
+    if (key != _installedAsked) {
+      try {
+        _installed = (await const PlatformApi().appInfo(apps)).keys.toSet();
+        _installedAsked = key;
+      } on Object {
+        return apps;
+      }
+    }
+    return [
+      for (final a in apps)
+        if (_installed.contains(a)) a,
+    ];
   }
 
   /// Times left at which a warning is due for decision [d]: the child's

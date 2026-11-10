@@ -8,8 +8,11 @@ library;
 import 'package:flutter/material.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
+import '../children_glance.dart';
 import '../controller.dart';
+import '../family.dart';
 import '../store.dart';
+import '../strings.dart';
 import 'widgets.dart';
 
 class RuleEditor extends StatefulWidget {
@@ -81,9 +84,18 @@ class _RuleEditorState extends State<RuleEditor> {
   /// A day without ranges is blocked all day.
   late Map<int, List<TimeRange>> _days;
 
+  /// The child's devices and their names, in order; the choice is offered
+  /// from two devices on.
+  List<(String, String)> _childDevices = const [];
+
+  /// The devices chosen; `null` for all the child's devices (those linked
+  /// later too).
+  Set<String>? _devices;
+
   @override
   void initState() {
     super.initState();
+    _loadDevices();
     final r = widget.rule;
     _target = r?.appTarget ?? widget.initialTarget ?? const AppTarget.all();
     _enabled = r?.enabled ?? true;
@@ -259,16 +271,89 @@ class _RuleEditorState extends State<RuleEditor> {
     );
   }
 
+  Future<void> _loadDevices() async {
+    final c = widget.controller;
+    final childId = c.childId;
+    if (childId == null) return;
+    final ids = {...(await c.childDevices())[childId] ?? const <String>{}};
+    // This device is the child's, linked or not.
+    if (!c.settings.parentDevice) ids.add(c.settings.deviceId);
+    final names = await c.deviceNames();
+    final rule = widget.rule;
+    final chosen = rule == null
+        ? null
+        : ruleDevices(rule, c.family.config.deviceGroups);
+    if (!mounted) return;
+    setState(() {
+      _childDevices = [
+        for (final id in ids)
+          (
+            id,
+            id == c.settings.deviceId
+                ? c.s.t('thisDeviceName', {'name': names[id] ?? id})
+                : names[id] ?? id,
+          ),
+      ]..sort((a, b) => a.$2.toLowerCase().compareTo(b.$2.toLowerCase()));
+      _devices = chosen == null ? null : {...chosen};
+    });
+  }
+
+  /// The devices of the rule: all of them, or those ticked.
+  List<Widget> _deviceTiles(S s) {
+    if (_childDevices.length < 2) return const [];
+    final all = {for (final d in _childDevices) d.$1};
+    final chosen = _devices;
+    return [
+      ListTile(
+        title: Text(s.t('ruleDevices')),
+        subtitle: Text(s.t('ruleDevicesHint')),
+      ),
+      CheckboxListTile(
+        title: Text(s.t('ruleDevicesAll')),
+        value: chosen == null,
+        onChanged: (v) => setState(() => _devices = v! ? null : {...all}),
+      ),
+      for (final (id, name) in _childDevices)
+        CheckboxListTile(
+          contentPadding: const EdgeInsetsDirectional.only(start: 40, end: 24),
+          title: Text(name),
+          value: chosen == null || chosen.contains(id),
+          // At least one device stays chosen.
+          onChanged:
+              chosen == null || (chosen.length == 1 && chosen.contains(id))
+              ? null
+              : (v) => setState(() {
+                  if (v!) {
+                    chosen.add(id);
+                  } else {
+                    chosen.remove(id);
+                  }
+                }),
+        ),
+      const Divider(),
+    ];
+  }
+
   Future<void> _save() async {
     final c = widget.controller;
     final old = widget.rule;
     final daily = _dailyQuotas();
+    final id = old?.id ?? newId();
+    // Devices not offered (a single one): the rule keeps its target.
+    final (deviceTarget, deviceGroups) = _childDevices.length < 2
+        ? (
+            old?.deviceTarget ?? const DeviceTarget.all(),
+            c.family.config.deviceGroups,
+          )
+        : aimRule(id, _devices, {
+            for (final d in _childDevices) d.$1,
+          }, c.family.config.deviceGroups);
     final rule = Rule(
-      id: old?.id ?? newId(),
+      id: id,
       childId: c.childId!,
       profileId: _profile,
       appTarget: _target,
-      deviceTarget: old?.deviceTarget ?? const DeviceTarget.all(),
+      deviceTarget: deviceTarget,
       schedule: _schedule(),
       dailyQuota: daily.$1,
       dailyQuotaByWeekday: daily.$2,
@@ -318,7 +403,12 @@ class _RuleEditorState extends State<RuleEditor> {
       rule,
     ];
     await c.updateFamily(
-      c.family.copyWith(state: stateWithRules(c.family.state, rules)),
+      c.family.copyWith(
+        config: c.family.config.copyWith(
+          deviceGroups: pruneRuleDeviceGroups(deviceGroups, rules),
+        ),
+        state: stateWithRules(c.family.state, rules),
+      ),
     );
     if (mounted) Navigator.of(context).pop();
   }
@@ -330,7 +420,15 @@ class _RuleEditorState extends State<RuleEditor> {
         .where((r) => r.id != widget.rule!.id)
         .toList();
     await c.updateFamily(
-      c.family.copyWith(state: stateWithRules(c.family.state, rules)),
+      c.family.copyWith(
+        config: c.family.config.copyWith(
+          deviceGroups: pruneRuleDeviceGroups(
+            c.family.config.deviceGroups,
+            rules,
+          ),
+        ),
+        state: stateWithRules(c.family.state, rules),
+      ),
     );
     if (mounted) Navigator.of(context).pop();
   }
@@ -365,6 +463,7 @@ class _RuleEditorState extends State<RuleEditor> {
             value: _enabled,
             onChanged: (v) => setState(() => _enabled = v),
           ),
+          ..._deviceTiles(s),
           // With special periods: always, in normal times, or during one.
           if (c.specialPeriods.isNotEmpty)
             ListTile(

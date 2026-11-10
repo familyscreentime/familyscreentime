@@ -47,6 +47,11 @@ behind the parent code.
   rule applies always, in normal times, or only during one of them. When
   periods overlap, the first in the list wins (drag to reorder). The child
   sees which period is running.
+- Rules on all the child's devices, or on some of them only (a rule can
+  aim at the PC, or at the tablet and the phone): it counts the time spent
+  on those devices and blocks only them. The rule says which devices, on
+  the parent's screens and on the child's home. Several devices make a
+  group of devices of the rule's own, which goes with it.
 - Limits on a single app, besides total screen time and groups (from the
   parent screen or from the app's detail in the usage screen).
 - Limits the child sets for themselves, freely and without the code (an

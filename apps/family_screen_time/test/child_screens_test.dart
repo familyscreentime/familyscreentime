@@ -312,17 +312,17 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('outside the hours, the child still sees their home', (
+  testWidgets('outside the hours, the app itself asks for the parent code', (
     tester,
   ) async {
     final c = controller([
       Rule(id: 'all', childId: 'emma', schedule: WeeklySchedule(const {})),
     ]);
     await tester.pumpWidget(MaterialApp(home: ChildHome(controller: c)));
-    await settle(tester, find.byIcon(Icons.bedtime_outlined));
-    // Said at the top; the time used and their own limits stay at hand.
-    expect(find.byIcon(Icons.bedtime_outlined), findsOneWidget);
-    expect(find.text('Me fixer une limite'), findsOneWidget);
+    await settle(tester, find.text('En dehors des horaires'));
+    expect(find.text('En dehors des horaires'), findsOneWidget);
+    expect(find.text('Mode parent'), findsOneWidget);
+    expect(find.text('Me fixer une limite'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

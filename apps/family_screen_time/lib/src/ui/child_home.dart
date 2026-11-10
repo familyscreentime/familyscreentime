@@ -36,8 +36,8 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
   /// "Your time for today is up. See you tomorrow from 9.", when it is.
   String? _timeOver;
 
-  /// Outside the hours set for all apps, when [_timeOver] cannot say when
-  /// they come back: until when.
+  /// Outside the hours set for all apps: the app itself is closed, but for
+  /// parent mode. The text says until when.
   String? _closed;
   Map<String, AppInfo> _info = const {};
   bool _missingPermission = false;
@@ -532,6 +532,47 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
     final c = widget.controller;
     final s = c.s;
     final theme = Theme.of(context);
+    final closed = _closed;
+    if (closed != null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(c.child?.name ?? s.t('appName'))),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.bedtime_outlined,
+                  size: 64,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  s.t('appClosedTitle'),
+                  style: theme.textTheme.headlineSmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(closed, textAlign: TextAlign.center),
+                const SizedBox(height: 24),
+                Text(
+                  s.t('appClosedHint'),
+                  style: theme.textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  icon: const Icon(Icons.lock_outline),
+                  label: Text(s.t('parentMode')),
+                  onPressed: _openParentMode,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text(c.child?.name ?? s.t('appName')),
@@ -584,14 +625,12 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-            // No more time, or outside the hours: the app stays open, to
-            // see the time used and change the child's own limits.
-            if (_timeOver ?? _closed case final over?)
+            if (_timeOver != null)
               Card(
                 color: theme.colorScheme.tertiaryContainer,
                 child: ListTile(
                   leading: const Icon(Icons.bedtime_outlined),
-                  title: Text(over),
+                  title: Text(_timeOver!),
                 ),
               ),
             for (final b in c.activeBlocks(DateTime.now()))

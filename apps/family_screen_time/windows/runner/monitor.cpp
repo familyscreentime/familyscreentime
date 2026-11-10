@@ -55,6 +55,14 @@ std::wstring g_settings_title, g_settings_message;
 NoticeWindow* g_block_notice = nullptr;
 LockWindow* g_device_lock = nullptr;
 OverlayWindow* g_overlay = nullptr;
+EyeNoticeWindow* g_eye_notice = nullptr;
+EyeVeilWindow* g_eye_veil = nullptr;
+
+// Takes the eye break's notice and veil down.
+void HideEyeBreak() {
+    if (g_eye_notice) g_eye_notice->Hide();
+    if (g_eye_veil) g_eye_veil->Hide();
+}
 
 NOTIFYICONDATAW g_nid = {};
 
@@ -232,6 +240,7 @@ void UpdateDeviceLock() {
                 !exempt && !g_parent_mode;
     if (show) {
         if (g_block_notice) g_block_notice->Hide();
+        HideEyeBreak();
         std::vector<std::wstring> labels;
         for (auto& e : g_lock_exempt) labels.push_back(AppLabel(e));
         g_device_lock->Show(g_lock_title, g_lock_message, g_lock_open, labels);
@@ -265,6 +274,7 @@ void OnForegroundApp(const std::string& pkg) {
 // devoirs non enregistrés).
 void DoBlock(const EncodableValue* args) {
     if (g_parent_mode) return;
+    HideEyeBreak();
     std::string app = StringField(args, "package");
     if (app.empty()) app = g_last_foreground;
 
@@ -392,16 +402,33 @@ void HandleCall(const flutter::MethodCall<EncodableValue>& call,
         result->Success();
         return;
     }
-    // Pauses oculaires : la fenêtre n'existe pas encore. Répondre « busy »
-    // pour que Dart continue de compter et réessaie.
+    // Eye breaks: the notice, then the veil. When they cannot show (the
+    // device locked, parent mode, the screen off), "busy": Dart counts the
+    // time after all and tries again later.
     if (m == "eyeNotice" || m == "eyeVeil") {
-        auto a = std::make_unique<EncodableValue>(EncodableMap{
-            {EncodableValue("action"), EncodableValue("busy")}});
-        SendToDart("eyeBreak", std::move(a));
+        bool waits = (g_device_lock && g_device_lock->Visible()) ||
+                     g_parent_mode || !g_screen_on || g_session_locked;
+        if (waits || !g_eye_notice || !g_eye_veil) {
+            HideEyeBreak();
+            auto a = std::make_unique<EncodableValue>(EncodableMap{
+                {EncodableValue("action"), EncodableValue("busy")}});
+            SendToDart("eyeBreak", std::move(a));
+        } else if (m == "eyeNotice") {
+            g_eye_notice->Show(Utf16FromUtf8(StringField(args, "title")),
+                               Utf16FromUtf8(StringField(args, "text")),
+                               Utf16FromUtf8(StringField(args, "now")),
+                               Utf16FromUtf8(StringField(args, "later")),
+                               Int64Field(map, "endsAt"));
+        } else {
+            g_eye_notice->Hide();
+            g_eye_veil->Show(Utf16FromUtf8(StringField(args, "title")),
+                             Utf16FromUtf8(StringField(args, "text")),
+                             Int64Field(map, "endsAt"));
+        }
         result->Success();
         return;
     }
-    if (m == "eyeHide") { result->Success(); return; }
+    if (m == "eyeHide") { HideEyeBreak(); result->Success(); return; }
     if (m == "pauseMedia") {
         // V1 Windows : pas de browserMedia natif, donc pas de pause média
         // ciblée. On ne tente pas de pause globale : elle pourrait viser
@@ -587,11 +614,20 @@ void RunMonitorProcess(HINSTANCE instance) {
         }
     });
     g_overlay = new OverlayWindow();
+    g_eye_notice = new EyeNoticeWindow([](const char* action) {
+        // The child's answer: the break now, or in a minute.
+        auto a = std::make_unique<EncodableValue>(EncodableMap{
+            {EncodableValue("action"), EncodableValue(action)}});
+        SendToDart("eyeBreak", std::move(a));
+    });
+    g_eye_veil = new EyeVeilWindow();
 
     if (!g_engine->Run()) {
         delete g_block_notice;
         delete g_device_lock;
         delete g_overlay;
+        delete g_eye_notice;
+        delete g_eye_veil;
         delete g_platform;
         delete g_volume;
         ::CloseHandle(g_single_instance);
@@ -617,6 +653,8 @@ void RunMonitorProcess(HINSTANCE instance) {
     delete g_block_notice;
     delete g_device_lock;
     delete g_overlay;
+    delete g_eye_notice;
+    delete g_eye_veil;
     delete g_platform;
     delete g_volume;
     g_channel.reset();

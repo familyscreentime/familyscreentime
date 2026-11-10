@@ -560,3 +560,228 @@ bool OverlayWindow::Message(UINT message, WPARAM wparam, LPARAM lparam,
   }
   return false;
 }
+
+// --- EyeNoticeWindow -------------------------------------------------------
+
+namespace {
+constexpr int kEyeNow = 1;
+constexpr int kEyeLater = 2;
+constexpr UINT_PTR kEndTimer = 2;
+
+// Milliseconds from now until [ends_at_ms], at least 1.
+UINT Until(int64_t ends_at_ms) {
+  int64_t left = ends_at_ms - NowMs();
+  if (left < 1) return 1;
+  if (left > 24LL * 3600 * 1000) return 24u * 3600 * 1000;
+  return static_cast<UINT>(left);
+}
+}  // namespace
+
+void EyeNoticeWindow::Show(const std::wstring& title, const std::wstring& text,
+                           const std::wstring& now, const std::wstring& later,
+                           int64_t ends_at_ms) {
+  if (!Ensure(L"FamilyScreenTimeEyeNotice",
+              WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) {
+    return;
+  }
+  title_ = title;
+  text_ = text;
+  now_ = now;
+  later_ = later;
+  Layout();
+  ::ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
+  ::SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  ::InvalidateRect(hwnd_, nullptr, FALSE);
+  ::SetTimer(hwnd_, kEndTimer, Until(ends_at_ms), nullptr);
+}
+
+void EyeNoticeWindow::Layout() {
+  int pad = Scale(20);
+  int width = Scale(460);
+  int inner = width - 2 * pad;
+  int y = Scale(6) + Scale(14);
+  int h = TextHeight(title_, Font(13, true), inner);
+  title_rect_ = {pad, y, pad + inner, y + h};
+  y += h + Scale(6);
+  h = TextHeight(text_, Font(11, false), inner);
+  text_rect_ = {pad, y, pad + inner, y + h};
+  y += h + Scale(16);
+
+  buttons_.clear();
+  HDC dc = ::GetDC(hwnd_);
+  int button_height = Scale(34);
+  int right = width - pad;
+  int now_width = std::max(Scale(96), TextWidth(dc, now_, Font(10, true)) +
+                                          Scale(40));
+  buttons_.push_back(
+      {{right - now_width, y, right, y + button_height}, now_, kEyeNow, true});
+  right -= now_width + Scale(8);
+  if (!later_.empty()) {
+    int later_width = TextWidth(dc, later_, Font(10, true)) + Scale(40);
+    buttons_.push_back({{right - later_width, y, right, y + button_height},
+                        later_,
+                        kEyeLater,
+                        false});
+  }
+  ::ReleaseDC(hwnd_, dc);
+  int height = y + button_height + pad;
+
+  // At the top of the screen the child is looking at.
+  RECT area = ActiveMonitorRect(true);
+  int x = area.left + (area.right - area.left - width) / 2;
+  ::SetWindowPos(hwnd_, HWND_TOPMOST, x, area.top + Scale(16), width, height,
+                 SWP_NOACTIVATE);
+  DWORD corners = 2;  // DWMWCP_ROUND
+  ::DwmSetWindowAttribute(hwnd_, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */,
+                          &corners, sizeof(corners));
+}
+
+void EyeNoticeWindow::Paint(HDC dc, const RECT& client) {
+  Fill(dc, client, RGB(0xFF, 0xFF, 0xFF));
+  RECT band = {0, 0, client.right, Scale(6)};
+  Fill(dc, band, kPrimary);
+  HPEN pen = ::CreatePen(PS_SOLID, 1, RGB(0xC8, 0xCD, 0xD8));
+  HGDIOBJ old_pen = ::SelectObject(dc, pen);
+  HGDIOBJ old_brush = ::SelectObject(dc, ::GetStockObject(NULL_BRUSH));
+  ::Rectangle(dc, 0, 0, client.right, client.bottom);
+  ::SelectObject(dc, old_pen);
+  ::SelectObject(dc, old_brush);
+  ::DeleteObject(pen);
+  Text(dc, title_, title_rect_, Font(13, true), kText, DT_WORDBREAK);
+  Text(dc, text_, text_rect_, Font(11, false), kMuted, DT_WORDBREAK);
+  for (const auto& button : buttons_) DrawButton(dc, button, false);
+}
+
+void EyeNoticeWindow::Clicked(int id) {
+  ::KillTimer(hwnd_, kEndTimer);
+  Hide();
+  if (on_answer_) on_answer_(id == kEyeLater ? "later" : "now");
+}
+
+bool EyeNoticeWindow::Message(UINT message, WPARAM wparam, LPARAM lparam,
+                              LRESULT* result) {
+  switch (message) {
+    case WM_TIMER:
+      if (wparam == kEndTimer) {
+        // Its time is over: the veil comes next, if the monitor sends it.
+        ::KillTimer(hwnd_, kEndTimer);
+        Hide();
+        *result = 0;
+        return true;
+      }
+      break;
+    case WM_MOUSEACTIVATE:
+      // A click on a button leaves the app in front where it was.
+      *result = MA_NOACTIVATE;
+      return true;
+    case WM_DPICHANGED:
+      dpi_ = HIWORD(wparam);
+      Layout();
+      ::InvalidateRect(hwnd_, nullptr, FALSE);
+      *result = 0;
+      return true;
+  }
+  return false;
+}
+
+// --- EyeVeilWindow ---------------------------------------------------------
+
+void EyeVeilWindow::Show(const std::wstring& title, const std::wstring& text,
+                         int64_t ends_at_ms) {
+  if (!Ensure(L"FamilyScreenTimeEyeVeil", WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
+                                              WS_EX_NOACTIVATE |
+                                              WS_EX_LAYERED)) {
+    return;
+  }
+  ::SetLayeredWindowAttributes(hwnd_, 0, 240, LWA_ALPHA);
+  title_ = title;
+  text_ = text;
+  ends_at_ = ends_at_ms;
+  Layout();
+  ::ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
+  ::SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  ::InvalidateRect(hwnd_, nullptr, FALSE);
+  ::SetTimer(hwnd_, kTickTimer, 250, nullptr);
+}
+
+void EyeVeilWindow::Layout() {
+  ::SetWindowPos(hwnd_, HWND_TOPMOST, ::GetSystemMetrics(SM_XVIRTUALSCREEN),
+                 ::GetSystemMetrics(SM_YVIRTUALSCREEN),
+                 ::GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                 ::GetSystemMetrics(SM_CYVIRTUALSCREEN), SWP_NOACTIVATE);
+}
+
+void EyeVeilWindow::Paint(HDC dc, const RECT& client) {
+  Fill(dc, client, RGB(0x10, 0x16, 0x24));
+  int64_t left = std::max<int64_t>(0, (ends_at_ - NowMs() + 999) / 1000);
+  std::wstring count = std::to_wstring(left);
+  // The same on every screen, in the window's coordinates.
+  struct Screens {
+    std::vector<RECT> rects;
+  } screens;
+  ::EnumDisplayMonitors(
+      nullptr, nullptr,
+      [](HMONITOR, HDC, LPRECT rect, LPARAM param) -> BOOL {
+        reinterpret_cast<Screens*>(param)->rects.push_back(*rect);
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&screens));
+  int origin_x = ::GetSystemMetrics(SM_XVIRTUALSCREEN);
+  int origin_y = ::GetSystemMetrics(SM_YVIRTUALSCREEN);
+  for (RECT screen : screens.rects) {
+    ::OffsetRect(&screen, -origin_x, -origin_y);
+    int width = screen.right - screen.left;
+    int inner = std::min(Scale(640), width - Scale(64));
+    int x = screen.left + (width - inner) / 2;
+    int title_height = TextHeight(title_, Font(20, true), inner);
+    int count_height = Scale(110);
+    int text_height = TextHeight(text_, Font(13, false), inner);
+    int block = title_height + Scale(24) + count_height + Scale(24) +
+                text_height;
+    int y = screen.top + (screen.bottom - screen.top - block) / 2;
+    Text(dc, title_, {x, y, x + inner, y + title_height}, Font(20, true),
+         RGB(0xFF, 0xFF, 0xFF), DT_CENTER | DT_WORDBREAK);
+    y += title_height + Scale(24);
+    Text(dc, count, {x, y, x + inner, y + count_height}, Font(64, true),
+         RGB(0xFF, 0xFF, 0xFF), DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    y += count_height + Scale(24);
+    Text(dc, text_, {x, y, x + inner, y + text_height}, Font(13, false),
+         kLightText, DT_CENTER | DT_WORDBREAK);
+  }
+}
+
+bool EyeVeilWindow::Message(UINT message, WPARAM wparam, LPARAM lparam,
+                            LRESULT* result) {
+  switch (message) {
+    case WM_TIMER:
+      if (wparam == kTickTimer) {
+        if (!Visible() || NowMs() >= ends_at_) {
+          // The break is over: the veil goes by itself.
+          ::KillTimer(hwnd_, kTickTimer);
+          Hide();
+        } else {
+          ::InvalidateRect(hwnd_, nullptr, FALSE);
+        }
+        *result = 0;
+        return true;
+      }
+      break;
+    case WM_MOUSEACTIVATE:
+      // The clicks stop here, and the keyboard stays where it was.
+      *result = MA_NOACTIVATE;
+      return true;
+    case WM_DISPLAYCHANGE:
+    case WM_DPICHANGED:
+      if (message == WM_DPICHANGED) dpi_ = HIWORD(wparam);
+      Layout();
+      ::InvalidateRect(hwnd_, nullptr, FALSE);
+      *result = 0;
+      return true;
+    case WM_CLOSE:
+      *result = 0;
+      return true;
+  }
+  return false;
+}

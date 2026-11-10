@@ -64,28 +64,105 @@ class _FamilyScreenTimeAppState extends State<FamilyScreenTimeApp>
     }
     return ListenableBuilder(
       listenable: controller,
-      builder: (context, _) => MaterialApp(
-        title: 'Family Screen Time',
-        navigatorKey: controller.navigatorKey,
-        theme: ThemeData(colorSchemeSeed: const Color(0xFF3A5BA0)),
-        darkTheme: ThemeData(
-          colorSchemeSeed: const Color(0xFF3A5BA0),
-          brightness: Brightness.dark,
+      builder: (context, _) {
+        // Parent mode on a child's device: nothing is limited here, so the
+        // whole interface changes colour and says so.
+        final parentHere =
+            controller.parentMode && !controller.settings.parentDevice;
+        final seed = parentHere ? parentModeColor : appColor;
+        return MaterialApp(
+          title: 'Family Screen Time',
+          navigatorKey: controller.navigatorKey,
+          theme: ThemeData(colorSchemeSeed: seed),
+          darkTheme: ThemeData(
+            colorSchemeSeed: seed,
+            brightness: Brightness.dark,
+          ),
+          locale: Locale(controller.s.language),
+          supportedLocales: [for (final l in supportedLanguages) Locale(l)],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          // Every touch keeps parent mode open.
+          builder: (context, child) => Listener(
+            onPointerDown: (_) => controller.touch(),
+            child: SystemBarsInset(
+              child: parentHere
+                  ? ParentModeFrame(controller: controller, child: child!)
+                  : child!,
+            ),
+          ),
+          home: !controller.settings.setupDone
+              ? SetupFlow(controller: controller)
+              : controller.settings.parentDevice
+              ? ParentDeviceHome(controller: controller)
+              : ChildHome(controller: controller),
+        );
+      },
+    );
+  }
+}
+
+/// The interface's colour.
+const appColor = Color(0xFF3A5BA0);
+
+/// Its colour in parent mode on a child's device.
+const parentModeColor = Color(0xFFC25A16);
+
+/// Parent mode on a child's device: a band above every screen says that
+/// nothing is limited, with the way out.
+class ParentModeFrame extends StatelessWidget {
+  final AppController controller;
+  final Widget child;
+
+  const ParentModeFrame({
+    super.key,
+    required this.controller,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      children: [
+        Material(
+          color: scheme.primary,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+              child: Row(
+                children: [
+                  Icon(Icons.lock_open, color: scheme.onPrimary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      controller.s.t('parentModeBanner'),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: scheme.onPrimary,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: scheme.onPrimary,
+                    ),
+                    onPressed: controller.leaveParentMode,
+                    child: Text(controller.s.t('parentModeLeave')),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-        locale: Locale(controller.s.language),
-        supportedLocales: [for (final l in supportedLanguages) Locale(l)],
-        localizationsDelegates: GlobalMaterialLocalizations.delegates,
-        // Every touch keeps parent mode open.
-        builder: (context, child) => Listener(
-          onPointerDown: (_) => controller.touch(),
-          child: SystemBarsInset(child: child!),
+        Expanded(
+          child: MediaQuery.removePadding(
+            context: context,
+            removeTop: true,
+            child: child,
+          ),
         ),
-        home: !controller.settings.setupDone
-            ? SetupFlow(controller: controller)
-            : controller.settings.parentDevice
-            ? ParentDeviceHome(controller: controller)
-            : ChildHome(controller: controller),
-      ),
+      ],
     );
   }
 }

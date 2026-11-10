@@ -46,12 +46,6 @@ class EyeStep {
 /// trying again.
 const eyeBusyWait = Duration(seconds: 30);
 
-/// The policy as this device carries it out. The Windows client has no
-/// veil yet: there, a break is a reminder only, whatever the setting
-/// (which the child's other devices still follow).
-EyeBreakPolicy eyePolicyHere(EyeBreakPolicy policy, {required bool windows}) =>
-    windows && policy.veil ? policy.copyWith(veil: false) : policy;
-
 /// A limit ending this soon makes the break wait: the block comes first.
 const eyeBlockSoon = Duration(minutes: 2);
 

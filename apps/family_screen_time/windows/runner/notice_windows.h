@@ -140,4 +140,52 @@ class OverlayWindow : public PaintedWindow {
   bool placed_ = false;
 };
 
+// The eye break's notice, at the top of the screen the child looks at:
+// a break is coming, now or in a minute. It never takes the keyboard from
+// the app in front, and goes by itself at the end of its time.
+class EyeNoticeWindow : public PaintedWindow {
+ public:
+  // [on_answer]: "now" or "later".
+  explicit EyeNoticeWindow(std::function<void(const char*)> on_answer)
+      : on_answer_(std::move(on_answer)) {}
+
+  // [later]: empty when the break can no longer be put off.
+  void Show(const std::wstring& title, const std::wstring& text,
+            const std::wstring& now, const std::wstring& later,
+            int64_t ends_at_ms);
+
+ protected:
+  void Paint(HDC dc, const RECT& client) override;
+  void Clicked(int id) override;
+  bool Message(UINT message, WPARAM wparam, LPARAM lparam,
+               LRESULT* result) override;
+
+ private:
+  void Layout();
+
+  std::function<void(const char*)> on_answer_;
+  std::wstring title_, text_, now_, later_;
+  RECT title_rect_{}, text_rect_{};
+};
+
+// The eye break's veil: every screen darkened, a countdown and an
+// invitation to look into the distance, until the end of the break. It
+// takes the clicks, not the keyboard, and goes by itself.
+class EyeVeilWindow : public PaintedWindow {
+ public:
+  void Show(const std::wstring& title, const std::wstring& text,
+            int64_t ends_at_ms);
+
+ protected:
+  void Paint(HDC dc, const RECT& client) override;
+  bool Message(UINT message, WPARAM wparam, LPARAM lparam,
+               LRESULT* result) override;
+
+ private:
+  void Layout();
+
+  std::wstring title_, text_;
+  int64_t ends_at_ = 0;
+};
+
 #endif  // RUNNER_NOTICE_WINDOWS_H_

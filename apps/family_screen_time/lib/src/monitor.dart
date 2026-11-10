@@ -894,9 +894,7 @@ class Monitor {
 
   EyeBreakPolicy get _eyePolicy {
     for (final c in _family.children) {
-      if (c.id == _settings?.childId) {
-        return eyePolicyHere(c.eyeBreak, windows: onWindows);
-      }
+      if (c.id == _settings?.childId) return c.eyeBreak;
     }
     return const EyeBreakPolicy(enabled: false);
   }

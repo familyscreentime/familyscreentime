@@ -119,17 +119,4 @@ void main() {
     );
     expect(off.kind, EyeStepKind.hide);
   });
-
-  test('on Windows, a reminder only until the PC has a veil', () {
-    final here = eyePolicyHere(policy, windows: true);
-    expect(here.veil, isFalse);
-    expect(here.every, policy.every);
-    expect(here.length, policy.length);
-    expect(eyePolicyHere(policy, windows: false).veil, isTrue);
-    eye.step(policy: here, stretchStart: start, now: t(19));
-    expect(
-      eye.step(policy: here, stretchStart: start, now: t(20)).kind,
-      EyeStepKind.reminder,
-    );
-  });
 }

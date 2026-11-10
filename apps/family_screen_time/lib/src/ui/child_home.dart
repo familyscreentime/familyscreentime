@@ -36,8 +36,8 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
   /// "Your time for today is up. See you tomorrow from 9.", when it is.
   String? _timeOver;
 
-  /// Outside the hours set for all apps: the app itself is closed, but for
-  /// parent mode. The text says until when.
+  /// Outside the hours set for all apps, when [_timeOver] cannot say when
+  /// they come back: until when.
   String? _closed;
   Map<String, AppInfo> _info = const {};
   bool _missingPermission = false;
@@ -216,6 +216,89 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => ParentHome(controller: c)));
     c.leaveParentMode();
+  }
+
+  /// Restrictions a parent lifted (for today, or the hours opened early):
+  /// said plainly at the top, with the way to put them back.
+  Widget? _liftedBanner(BuildContext context) {
+    final c = widget.controller;
+    final s = c.s;
+    final now = DateTime.now();
+    final day = c.dayUnlocked(now);
+    final early = c.hoursOpenedEarly(now);
+    if (!day && early.isEmpty) return null;
+    final scheme = Theme.of(context).colorScheme;
+    final text = TextStyle(color: scheme.onPrimary);
+    return Card(
+      color: scheme.primary,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Row(
+          children: [
+            Icon(Icons.lock_open, color: scheme.onPrimary, size: 32),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    s.t(day ? 'liftedDayTitle' : 'liftedHoursTitle'),
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(color: scheme.onPrimary),
+                  ),
+                  if (day) Text(s.t('liftedDayText'), style: text),
+                  for (final u in early)
+                    Text(
+                      s.t('liftedHoursText', {
+                        'label': _ruleName(u.ruleId),
+                        'time': s.time(u.until),
+                      }),
+                      style: text,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.lock),
+              label: Text(s.t('relock')),
+              onPressed: _relock,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _ruleName(String id) {
+    final c = widget.controller;
+    for (final r in c.childRules) {
+      if (r.id == id) return c.labelOf(r);
+    }
+    return id;
+  }
+
+  /// Puts back the restrictions a parent lifted, after the parent code.
+  Future<void> _relock() async {
+    final c = widget.controller;
+    if (!await askParentPin(context, c)) {
+      return;
+    }
+    // In parent mode, so that the change is signed for the other devices.
+    c.enterParentMode();
+    try {
+      final now = DateTime.now();
+      if (c.dayUnlocked(now)) await c.setDayUnlocked(false, now: now);
+      for (final u in c.hoursOpenedEarly(now)) {
+        await c.closeHoursEarly(u.id, now: now);
+      }
+    } finally {
+      c.leaveParentMode();
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(c.s.t('relocked'))));
+    await _refresh();
   }
 
   String _ranges(List<TimeRange> ranges) {
@@ -449,47 +532,6 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
     final c = widget.controller;
     final s = c.s;
     final theme = Theme.of(context);
-    final closed = _closed;
-    if (closed != null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(c.child?.name ?? s.t('appName'))),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.bedtime_outlined,
-                  size: 64,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  s.t('appClosedTitle'),
-                  style: theme.textTheme.headlineSmall,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(closed, textAlign: TextAlign.center),
-                const SizedBox(height: 24),
-                Text(
-                  s.t('appClosedHint'),
-                  style: theme.textTheme.bodySmall,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  icon: const Icon(Icons.lock_outline),
-                  label: Text(s.t('parentMode')),
-                  onPressed: _openParentMode,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
     return Scaffold(
       appBar: AppBar(
         title: Text(c.child?.name ?? s.t('appName')),
@@ -524,6 +566,7 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            ?_liftedBanner(context),
             if (_missingPermission)
               Card(
                 color: theme.colorScheme.errorContainer,
@@ -541,21 +584,14 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-            if (_timeOver != null)
+            // No more time, or outside the hours: the app stays open, to
+            // see the time used and change the child's own limits.
+            if (_timeOver ?? _closed case final over?)
               Card(
                 color: theme.colorScheme.tertiaryContainer,
                 child: ListTile(
                   leading: const Icon(Icons.bedtime_outlined),
-                  title: Text(_timeOver!),
-                ),
-              ),
-            // What the parent decided for today.
-            if (c.dayUnlocked(DateTime.now()))
-              Card(
-                color: theme.colorScheme.primaryContainer,
-                child: ListTile(
-                  leading: const Icon(Icons.lock_open),
-                  title: Text(s.t('monitorDayUnlocked')),
+                  title: Text(over),
                 ),
               ),
             for (final b in c.activeBlocks(DateTime.now()))

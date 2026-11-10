@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:family_screen_time/src/app.dart';
 import 'package:family_screen_time/src/controller.dart';
 import 'package:family_screen_time/src/store.dart';
 import 'package:family_screen_time/src/ui/child_home.dart';
@@ -322,6 +323,42 @@ void main() {
     expect(find.text('En dehors des horaires'), findsOneWidget);
     expect(find.text('Mode parent'), findsOneWidget);
     expect(find.text('Me fixer une limite'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('restrictions lifted for today: said plainly, with a lock', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final c = controller(const [
+      Rule(id: 'all', childId: 'emma', dailyQuota: Duration(hours: 1)),
+    ]);
+    await tester.runAsync(() => c.setDayUnlocked(true));
+    await tester.pumpWidget(MaterialApp(home: ChildHome(controller: c)));
+    await settle(tester, find.text('Aucune limite aujourd\'hui'));
+    expect(find.text('Aucune limite aujourd\'hui'), findsOneWidget);
+    expect(find.text('Verrouiller'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('parent mode on a child\'s device says nothing is limited', (
+    tester,
+  ) async {
+    final c = controller(const []);
+    c.enterParentMode();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ParentModeFrame(controller: c, child: const Text('écran')),
+      ),
+    );
+    expect(
+      find.text('Mode parent : aucune limite sur cet appareil'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Quitter le mode parent'));
+    expect(c.parentMode, isFalse);
     await tester.pumpWidget(const SizedBox());
   });
 

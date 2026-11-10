@@ -28,7 +28,9 @@ behind the parent code.
   limit closest to running out is offered first; a bonus can be taken
   back), lifting every restriction until midnight, blocking all apps or a
   group now (15 min to 2 h, until a given time, or until lifted). The
-  child's home screen shows a lifted day and the blocks in force.
+  child's home screen shows the blocks in force, and restrictions a parent
+  lifted (for today, or hours opened early) in a band at the top, with
+  until when and a "Lock" button that puts them back after the parent code.
 - Parent screen organised by kind of time: one line for total screen time,
   then one per app group, each leading to its rules (which can be turned
   off without being deleted) and, for a group, its apps. In the group
@@ -87,6 +89,9 @@ behind the parent code.
 - Outside the hours set for all apps, this app itself only opens parent
   mode.
 - A notification shows while parent mode is on, with a button to leave it.
+  On a child's device, the whole interface turns orange in parent mode, and
+  a band above every screen says that nothing is limited on this device,
+  with "Leave parent mode".
 - Durations offered in one tap, chosen per child by the parent (e.g. 15,
   25, 35 and 45 min): extra time, blocks, time away from the devices,
   breaks, and the length of a mandatory break.

@@ -49,6 +49,8 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     widget.controller.addListener(_refresh);
     _refresh();
+    // The names of the devices, for the limits on some of them.
+    widget.controller.loadDeviceLabels();
     // Statistics from the first day: import Android's history once.
     widget.controller.importHistoryIfNeeded();
     _timer = Timer.periodic(const Duration(seconds: 30), (_) => _refresh());
@@ -361,6 +363,23 @@ class _ChildHomeState extends State<ChildHome> with WidgetsBindingObserver {
                   ),
               ],
             ),
+            // A limit on some of the child's devices only: which.
+            if (c.devicesLabel(st.rule) case final devices?)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.devices, size: 16, color: scheme.outline),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        s.t('ruleTagDevices', {'devices': devices}),
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 4),
             if (remaining != null && total != null) ...[
               Text(

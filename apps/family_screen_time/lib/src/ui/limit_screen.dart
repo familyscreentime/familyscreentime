@@ -3,6 +3,8 @@
 /// with the rules that apply to it and, for a group, its apps.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
@@ -55,6 +57,8 @@ class _LimitScreenState extends State<LimitScreen> {
   }
 
   Future<void> _load() async {
+    // The names of the devices, for the rules aimed at some of them.
+    unawaited(c.loadDeviceLabels());
     final id = _groupId;
     final today = await c.timeToday(widget.target);
     if (widget.target.kind == TargetKind.single) {

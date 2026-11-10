@@ -181,34 +181,87 @@ bool _sameVersions(List<RuleVersion> a, List<RuleVersion> b) =>
 ///
 /// [periodNames] names the special periods by id, for rules that only apply
 /// during one of them.
-String ruleSummary(Rule r, S s, {Map<String, String> periodNames = const {}}) =>
-    [
-      if (r.profileId == 'normal') s.t('ruleTagNormal'),
-      if (r.profileId != null && r.profileId != 'normal')
-        s.t('ruleTagPeriod', {
-          'name': periodNames[r.profileId] ?? r.profileId!,
-        }),
-      if (r.dailyQuotaByWeekday.isNotEmpty)
-        s.t('ruleSummaryQuotaByDay')
-      else if (r.dailyQuota != null)
-        s.t('ruleSummaryQuota', {'time': s.duration(r.dailyQuota!)}),
-      if (r.weeklyQuota != null)
-        s.t('ruleSummaryWeekly', {'time': s.duration(r.weeklyQuota!)}),
-      if (r.rollingQuota != null)
-        s.t('ruleSummaryRolling', {
-          'time': s.duration(r.rollingQuota!.quota),
-          'days': s.days(r.rollingQuota!.days),
-        }),
-      if (r.schedule != null) s.t('ruleSummarySchedule'),
-      if (r.breakPolicy != null)
-        s.t('ruleSummaryBreak', {
-          'length': s.duration(r.breakPolicy!.length),
-          'after': s.duration(r.breakPolicy!.after),
-        }),
-      if (r.grace != null)
-        s.t('ruleSummaryGrace', {'time': s.duration(r.grace!.length)}),
-      if (r.carryOver.mode != CarryOverMode.none) s.t('ruleSummaryCarry'),
-      if (r.rollover != null)
-        s.t('ruleSummaryRollover', {'days': s.days(r.rollover!.days)}),
-      if (r.listenOnly != null) s.t('listenOnly').toLowerCase(),
-    ].join(' · ');
+///
+/// [devices] names the devices of a rule aimed at some of them only.
+String ruleSummary(
+  Rule r,
+  S s, {
+  Map<String, String> periodNames = const {},
+  String? devices,
+}) => [
+  if (devices != null) s.t('ruleTagDevices', {'devices': devices}),
+  if (r.profileId == 'normal') s.t('ruleTagNormal'),
+  if (r.profileId != null && r.profileId != 'normal')
+    s.t('ruleTagPeriod', {'name': periodNames[r.profileId] ?? r.profileId!}),
+  if (r.dailyQuotaByWeekday.isNotEmpty)
+    s.t('ruleSummaryQuotaByDay')
+  else if (r.dailyQuota != null)
+    s.t('ruleSummaryQuota', {'time': s.duration(r.dailyQuota!)}),
+  if (r.weeklyQuota != null)
+    s.t('ruleSummaryWeekly', {'time': s.duration(r.weeklyQuota!)}),
+  if (r.rollingQuota != null)
+    s.t('ruleSummaryRolling', {
+      'time': s.duration(r.rollingQuota!.quota),
+      'days': s.days(r.rollingQuota!.days),
+    }),
+  if (r.schedule != null) s.t('ruleSummarySchedule'),
+  if (r.breakPolicy != null)
+    s.t('ruleSummaryBreak', {
+      'length': s.duration(r.breakPolicy!.length),
+      'after': s.duration(r.breakPolicy!.after),
+    }),
+  if (r.grace != null)
+    s.t('ruleSummaryGrace', {'time': s.duration(r.grace!.length)}),
+  if (r.carryOver.mode != CarryOverMode.none) s.t('ruleSummaryCarry'),
+  if (r.rollover != null)
+    s.t('ruleSummaryRollover', {'days': s.days(r.rollover!.days)}),
+  if (r.listenOnly != null) s.t('listenOnly').toLowerCase(),
+].join(' · ');
+
+/// Prefix of the groups of devices made for one rule, aimed at some of the
+/// child's devices: `rule-<rule id>`. The parent never sees them as groups.
+const ruleDeviceGroupPrefix = 'rule-';
+
+/// The devices [r] applies to, by id; `null` for all the child's devices.
+Set<String>? ruleDevices(Rule r, Map<String, Set<String>> deviceGroups) =>
+    switch (r.deviceTarget.kind) {
+      TargetKind.all => null,
+      TargetKind.single => {r.deviceTarget.id!},
+      TargetKind.group => deviceGroups[r.deviceTarget.id] ?? const {},
+    };
+
+/// The target of rule [ruleId] for the devices [chosen] among the child's
+/// [devices] (`null`, or every one of them: all, those added later too),
+/// and the family's groups of devices with the rule's own group set or
+/// gone.
+(DeviceTarget, Map<String, Set<String>>) aimRule(
+  String ruleId,
+  Set<String>? chosen,
+  Set<String> devices,
+  Map<String, Set<String>> deviceGroups,
+) {
+  final own = '$ruleDeviceGroupPrefix$ruleId';
+  final groups = {...deviceGroups}..remove(own);
+  if (chosen == null || chosen.isEmpty || chosen.containsAll(devices)) {
+    return (const DeviceTarget.all(), groups);
+  }
+  if (chosen.length == 1) return (DeviceTarget.device(chosen.single), groups);
+  groups[own] = {...chosen};
+  return (DeviceTarget.group(own), groups);
+}
+
+/// [deviceGroups] without the groups of rules that no longer use them.
+Map<String, Set<String>> pruneRuleDeviceGroups(
+  Map<String, Set<String>> deviceGroups,
+  Iterable<Rule> rules,
+) {
+  final used = {
+    for (final r in rules)
+      if (r.deviceTarget.kind == TargetKind.group) r.deviceTarget.id,
+  };
+  return {
+    for (final e in deviceGroups.entries)
+      if (!e.key.startsWith(ruleDeviceGroupPrefix) || used.contains(e.key))
+        e.key: e.value,
+  };
+}

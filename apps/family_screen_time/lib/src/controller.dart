@@ -888,7 +888,29 @@ class AppController extends ChangeNotifier {
   };
 
   /// One-line summary of [r], special periods named.
-  String summaryOf(Rule r) => ruleSummary(r, s, periodNames: periodNames);
+  String summaryOf(Rule r) =>
+      ruleSummary(r, s, periodNames: periodNames, devices: devicesLabel(r));
+
+  /// Names of the family's devices, by id, for the rules aimed at some of
+  /// them; read by [loadDeviceLabels].
+  Map<String, String> deviceLabels = const {};
+
+  Future<void> loadDeviceLabels() async {
+    final names = await deviceNames();
+    if (mapEquals(names, deviceLabels)) return;
+    deviceLabels = names;
+    notifyListeners();
+  }
+
+  /// "Tablette, PC" for a rule aimed at some of the child's devices;
+  /// `null` for a rule on all of them.
+  String? devicesLabel(Rule r) {
+    final ids = ruleDevices(r, family.config.deviceGroups);
+    if (ids == null) return null;
+    final names = [for (final id in ids) deviceLabels[id] ?? id]
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return names.join(', ');
+  }
 
   /// The special period in force on [t], if any.
   Profile? activePeriod(DateTime t) {

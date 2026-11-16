@@ -16,7 +16,6 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Message
 import android.os.Messenger
-import android.os.PowerManager
 import android.os.RemoteException
 import android.os.SystemClock
 import android.util.Log
@@ -209,6 +208,7 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
     /** Polls usage statistics when the accessibility service is not running. */
     private val poller = object : Runnable {
         override fun run() {
+            checkScreen()
             if (screenOn && !accessibilityRuns) {
                 // Not known yet (the process just started, say): the app in
                 // front may have come there long ago.
@@ -293,8 +293,7 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
         } else {
             registerReceiver(packageReceiver, packages)
         }
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        screenOn = pm.isInteractive && !keyguardLocked()
+        screenOn = Shared.screenInUse(this)
         // Started again by Android (after it ran short of memory, say): the
         // app in front is the one the usage statistics last saw come there,
         // until the main process says.
@@ -353,7 +352,9 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
     /** From the main process, or this process's poller ([fromEnforcer] false). */
     private fun onForegroundApp(pkg: String, fromEnforcer: Boolean = false) {
         main.post {
-            // Nothing is in use while the screen is off or locked.
+            // Nothing is in use while the screen is off or locked; a
+            // broadcast missed is caught up with here.
+            if (!screenOn) checkScreen(lookUp = false)
             if (!screenOn) return@post
             if (pkg == lastForeground) return@post
             lastForeground = pkg
@@ -379,14 +380,27 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
         (getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager)
             .isKeyguardLocked
 
-    private fun setScreen(on: Boolean) {
+    /**
+     * Catches up with a screen broadcast missed or misleading: without it,
+     * a screen believed off would count nothing until it is turned off and
+     * on again.
+     */
+    private fun checkScreen(lookUp: Boolean = true) {
+        val inUse = Shared.screenInUse(this)
+        if (inUse == screenOn) return
+        Log.w(TAG, "Screen state corrected: ${if (inUse) "in use" else "off or locked"}")
+        setScreen(inUse, lookUp)
+    }
+
+    /** With [lookUp], the app in front is taken from the usage statistics. */
+    private fun setScreen(on: Boolean, lookUp: Boolean = true) {
         if (on == screenOn) return
         screenOn = on
         if (!on) lastForeground = null
         channel?.invokeMethod("screen", mapOf("on" to on))
         // Unlocking straight into an app sends no window change: look up
         // the last app that came to the foreground instead.
-        if (on) {
+        if (on && lookUp) {
             Shared.foregroundFromUsageStats(this, Shared.SINCE_UNLOCK_MS)?.let { onForegroundApp(it) }
         }
     }

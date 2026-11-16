@@ -14,11 +14,10 @@ import '../family.dart';
 import '../ordering.dart';
 import '../platform.dart';
 import '../strings.dart';
+import '../usage_period.dart';
 import '../usage_report.dart';
 import 'group_chips.dart';
 import 'limit_screen.dart';
-
-const _periods = [1, 7, 30];
 
 class UsageScreen extends StatefulWidget {
   final AppController controller;
@@ -90,7 +89,13 @@ Widget deviceChips(
 }
 
 class _UsageScreenState extends State<UsageScreen> {
-  int _days = 1;
+  PeriodKind _kind = PeriodKind.day;
+
+  /// How many periods back from the current one.
+  int _back = 0;
+
+  /// Midnight of the first day recorded: the periods go back to it.
+  DateTime? _since;
 
   /// The device shown; `null`: all of them.
   String? _device;
@@ -113,7 +118,13 @@ class _UsageScreenState extends State<UsageScreen> {
     _excluded = await c.usageExcluded();
     _names = await c.deviceNames();
     await c.importHistoryIfNeeded();
-    final since = addDays(dayOf(DateTime.now()), -usageHistoryDays);
+    // As far back as use is kept here; the periods go back to the first
+    // day recorded.
+    final today = dayOf(DateTime.now());
+    final first = await c.store.firstUsageDay();
+    final oldest = first == null ? today : dayOf(first);
+    var since = addDays(today, -usageHistoryDays);
+    if (oldest.isBefore(since)) since = oldest;
     final imported = await c.store.loadImported(since: since);
     final recorded = await c.store.loadUsage(since: since);
     DateTime? importedUntil;
@@ -126,6 +137,7 @@ class _UsageScreenState extends State<UsageScreen> {
     setState(() {
       _history = [...imported, ...recorded];
       _importedUntil = importedUntil;
+      _since = oldest;
     });
     final history = _history!;
     final apps = {
@@ -155,6 +167,15 @@ class _UsageScreenState extends State<UsageScreen> {
               builder: (context, _) {
                 final child = c.childId ?? '';
                 final now = DateTime.now();
+                final weekStart = c.family.config.weekStart;
+                final current = UsagePeriod.at(
+                  _kind,
+                  now,
+                  weekStart: weekStart,
+                );
+                final period = current.shifted(-_back, weekStart: weekStart);
+                final since = _since ?? period.first;
+                final canGoBack = period.first.isAfter(since);
                 final exclude = _excluded ?? c.family.config.neverBlocked;
                 UsageReport reportOf(String? device) => buildUsageReport(
                   device == null
@@ -165,7 +186,8 @@ class _UsageScreenState extends State<UsageScreen> {
                         ],
                   childId: child,
                   now: now,
-                  days: _days,
+                  from: period.first,
+                  days: period.length,
                   exclude: exclude,
                   together:
                       c.family.config.counting == SimultaneousCounting.elapsed,
@@ -185,19 +207,47 @@ class _UsageScreenState extends State<UsageScreen> {
                     children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: SegmentedButton<int>(
+                        child: SegmentedButton<PeriodKind>(
                           segments: [
-                            for (final d in _periods)
+                            for (final k in PeriodKind.values)
                               ButtonSegment(
-                                value: d,
-                                label: Text(
-                                  s.t(d == 1 ? 'periodToday' : 'period$d'),
-                                ),
+                                value: k,
+                                label: Text(s.t('period_${k.name}')),
                               ),
                           ],
-                          selected: {_days},
-                          onSelectionChanged: (v) =>
-                              setState(() => _days = v.first),
+                          selected: {_kind},
+                          onSelectionChanged: (v) => setState(() {
+                            _kind = v.first;
+                            _back = 0;
+                          }),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.chevron_left),
+                              tooltip: s.t('periodPrevious'),
+                              onPressed: canGoBack
+                                  ? () => setState(() => _back++)
+                                  : null,
+                            ),
+                            Expanded(
+                              child: Text(
+                                period.label(s, now),
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.titleMedium,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.chevron_right),
+                              tooltip: s.t('periodNext'),
+                              onPressed: _back > 0
+                                  ? () => setState(() => _back--)
+                                  : null,
+                            ),
+                          ],
                         ),
                       ),
                       // Several devices: each one's time, and its apps.
@@ -223,7 +273,7 @@ class _UsageScreenState extends State<UsageScreen> {
                           style: theme.textTheme.headlineSmall,
                         ),
                       ),
-                      if (_days > 1)
+                      if (_kind != PeriodKind.day)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Text(
@@ -234,7 +284,7 @@ class _UsageScreenState extends State<UsageScreen> {
                         ),
                       Padding(
                         padding: const EdgeInsets.all(16),
-                        child: _days == 1
+                        child: _kind == PeriodKind.day
                             ? hourChart(context, s, report.totalByHour)
                             : dayChart(
                                 context,

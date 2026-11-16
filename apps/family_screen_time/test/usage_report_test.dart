@@ -98,4 +98,31 @@ void main() {
     );
     expect(r.dailyAverage, min(45));
   });
+
+  test('an earlier period, and the average over its days gone by', () {
+    final r = buildUsageReport(
+      history,
+      childId: 'emma',
+      now: at(20, 12),
+      from: DateTime(2026, 10, 18),
+      days: 2,
+      exclude: {'launcher'},
+    );
+    expect(r.days, [DateTime(2026, 10, 18), DateTime(2026, 10, 19)]);
+    expect(r.totalByDay[DateTime(2026, 10, 18)], min(45));
+    // Up to midnight only: TikTok's half after it is the 20th's.
+    expect(r.total, min(45 + 75));
+
+    final week = buildUsageReport(
+      history,
+      childId: 'emma',
+      now: at(20, 12),
+      from: DateTime(2026, 10, 19),
+      days: 7,
+      exclude: {'launcher'},
+    );
+    // Monday 19 and Tuesday 20 only: the rest of the week is to come.
+    expect(week.countedDays, 2);
+    expect(week.dailyAverage, min(105) ~/ 2);
+  });
 }

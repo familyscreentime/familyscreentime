@@ -123,9 +123,157 @@ void main() {
 
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('30 jours'));
+    // Twenty days back, day by day: the arrows stop at the first day kept.
+    for (var i = 0; i < 20; i++) {
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Total : 10 min'), findsOneWidget);
+    final back = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.chevron_left),
+    );
+    expect(back.onPressed, isNull);
+
+    // The month, with the average over its days gone by.
+    await tester.tap(find.text('Mois'));
     await tester.pumpAndSettle();
-    expect(find.text('Total : 1 h 10'), findsOneWidget);
+    final old = addDays(today, -20);
+    if (old.month == today.month) {
+      expect(find.text('Total : 1 h 10'), findsOneWidget);
+    } else {
+      expect(find.text('Total : 1 h'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.pumpAndSettle();
+      expect(find.text('Total : 10 min'), findsOneWidget);
+    }
+  });
+
+  testWidgets('earlier days, weeks and months, by name', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => null);
+    final dir = Directory.systemTemp.createTempSync('fst');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final store = LocalStore(dir);
+    final today = dayOf(DateTime.now());
+    final controller = AppController(
+      store,
+      const AppSettings(
+        deviceId: 'd',
+        language: 'fr',
+        setupDone: true,
+        childId: 'emma',
+        historyImported: true,
+      ),
+      const FamilyData(
+        children: [Child(id: 'emma', name: 'Emma')],
+      ),
+    );
+    await tester.runAsync(() async {
+      for (final (back, minutes) in [(0, 5), (1, 25), (70, 15)]) {
+        final day = addDays(today, -back).add(const Duration(hours: 10));
+        await store.appendUsage(
+          UsageSegment.device(
+            childId: 'emma',
+            deviceId: 'd',
+            appId: 'minecraft',
+            start: day,
+            end: day.add(Duration(minutes: minutes)),
+          ),
+        );
+      }
+    });
+    await tester.pumpWidget(
+      MaterialApp(home: UsageScreen(controller: controller)),
+    );
+    for (
+      var i = 0;
+      i < 1000 && find.text('minecraft').evaluate().isEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+      await tester.pump();
+    }
+    expect(find.text('Aujourd\'hui'), findsWidgets);
+    expect(find.text('Total : 5 min'), findsOneWidget);
+    // Nothing after today.
+    final next = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.chevron_right),
+    );
+    expect(next.onPressed, isNull);
+    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.pumpAndSettle();
+    expect(find.text('Hier'), findsOneWidget);
+    expect(find.text('Total : 25 min'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.pumpAndSettle();
+    final before = addDays(today, -2);
+    const days = [
+      'Lundi',
+      'Mardi',
+      'Mercredi',
+      'Jeudi',
+      'Vendredi',
+      'Samedi',
+      'Dimanche',
+    ];
+    final day = before.day.toString().padLeft(2, '0');
+    final month = before.month.toString().padLeft(2, '0');
+    expect(
+      find.text('${days[before.weekday - 1]} $day/$month'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Semaine'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cette semaine'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.pumpAndSettle();
+    expect(find.text('Semaine dernière'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.chevron_left));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining(RegExp(r'^Du \d\d/\d\d au \d\d/\d\d$')),
+      findsOneWidget,
+    );
+
+    // Seventy days back: kept, so two or three months back.
+    await tester.tap(find.text('Mois'));
+    await tester.pumpAndSettle();
+    const months = [
+      'Janvier',
+      'Février',
+      'Mars',
+      'Avril',
+      'Mai',
+      'Juin',
+      'Juillet',
+      'Août',
+      'Septembre',
+      'Octobre',
+      'Novembre',
+      'Décembre',
+    ];
+    expect(
+      find.text('${months[today.month - 1]} ${today.year}'),
+      findsOneWidget,
+    );
+    final old = addDays(today, -70);
+    final steps = (today.year - old.year) * 12 + today.month - old.month;
+    for (var i = 0; i < steps; i++) {
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('${months[old.month - 1]} ${old.year}'), findsOneWidget);
+    expect(find.text('Total : 15 min'), findsOneWidget);
+    final back = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.chevron_left),
+    );
+    expect(back.onPressed, isNull);
   });
 
   testWidgets('with several devices, each one\'s time', (tester) async {
@@ -169,17 +317,19 @@ void main() {
           ),
         );
       }
-      // A device unlinked since, used three days ago.
+      // A device unlinked since, used three days ago, as this one.
       final before = addDays(today, -3);
-      await store.appendUsage(
-        UsageSegment.device(
-          childId: 'emma',
-          deviceId: 'old12345678',
-          appId: 'minecraft',
-          start: before,
-          end: before.add(const Duration(minutes: 30)),
-        ),
-      );
+      for (final device in ['old12345678', 'd']) {
+        await store.appendUsage(
+          UsageSegment.device(
+            childId: 'emma',
+            deviceId: device,
+            appId: 'minecraft',
+            start: before,
+            end: before.add(const Duration(minutes: 30)),
+          ),
+        );
+      }
     });
     await tester.pumpWidget(
       MaterialApp(home: UsageScreen(controller: controller, parent: true)),
@@ -196,11 +346,15 @@ void main() {
     expect(find.text('phone123 · 15 min'), findsOneWidget);
     // Not used today: no chip at 0 min.
     expect(find.textContaining('old12345'), findsNothing);
-    await tester.tap(find.text('7 jours'));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.byIcon(Icons.chevron_left));
+      await tester.pumpAndSettle();
+    }
     expect(find.text('old12345 · 30 min'), findsOneWidget);
-    await tester.tap(find.text('Aujourd\'hui'));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.byIcon(Icons.chevron_right));
+      await tester.pumpAndSettle();
+    }
     await tester.ensureVisible(find.text('phone123 · 15 min'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('phone123 · 15 min'));

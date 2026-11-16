@@ -75,16 +75,16 @@ class UsageReport {
     required this.total,
     required this.apps,
     required this.historyStart,
+    required this.countedDays,
   });
 
-  /// Average per day, over the days since recording started.
-  Duration get dailyAverage {
-    final start = historyStart;
-    final counted = start == null
-        ? 0
-        : days.where((d) => !d.isBefore(dayOf(start))).length;
-    return counted == 0 ? Duration.zero : total ~/ counted;
-  }
+  /// Days of the period already begun, recording started: those the
+  /// average is over.
+  final int countedDays;
+
+  /// Average per day, over the days since recording started, up to today.
+  Duration get dailyAverage =>
+      countedDays == 0 ? Duration.zero : total ~/ countedDays;
 }
 
 /// Splits [from, to) at every hour boundary and calls [add] for each piece.
@@ -123,20 +123,43 @@ Map<String, List<Interval>> screenTime(
 
 /// Builds the report of [childId]'s device usage ([together]: time on
 /// several devices at once counted once in the totals) over the [days] days
-/// ending on the day of [now]. Injected time and apps in [exclude] (system
-/// components) are left out.
+/// from the day of [from], by default those ending on the day of [now].
+/// Injected time and apps in [exclude] (system components) are left out.
 UsageReport buildUsageReport(
   List<UsageSegment> history, {
   required String childId,
   required DateTime now,
   required int days,
+  DateTime? from,
   Set<String> exclude = const {},
   bool together = false,
 }) {
   final today = dayOf(now);
-  final from = addDays(today, -(days - 1));
+  final first = from == null ? addDays(today, -(days - 1)) : dayOf(from);
+  return _build(
+    history,
+    childId: childId,
+    now: now,
+    today: today,
+    from: first,
+    days: days,
+    exclude: exclude,
+    together: together,
+  );
+}
+
+UsageReport _build(
+  List<UsageSegment> history, {
+  required String childId,
+  required DateTime now,
+  required DateTime today,
+  required DateTime from,
+  required int days,
+  required Set<String> exclude,
+  required bool together,
+}) {
   final periodDays = [for (var i = 0; i < days; i++) addDays(from, i)];
-  final to = addDays(today, 1);
+  final to = addDays(from, days);
 
   // Time open only to pick the music counts as the app's.
   UsageSegment asApp(UsageSegment s) => usedApp(s.appId!) == s.appId
@@ -249,5 +272,12 @@ UsageReport buildUsageReport(
     total: total,
     apps: apps,
     historyStart: historyStart,
+    countedDays: historyStart == null
+        ? 0
+        : periodDays
+              .where(
+                (d) => !d.isBefore(dayOf(historyStart)) && !d.isAfter(today),
+              )
+              .length,
   );
 }

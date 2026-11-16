@@ -89,6 +89,18 @@ internal object Shared {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
+    /**
+     * Whether the screen is on and unlocked, as Android says now. The
+     * screen broadcasts alone can mislead: the screen may come on while
+     * the lock screen still shows and be unlocked with no "user present"
+     * broadcast (a lock that waits a few seconds, say).
+     */
+    fun screenInUse(context: Context): Boolean {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        return pm.isInteractive && !keyguard.isKeyguardLocked
+    }
+
     /** The last app that came to the foreground in the last [windowMs]. */
     fun foregroundFromUsageStats(context: Context, windowMs: Long = 15_000): String? {
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null

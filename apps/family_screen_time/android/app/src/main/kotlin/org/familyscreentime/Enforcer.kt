@@ -12,7 +12,6 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Message
 import android.os.Messenger
-import android.os.PowerManager
 import android.os.RemoteException
 import android.os.SystemClock
 import android.util.Log
@@ -116,8 +115,7 @@ internal object Enforcer {
         } else {
             app.registerReceiver(screenReceiver, filter)
         }
-        val pm = app.getSystemService(Context.POWER_SERVICE) as PowerManager
-        screenOn = pm.isInteractive && !keyguardLocked()
+        screenOn = Shared.screenInUse(app)
         main.postDelayed(safetyWatcher, SAFETY_POLL_MS)
         Log.i(TAG, "Enforcer started")
         return this
@@ -126,24 +124,46 @@ internal object Enforcer {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                Intent.ACTION_SCREEN_OFF -> {
-                    screenOn = false
-                    lastForeground = null
-                    lastVisible = emptyList()
-                    eyeBreak.hide()
-                    browserWatch.foreground(null)
-                }
-                Intent.ACTION_SCREEN_ON -> if (!keyguardLocked()) {
-                    screenOn = true
-                    confirmSoon()
-                }
-                Intent.ACTION_USER_PRESENT -> {
-                    screenOn = true
-                    confirmSoon()
-                }
+                Intent.ACTION_SCREEN_OFF -> setScreen(false)
+                Intent.ACTION_SCREEN_ON -> if (!keyguardLocked()) setScreen(true)
+                Intent.ACTION_USER_PRESENT -> setScreen(true)
             }
             updateDeviceLock()
         }
+    }
+
+    private fun setScreen(on: Boolean) {
+        if (!on) {
+            screenOn = false
+            lastForeground = null
+            lastVisible = emptyList()
+            eyeBreak.hide()
+            browserWatch.foreground(null)
+            return
+        }
+        screenOn = true
+        confirmSoon()
+    }
+
+    /**
+     * Catches up with a screen broadcast missed or misleading (see
+     * [Shared.screenInUse]): a screen believed off would otherwise let
+     * every app through, uncounted, until it is turned off and on again.
+     */
+    private fun checkScreen(lookUp: Boolean = true) {
+        val inUse = Shared.screenInUse(app)
+        if (inUse == screenOn) return
+        Log.w(TAG, "Screen state corrected: ${if (inUse) "in use" else "off or locked"}")
+        if (!inUse) {
+            setScreen(false)
+        } else {
+            screenOn = true
+            // Unlocked a while ago, maybe: the app in front came there then.
+            if (lookUp) {
+                Shared.foregroundFromUsageStats(app, Shared.SINCE_UNLOCK_MS)?.let { onForegroundApp(it) }
+            }
+        }
+        updateDeviceLock()
     }
 
     /**
@@ -160,6 +180,7 @@ internal object Enforcer {
                 if (call) clearForCall()
                 updateDeviceLock()
             }
+            checkScreen()
             val accessibility = ForegroundAccessibilityService.instance
             if (screenOn && accessibility != null && ProtectionGuard.safetyCenterInFront(app)) {
                 accessibility.closeProtected()
@@ -185,6 +206,7 @@ internal object Enforcer {
             // Screen off or locked: a window shown then (an alarm getting
             // ready, say) is no use of the device. The app in front is
             // looked up again once the screen is unlocked.
+            if (!screenOn) checkScreen(lookUp = false)
             if (!screenOn) return@post
             if (pkg == lastForeground) return@post
             lastForeground = pkg

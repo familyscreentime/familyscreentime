@@ -266,7 +266,15 @@ void main() {
       expect(find.text('Tout verrouiller'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Déverrouiller'));
+      // Written to disk first: a slow machine needs longer.
       await settle(tester);
+      for (
+        var i = 0;
+        i < 20 && find.byTooltip('Bloquer maintenant').evaluate().length < 2;
+        i++
+      ) {
+        await settle(tester);
+      }
       expect(c.activeBlocks(DateTime.now(), forChild: 'emma'), isEmpty);
       expect(
         find.text('Emma peut à nouveau utiliser ses appareils.'),

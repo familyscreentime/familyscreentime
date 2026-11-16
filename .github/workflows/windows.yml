@@ -27,6 +27,9 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # 3.50 deprecates package:flutter/material.dart (material_ui):
+          # kept on the version the app is tested with until it moves.
+          flutter-version: 3.47.7
       - run: flutter pub get
       - run: flutter analyze
       # The C++ compiler's errors, as annotations, when the build fails.

@@ -135,8 +135,11 @@ behind the parent code.
   parent mode they lead to the group's rules. The group list shows the time
   spent today in each group.
 - Apps can be renamed; the name is used everywhere in the app.
-- Usage screen, whatever the rules: time per app today, over 7 or 30 days,
-  by day and by hour, with flags for apps worth a look (first used in the
+- Usage screen, whatever the rules: time per app by day, week (from the
+  family's first day of the week) or month, today's or an earlier one with
+  the arrows beside its name ("Hier", "Semaine dernière", "Octobre 2026"),
+  back to the first day recorded; by day and by hour, the average per day
+  over the days gone by, with flags for apps worth a look (first used in the
   last 7 days, not limited by any rule, used between 22:00 and 06:00). From
   parent mode, an app can be put in groups straight from its detail.
   On first use, Android's own usage history is imported (it keeps about ten

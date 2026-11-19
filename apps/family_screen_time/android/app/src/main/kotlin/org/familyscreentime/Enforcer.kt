@@ -90,6 +90,7 @@ internal object Enforcer {
             onVeilEnd = { done -> veilEnd(done) },
         )
         soundSources = SoundSources(app) { lastForeground }
+        soundSources.onChange = { keepSilent() }
         browserWatch = BrowserWatch(
             app,
             send = { sample -> send("browserActivity", sample) },
@@ -539,6 +540,85 @@ internal object Enforcer {
             deviceLock.show(lockTexts, lockExempt)
         } else {
             deviceLock.hide()
+        }
+        keepSilent()
+    }
+
+    /** Audio focus held while the device is locked (see [keepSilent]). */
+    private var lockFocus: Any? = null
+
+    /**
+     * While the device is locked, no media plays but from the apps kept
+     * available: the player of Android's lock screen or of the
+     * notifications would start music again, unseen by the lock. What
+     * plays is paused, and the audio focus held, so that players that
+     * heed it stop (and do not start again by themselves once it goes).
+     * Not during a call, nor in parent mode.
+     */
+    private fun keepSilent() {
+        if (!started) return
+        val silent = deviceLocked && !phoneCall && !ProtectionGuard.allowed()
+        if (!silent) {
+            releaseLockFocus()
+            return
+        }
+        val allowed = { pkg: String -> pkg == app.packageName || pkg in lockExempt }
+        if (!soundSources.playsBeside(allowed)) return
+        Log.i(TAG, "Media paused: the device is locked")
+        // Taken back by the player that started: asked again.
+        releaseLockFocus()
+        val audio = audio()
+        try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                val request = android.media.AudioFocusRequest.Builder(
+                    android.media.AudioManager.AUDIOFOCUS_GAIN,
+                )
+                    .setAudioAttributes(
+                        android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                            .build(),
+                    )
+                    .setOnAudioFocusChangeListener(lockFocusListener)
+                    .build()
+                if (audio.requestAudioFocus(request) ==
+                    android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                ) {
+                    lockFocus = request
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                if (audio.requestAudioFocus(
+                        lockFocusListener,
+                        android.media.AudioManager.STREAM_MUSIC,
+                        android.media.AudioManager.AUDIOFOCUS_GAIN,
+                    ) == android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                ) {
+                    lockFocus = lockFocusListener
+                }
+            }
+        } catch (e: Exception) {
+            // The pause key below, then.
+        }
+        // Players without a care for the focus: the pause key too.
+        pauseMedia()
+    }
+
+    private val lockFocusListener =
+        android.media.AudioManager.OnAudioFocusChangeListener { }
+
+    private fun releaseLockFocus() {
+        val focus = lockFocus ?: return
+        lockFocus = null
+        val audio = audio()
+        try {
+            if (Build.VERSION.SDK_INT >= 26 && focus is android.media.AudioFocusRequest) {
+                audio.abandonAudioFocusRequest(focus)
+            } else {
+                @Suppress("DEPRECATION")
+                audio.abandonAudioFocus(lockFocusListener)
+            }
+        } catch (e: Exception) {
+            // Taken back with the process anyway.
         }
     }
 

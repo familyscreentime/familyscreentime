@@ -34,6 +34,9 @@ internal class SoundSources(
      */
     private val started = HashMap<Any, String?>()
 
+    /** Called when a media player starts or stops. */
+    var onChange: (() -> Unit)? = null
+
     init {
         if (Build.VERSION.SDK_INT >= 26) {
             try {
@@ -61,6 +64,18 @@ internal class SoundSources(
         started.keys.retainAll(now)
         val pkg = front()
         for (c in now) if (c !in started) started[c] = pkg
+        onChange?.invoke()
+    }
+
+    /**
+     * Whether media sound plays that started while no app [allowed] was in
+     * front: on the lock screen, from the notifications' player, in an app
+     * left since, or before this began watching. Before Android 8, whether
+     * any media sound plays.
+     */
+    fun playsBeside(allowed: (String) -> Boolean): Boolean {
+        if (Build.VERSION.SDK_INT < 26) return audio.isMusicActive
+        return started.values.any { it == null || it == UNKNOWN || !allowed(it) }
     }
 
     /**

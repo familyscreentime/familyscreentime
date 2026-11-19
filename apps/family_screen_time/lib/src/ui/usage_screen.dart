@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
+import '../away_usage.dart';
 import '../browser_activity.dart';
 import '../controller.dart';
 import '../family.dart';
@@ -135,14 +136,19 @@ class _UsageScreenState extends State<UsageScreen> {
     }
     if (!mounted) return;
     setState(() {
-      _history = [...imported, ...recorded];
+      _history = [
+        ...imported,
+        ...recorded,
+        // The time the parent entered for away from the devices too.
+        ...awaySegments(c.family.injected),
+      ];
       _importedUntil = importedUntil;
       _since = oldest;
     });
     final history = _history!;
     final apps = {
       for (final s in history)
-        if (s.appId != null) usedApp(s.appId!),
+        if (s.appId != null && !isAwayApp(s.appId!)) usedApp(s.appId!),
     };
     try {
       final info = await c.appInfo(apps);
@@ -347,6 +353,7 @@ class _UsageScreenState extends State<UsageScreen> {
 
 /// Labels flagging an app; empty when there is nothing to point out.
 List<String> appBadges(AppController c, AppUsage app) {
+  if (isAwayApp(app.appId)) return const [];
   final s = c.s;
   final config = c.family.config;
   final allowed = c.alwaysAllowed.contains(app.appId);
@@ -371,6 +378,7 @@ Widget appIcon(AppInfo? info, {double size = 40, String? package}) {
   if (package == browserVideoApp) {
     return Icon(Icons.ondemand_video, size: size);
   }
+  if (package != null && isAwayApp(package)) return Icon(Icons.tv, size: size);
   return Icon(Icons.android, size: size);
 }
 
@@ -396,8 +404,9 @@ class _AppTile extends StatelessWidget {
     final s = controller.s;
     final badges = appBadges(controller, app);
     final theme = Theme.of(context);
+    final away = isAwayApp(app.appId);
     return ListTile(
-      leading: appIcon(info),
+      leading: appIcon(info, package: app.appId),
       title: Text(controller.appName(app.appId, androidLabel: info?.label)),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -430,12 +439,14 @@ class _AppTile extends StatelessWidget {
               ],
             ),
           ],
-          const SizedBox(height: 4),
-          GroupChips(
-            controller: controller,
-            appId: app.appId,
-            interactive: parent,
-          ),
+          if (!away) ...[
+            const SizedBox(height: 4),
+            GroupChips(
+              controller: controller,
+              appId: app.appId,
+              interactive: parent,
+            ),
+          ],
         ],
       ),
       trailing: Text(s.duration(app.total), style: theme.textTheme.titleSmall),
@@ -607,11 +618,13 @@ class AppUsageScreen extends StatelessWidget {
       final badges = appBadges(c, app);
       final name = c.appName(app.appId, androidLabel: info?.label);
       final androidName = info?.label ?? app.appId;
+      // Time the parent entered: no app to rename, group or limit.
+      final away = isAwayApp(app.appId);
       return Scaffold(
         appBar: AppBar(
           title: Text(name),
           actions: [
-            if (parent)
+            if (parent && !away)
               IconButton(
                 tooltip: s.t('renameApp'),
                 icon: const Icon(Icons.edit),
@@ -624,7 +637,7 @@ class AppUsageScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                appIcon(info, size: 48),
+                appIcon(info, size: 48, package: app.appId),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -634,12 +647,18 @@ class AppUsageScreen extends StatelessWidget {
                         s.duration(app.total),
                         style: theme.textTheme.headlineSmall,
                       ),
-                      if (name != androidName)
+                      if (!away && name != androidName)
                         Text(
                           s.t('androidName', {'name': androidName}),
                           style: theme.textTheme.bodySmall,
                         ),
-                      Text(app.appId, style: theme.textTheme.bodySmall),
+                      if (away)
+                        Text(
+                          s.t('awayStatHint'),
+                          style: theme.textTheme.bodySmall,
+                        )
+                      else
+                        Text(app.appId, style: theme.textTheme.bodySmall),
                     ],
                   ),
                 ),
@@ -712,41 +731,47 @@ class AppUsageScreen extends StatelessWidget {
             Text(s.t('appByHour'), style: theme.textTheme.titleSmall),
             const SizedBox(height: 8),
             hourChart(context, s, app.byHour),
-            const SizedBox(height: 20),
-            Text(s.t('appGroups'), style: theme.textTheme.titleSmall),
-            const SizedBox(height: 4),
-            if (groups.isEmpty)
-              Text(s.t('appNoGroup'))
-            else
-              GroupChips(controller: c, appId: app.appId, interactive: parent),
-            if (limitedBy.isNotEmpty)
-              Text(s.t('appLimitedBy', {'rules': limitedBy.join(', ')})),
-            if (parent) ...[
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.apps),
-                      label: Text(s.t('appEditGroups')),
-                      onPressed: () => _editGroups(context),
-                    ),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.timer_outlined),
-                      label: Text(s.t('appOwnLimits')),
-                      onPressed: () async {
-                        if (info != null) {
-                          c.androidLabels[app.appId] = info!.label;
-                        }
-                        await openLimit(context, c, AppTarget.app(app.appId));
-                      },
-                    ),
-                  ],
+            if (!away) ...[
+              const SizedBox(height: 20),
+              Text(s.t('appGroups'), style: theme.textTheme.titleSmall),
+              const SizedBox(height: 4),
+              if (groups.isEmpty)
+                Text(s.t('appNoGroup'))
+              else
+                GroupChips(
+                  controller: c,
+                  appId: app.appId,
+                  interactive: parent,
                 ),
-              ),
+              if (limitedBy.isNotEmpty)
+                Text(s.t('appLimitedBy', {'rules': limitedBy.join(', ')})),
+              if (parent) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.apps),
+                        label: Text(s.t('appEditGroups')),
+                        onPressed: () => _editGroups(context),
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.timer_outlined),
+                        label: Text(s.t('appOwnLimits')),
+                        onPressed: () async {
+                          if (info != null) {
+                            c.androidLabels[app.appId] = info!.label;
+                          }
+                          await openLimit(context, c, AppTarget.app(app.appId));
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ],
         ),

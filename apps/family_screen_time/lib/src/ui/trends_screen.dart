@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
+import '../away_usage.dart';
 import '../controller.dart';
 import '../platform.dart';
 import '../store.dart';
@@ -61,12 +62,14 @@ class _TrendsScreenState extends State<TrendsScreen> {
     final history = [
       ...await c.store.loadImported(since: since),
       ...await c.store.loadUsage(since: since),
+      // The time the parent entered for away from the devices too.
+      ...awaySegments(c.family.injected),
     ];
     if (!mounted) return;
     setState(() => _history = history);
     final apps = {
       for (final s in history)
-        if (s.appId != null) usedApp(s.appId!),
+        if (s.appId != null && !isAwayApp(s.appId!)) usedApp(s.appId!),
     };
     try {
       final info = await c.appInfo(apps);
@@ -97,6 +100,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
 
   String _appName(String package) {
     final c = widget.controller;
+    if (isAwayApp(package)) return c.appName(package);
     return c.family.appNames[package] ?? _info[package]?.label ?? package;
   }
 

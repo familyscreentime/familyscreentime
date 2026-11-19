@@ -172,6 +172,40 @@ void main() {
       },
     );
 
+    test('time away is kept as long as the use of apps', () async {
+      UsageSegment away(int daysAgo) {
+        final end = now.subtract(Duration(days: daysAgo));
+        return UsageSegment.injected(
+          childId: 'emma',
+          injectedTarget: const AppTarget.all(),
+          start: end.subtract(const Duration(minutes: 30)),
+          end: end,
+        );
+      }
+
+      final c = AppController(
+        LocalStore(dir),
+        const AppSettings(deviceId: 'd', language: 'fr', childId: 'emma'),
+        FamilyData(
+          children: const [Child(id: 'emma', name: 'Emma')],
+          usageKeptDays: 90,
+          injected: [away(200), away(80), away(30)],
+        ),
+      );
+      await c.addAwayTime(
+        const AppTarget.all(),
+        const Duration(minutes: 10),
+        now: now,
+      );
+      // Within the 90 days kept, not only the rules' 47.
+      expect(c.family.injected, hasLength(3));
+      expect(c.family.injected.map((u) => now.difference(u.end).inDays), [
+        80,
+        30,
+        0,
+      ]);
+    });
+
     test('a break the child takes blocks everything until its end', () async {
       final c = controller();
       await c.startPause(const Duration(minutes: 15), now: now);

@@ -3,6 +3,8 @@ library;
 
 import 'package:screentime_engine/screentime_engine.dart';
 
+import 'away_usage.dart';
+
 /// Segments of the same app closer than this count as one session.
 const sessionGap = Duration(minutes: 1);
 
@@ -105,7 +107,8 @@ void _byHour(
 /// The time each device's screen was in use within [from, to), by device:
 /// [segments] merged, so that apps on screen together count once.
 /// [together]: the devices' time at once counts once too (the family's
-/// choice, see [SimultaneousCounting.elapsed]): one list for all.
+/// choice, see [SimultaneousCounting.elapsed]): one list for all, but for
+/// the time away from the devices, added as the rules add it.
 Map<String, List<Interval>> screenTime(
   Iterable<UsageSegment> segments,
   DateTime from,
@@ -116,7 +119,10 @@ Map<String, List<Interval>> screenTime(
   for (final s in segments) {
     final part = s.clip(from, to);
     if (part == null) continue;
-    byDevice.putIfAbsent(together ? '' : s.deviceId ?? '', () => []).add(part);
+    final device = s.deviceId ?? '';
+    byDevice
+        .putIfAbsent(together && device != awayDevice ? '' : device, () => [])
+        .add(part);
   }
   return {for (final e in byDevice.entries) e.key: mergeIntervals(e.value)};
 }

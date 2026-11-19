@@ -363,4 +363,91 @@ void main() {
     expect(find.text('minecraft'), findsNothing);
     expect(find.text('youtube'), findsOneWidget);
   });
+
+  testWidgets('time away from the devices, as a device of its own', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'deviceName') return 'Tablette';
+          return null;
+        });
+    final dir = Directory.systemTemp.createTempSync('fst');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final store = LocalStore(dir);
+    final today = dayOf(DateTime.now());
+    final at = today.add(const Duration(hours: 10));
+    final controller = AppController(
+      store,
+      const AppSettings(
+        deviceId: 'd',
+        language: 'fr',
+        setupDone: true,
+        childId: 'emma',
+        historyImported: true,
+      ),
+      FamilyData(
+        children: const [Child(id: 'emma', name: 'Emma')],
+        config: const FamilyConfig(
+          appGroups: {
+            'games': {'minecraft'},
+          },
+          // Time on several devices at once counted once: not the time
+          // away, added as the rules add it.
+          counting: SimultaneousCounting.elapsed,
+        ),
+        groupNames: const {'games': 'Jeux'},
+        injected: [
+          UsageSegment.injected(
+            childId: 'emma',
+            injectedTarget: const AppTarget.group('games'),
+            start: at,
+            end: at.add(const Duration(minutes: 45)),
+          ),
+        ],
+      ),
+    );
+    await tester.runAsync(
+      () => store.appendUsage(
+        UsageSegment.device(
+          childId: 'emma',
+          deviceId: 'd',
+          appId: 'minecraft',
+          start: at,
+          end: at.add(const Duration(minutes: 20)),
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(home: UsageScreen(controller: controller, parent: true)),
+    );
+    for (
+      var i = 0;
+      i < 1000 && find.text('minecraft').evaluate().isEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+      await tester.pump();
+    }
+    expect(find.text('Total : 1 h 05'), findsOneWidget);
+    expect(find.text('Hors appareil · Jeux'), findsOneWidget);
+    expect(find.text('Hors appareil · 45 min'), findsOneWidget);
+    expect(find.text('Tablette · 20 min'), findsOneWidget);
+    // Only Minecraft is without limit: no flags for the time away.
+    expect(find.text('Sans limite'), findsOneWidget);
+
+    await tester.tap(find.text('Hors appareil · Jeux'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Temps entré par un parent : console, télé…'),
+      findsOneWidget,
+    );
+    expect(find.text('Choisir les groupes'), findsNothing);
+    expect(find.byTooltip('Renommer l\'appli'), findsNothing);
+  });
 }

@@ -17,6 +17,7 @@ import 'package:screentime_sync/screentime_sync.dart'
         RemoteSource,
         SigningKey;
 
+import 'away_usage.dart';
 import 'family.dart';
 import 'pin.dart';
 import 'platform.dart';
@@ -961,6 +962,15 @@ class AppController extends ChangeNotifier {
 
   /// Actions older than the usage history are dropped: the engine no longer
   /// looks at them.
+  /// Time away from the devices is kept as long as the use of apps, for
+  /// the statistics; never less than the rules look at.
+  bool _keptAway(DateTime t, DateTime now) {
+    final days = family.usageKeptDays;
+    if (days <= 0) return true;
+    final kept = days < usageHistoryDays ? usageHistoryDays : days;
+    return !t.isBefore(addDays(dayOf(now), -kept));
+  }
+
   bool _recent(DateTime t, DateTime now) =>
       !t.isBefore(addDays(dayOf(now), -usageHistoryDays));
 
@@ -1320,7 +1330,7 @@ class AppController extends ChangeNotifier {
       family.copyWith(
         injected: [
           for (final u in family.injected)
-            if (_recent(u.end, t)) u,
+            if (_keptAway(u.end, t)) u,
           UsageSegment.injected(
             childId: childId!,
             injectedTarget: target,
@@ -1486,6 +1496,7 @@ class AppController extends ChangeNotifier {
     if (!names.containsKey(settings.deviceId)) {
       names[settings.deviceId] = await platform.deviceName();
     }
+    names[awayDevice] = s.t('awayDevice');
     return names;
   }
 
@@ -1653,7 +1664,17 @@ class AppController extends ChangeNotifier {
   }
 
   /// Name shown for an app: the parent's name for it, else Android's.
-  String appName(String package, {String? androidLabel}) =>
+  String appName(String package, {String? androidLabel}) {
+    final away = awayTarget(package);
+    if (away != null) {
+      return away.kind == TargetKind.all
+          ? s.t('awayStat')
+          : s.t('awayStatIn', {'label': targetLabel(away)});
+    }
+    return _appName(package, androidLabel: androidLabel);
+  }
+
+  String _appName(String package, {String? androidLabel}) =>
       family.appNames[package] ??
       androidLabel ??
       (package == browserVideoApp ? s.t('browserVideos') : package);

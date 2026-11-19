@@ -66,7 +66,9 @@ behind the parent code.
   each child, what happens then: the apps close; the Android settings and wallpaper close
   too (default); or the whole device is locked, behind a
   screen that only opens the phone, messages and this app (never over the
-  lock screen or a call). The settings can also be kept for the parent only
+  lock screen or a call). Meanwhile no media plays but from the apps
+  kept available: music started from the player of Android's lock screen
+  or of the notifications is paused at once. The settings can also be kept for the parent only
   at all times, and reminders during grace time come as often as set; both
   for each child too. A child whose settings were never changed keeps the
   family's ones from earlier versions (older versions still use those).
@@ -118,7 +120,12 @@ behind the parent code.
   starts, so a sound started while the app in front was there is taken as
   that app's (unless it is a music app); before Android 8, any sound pauses.
 - Time away from the devices (console, TV), entered by the parent in quick
-  actions, counts for total screen time or a group.
+  actions, counts for total screen time or a group. It is kept as long as
+  the use of apps, and shown in the usage statistics, the analysis and
+  the export as a device of its own ("Hors appareil"), one line for each
+  kind of time it counted as ("Hors appareil · Jeux"); it adds to the
+  total even when time on several devices at once counts once, as the
+  rules add it.
 - Rule settings for grace time (with an optional firm limit after repeated
   overruns, which can also deduct those overruns from the following days)
   and for keeping unused daily time.

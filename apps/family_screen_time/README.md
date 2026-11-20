@@ -150,7 +150,14 @@ behind the parent code.
   last 7 days, not limited by any rule, used between 22:00 and 06:00). From
   parent mode, an app can be put in groups straight from its detail.
   On first use, Android's own usage history is imported (it keeps about ten
-  days in detail), for statistics only: the rules never see it.
+  days in detail), for statistics only: the rules never see it. From that
+  history (and for the use while the monitor was stopped), only the time
+  the screen is on and unlocked counts: an app that came in front over the
+  lock screen, the screen off (a maker's update check), is not counted
+  until the device is unlocked.
+  The screens of a call (the maker's in-call screen) count as the phone
+  app of their device: each device shares its phone app and its call
+  screens with its system components, and Samsung's is known by name.
 - A parent's device, locked: only the app's name and the unlock button.
   Unlocked: each child by name with their total screen time today, in red
   when a limit on it has no time left, and below, smaller, each group of

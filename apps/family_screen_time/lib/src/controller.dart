@@ -1513,6 +1513,31 @@ class AppController extends ChangeNotifier {
     return excluded;
   }
 
+  /// For each device, the screens of a call and its phone app (screen →
+  /// app), as the devices shared them, this one's included.
+  Future<Map<String, Map<String, String>>> callScreenApps() async {
+    final found = <String, Map<String, String>>{};
+    try {
+      final log = await sync;
+      if (log != null) found.addAll(log.sharedCallScreens());
+    } on Object {
+      // This device's only.
+    }
+    try {
+      final system = await platform.systemPackages();
+      final dialer = system.dialer;
+      if (dialer != null) {
+        found[settings.deviceId] = {
+          for (final p in system.callScreens)
+            if (p != dialer) p: dialer,
+        };
+      }
+    } on Object {
+      // The known ones still count.
+    }
+    return found;
+  }
+
   /// Name shown for [r].
   String labelOf(Rule r) => ruleLabel(r, family, s, labels: androidLabels);
 

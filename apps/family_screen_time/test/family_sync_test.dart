@@ -347,6 +347,40 @@ void main() {
     });
 
     test(
+      'each device shares its phone app and the screens of a call',
+      () async {
+        final (sync, _) = await FamilySync.create(
+          store: store,
+          settings: settings,
+          family: richFamily(),
+          parentCode: '123456',
+          deviceName: 'Tablette',
+        );
+        expect(
+          await sync.publishSystem(
+            {'com.maker.home'},
+            dialer: 'com.maker.dialer',
+            callScreens: {'com.maker.incallui', 'com.maker.dialer'},
+          ),
+          isTrue,
+        );
+        // The same again: nothing new.
+        expect(
+          await sync.publishSystem(
+            {'com.maker.home'},
+            dialer: 'com.maker.dialer',
+            callScreens: {'com.maker.dialer', 'com.maker.incallui'},
+          ),
+          isFalse,
+        );
+        expect(sync.sharedCallScreens(), {
+          settings.deviceId: {'com.maker.incallui': 'com.maker.dialer'},
+        });
+        expect(sync.sharedSystem(), {'com.maker.home'});
+      },
+    );
+
+    test(
       'the system components every device shared count for no one',
       () async {
         final (sync, _) = await FamilySync.create(

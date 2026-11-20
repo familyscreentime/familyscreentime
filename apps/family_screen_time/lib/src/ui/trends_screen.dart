@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screentime_engine/screentime_engine.dart';
 
 import '../away_usage.dart';
+import '../call_screens.dart';
 import '../controller.dart';
 import '../platform.dart';
 import '../store.dart';
@@ -60,8 +61,11 @@ class _TrendsScreenState extends State<TrendsScreen> {
     final first = await c.store.firstUsageDay();
     if (first != null && first.isAfter(since)) since = first;
     final history = [
-      ...await c.store.loadImported(since: since),
-      ...await c.store.loadUsage(since: since),
+      // A call's screens as the phone app.
+      ...callScreensAsPhone([
+        ...await c.store.loadImported(since: since),
+        ...await c.store.loadUsage(since: since),
+      ], await c.callScreenApps()),
       // The time the parent entered for away from the devices too.
       ...awaySegments(c.family.injected),
     ];

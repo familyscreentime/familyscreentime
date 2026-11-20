@@ -10,6 +10,7 @@ import 'package:screentime_engine/screentime_engine.dart';
 
 import '../away_usage.dart';
 import '../browser_activity.dart';
+import '../call_screens.dart';
 import '../controller.dart';
 import '../family.dart';
 import '../ordering.dart';
@@ -127,6 +128,7 @@ class _UsageScreenState extends State<UsageScreen> {
     var since = addDays(today, -usageHistoryDays);
     if (oldest.isBefore(since)) since = oldest;
     final imported = await c.store.loadImported(since: since);
+    final calls = await c.callScreenApps();
     final recorded = await c.store.loadUsage(since: since);
     DateTime? importedUntil;
     for (final s in imported) {
@@ -137,8 +139,7 @@ class _UsageScreenState extends State<UsageScreen> {
     if (!mounted) return;
     setState(() {
       _history = [
-        ...imported,
-        ...recorded,
+        ...callScreensAsPhone([...imported, ...recorded], calls),
         // The time the parent entered for away from the devices too.
         ...awaySegments(c.family.injected),
       ];

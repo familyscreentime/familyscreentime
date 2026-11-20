@@ -364,49 +364,88 @@ class PlatformBridge(
     /**
      * Rebuilds foreground sessions from Android's usage events between
      * [from] and [to] (milliseconds). Android keeps these events about ten
-     * days. Returns `null` without usage access.
+     * days. Returns `null` without usage access. [closeOpen]: the use still
+     * going on counts up to [to].
+     *
+     * Only the time the screen is on and unlocked counts: an app can come
+     * in front over the lock screen, the screen off (a maker's update
+     * check, an alarm), and stay there for Android until the device is
+     * unlocked and another app opened. The events of the hours before
+     * [from] say whether the screen was on and unlocked then.
      */
-    /** [closeOpen]: the use still going on counts up to [to]. */
     private fun usageHistory(from: Long, to: Long, closeOpen: Boolean = false): List<Map<String, Any>>? {
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val events = usm.queryEvents(from, to) ?: return null
+        val events = usm.queryEvents(from - STATE_LOOK_BACK_MS, to) ?: return null
         val out = ArrayList<Map<String, Any>>()
+        // The app in front for Android, and since when it counts (null:
+        // not counting, the screen being off or locked).
         var current: String? = null
-        var start = 0L
+        var start: Long? = null
         var pausedAt: Long? = null
+        var interactive = true
+        var unlocked = true
 
-        fun close(end: Long) {
-            val pkg = current ?: return
-            if (end > start) out.add(mapOf("package" to pkg, "start" to start, "end" to end))
-            current = null
-            pausedAt = null
+        fun stop(end: Long) {
+            val pkg = current
+            val s = start
+            if (pkg != null && s != null && end > s) {
+                out.add(mapOf("package" to pkg, "start" to s, "end" to end))
+            }
+            start = null
+        }
+
+        fun resume(t: Long) {
+            if (current != null && start == null && interactive && unlocked) {
+                start = maxOf(t, from)
+            }
         }
 
         val e = UsageEvents.Event()
         while (events.hasNextEvent()) {
             events.getNextEvent(e)
             val t = e.timeStamp
+            // Before [from]: only the state of the screen.
+            if (t < from) {
+                when (e.eventType) {
+                    SCREEN_INTERACTIVE -> interactive = true
+                    SCREEN_NON_INTERACTIVE -> interactive = false
+                    KEYGUARD_SHOWN -> unlocked = false
+                    KEYGUARD_HIDDEN -> unlocked = true
+                }
+                continue
+            }
             @Suppress("DEPRECATION")
             when (e.eventType) {
                 UsageEvents.Event.MOVE_TO_FOREGROUND -> {
                     if (e.packageName != current) {
-                        close(t)
+                        stop(t)
                         current = e.packageName
-                        start = t
                     }
                     pausedAt = null
+                    resume(t)
                 }
                 UsageEvents.Event.MOVE_TO_BACKGROUND -> {
                     if (e.packageName == current) pausedAt = t
                 }
-                SCREEN_NON_INTERACTIVE, KEYGUARD_SHOWN, DEVICE_SHUTDOWN -> {
-                    close(pausedAt ?: t)
+                SCREEN_NON_INTERACTIVE, KEYGUARD_SHOWN -> {
+                    stop(pausedAt ?: t)
+                    if (e.eventType == SCREEN_NON_INTERACTIVE) interactive = false else unlocked = false
+                }
+                SCREEN_INTERACTIVE, KEYGUARD_HIDDEN -> {
+                    if (e.eventType == SCREEN_INTERACTIVE) interactive = true else unlocked = true
+                    // Back to the app left in front, unless it was left.
+                    if (pausedAt == null) resume(t)
+                }
+                DEVICE_SHUTDOWN -> {
+                    stop(pausedAt ?: t)
+                    current = null
+                    pausedAt = null
                 }
             }
         }
         // Use still going on: up to the last pause, or not at all.
-        pausedAt?.let { close(it) }
-        if (closeOpen) close(to)
+        val paused = pausedAt
+        if (paused != null) stop(paused) else if (closeOpen) stop(to)
         return out
     }
 
@@ -459,8 +498,13 @@ class PlatformBridge(
         private val worker = Executors.newSingleThreadExecutor()
 
         // UsageEvents.Event constants added in API 28 and 29.
+        private const val SCREEN_INTERACTIVE = 15
         private const val SCREEN_NON_INTERACTIVE = 16
         private const val KEYGUARD_SHOWN = 17
+        private const val KEYGUARD_HIDDEN = 18
+
+        /** How far before the history asked the screen's state is looked for. */
+        private const val STATE_LOOK_BACK_MS = 6 * 60 * 60 * 1000L
         private const val DEVICE_SHUTDOWN = 26
     }
 }

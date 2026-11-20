@@ -558,16 +558,34 @@ class FamilySync {
   }
 
   /// Shares this device's system components (home screen…), so that no
-  /// device counts them in the statistics. Whether they changed.
-  Future<bool> publishSystem(Set<String> packages) async {
-    final sorted = packages.toList()..sort();
-    final held = node.replica[systemOf(deviceId)]?['packages'];
-    if (held is List && sameJson(held, sorted)) return false;
-    await node.emit([
-      EventDraft.put(systemOf(deviceId), {'packages': sorted}),
-    ]);
+  /// device counts them in the statistics, and its phone app with the
+  /// screens of a call, counted as that app in them. Whether they changed.
+  Future<bool> publishSystem(
+    Set<String> packages, {
+    String? dialer,
+    Set<String> callScreens = const {},
+  }) async {
+    final data = <String, Object?>{
+      'packages': packages.toList()..sort(),
+      'dialer': ?dialer,
+      if (callScreens.isNotEmpty) 'callScreens': callScreens.toList()..sort(),
+    };
+    final held = node.replica[systemOf(deviceId)];
+    if (held != null && sameJson(held, data)) return false;
+    await node.emit([EventDraft.put(systemOf(deviceId), data)]);
     return true;
   }
+
+  /// For each device that shared them, the screens of a call and its
+  /// phone app: screen → app.
+  Map<String, Map<String, String>> sharedCallScreens() => {
+    for (final e in node.replica.withPrefix(_systemPrefix).entries)
+      if (e.value['dialer'] case final String dialer)
+        e.key.substring(_systemPrefix.length): {
+          for (final p in e.value['callScreens'] as List? ?? const [])
+            if (p != dialer) p as String: dialer,
+        },
+  };
 
   /// The system components the family's devices shared.
   Set<String> sharedSystem() => {

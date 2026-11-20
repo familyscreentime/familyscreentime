@@ -257,7 +257,11 @@ class Monitor {
         '${watch.elapsedMilliseconds} ms',
       );
       final system = await platform.systemPackages();
-      await log.publishSystem({system.self, ...system.launchers});
+      await log.publishSystem(
+        {system.self, ...system.launchers},
+        dialer: system.dialer,
+        callScreens: {...system.callScreens},
+      );
       await done.writeAsString(today);
     } on Object catch (e) {
       debugPrint('Apps not shared: $e');

@@ -334,7 +334,49 @@ class _RuleEditorState extends State<RuleEditor> {
     ];
   }
 
+  /// No time limit at all: "listen only" would never begin.
+  bool get _noTimeLimit {
+    final daily = _dailyQuotas();
+    return daily.$1 == null && daily.$2.isEmpty && _weekly == null && !_rolling;
+  }
+
+  /// Listen only with no time limit: the parent is asked first, with
+  /// 0 min per day offered (the app then only opens to pick the music).
+  /// Whether to save.
+  Future<bool> _confirmListenOnly() async {
+    if (!_listenOnly || _target == const AppTarget.all() || !_noTimeLimit) {
+      return true;
+    }
+    final s = widget.controller.s;
+    final choice = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(s.t('listenNoLimitTitle')),
+        content: Text(s.t('listenNoLimitText')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(s.t('listenNoLimitKeep')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(s.t('listenNoLimitZero')),
+          ),
+        ],
+      ),
+    );
+    if (choice == null) return false;
+    if (choice) {
+      setState(() {
+        _dailyByDay = false;
+        _daily = Duration.zero;
+      });
+    }
+    return true;
+  }
+
   Future<void> _save() async {
+    if (!await _confirmListenOnly() || !mounted) return;
     final c = widget.controller;
     final old = widget.rule;
     final daily = _dailyQuotas();
@@ -745,6 +787,15 @@ class _RuleEditorState extends State<RuleEditor> {
               value: _listenOnly,
               onChanged: (v) => setState(() => _listenOnly = v),
             ),
+            if (_listenOnly && _noTimeLimit)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  s.t('listenNoLimitHint'),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
             if (_listenOnly) ...[
               DurationTile(
                 s: s,

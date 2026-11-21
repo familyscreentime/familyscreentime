@@ -364,6 +364,61 @@ void main() {
     expect(ruleSummary(saved, controller.s), contains('écoute seule'));
   });
 
+  testWidgets('listen only with no time limit: 0 min a day offered', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final dir = Directory.systemTemp.createTempSync('fst');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    const rule = Rule(
+      id: 'clips',
+      childId: 'emma',
+      appTarget: AppTarget.group('m'),
+      listenOnly: ListenOnlyPolicy(),
+    );
+    final controller = AppController(
+      LocalStore(dir),
+      const AppSettings(deviceId: 'd', language: 'fr', childId: 'emma'),
+      const FamilyData(
+        children: [Child(id: 'emma', name: 'Emma')],
+        config: FamilyConfig(
+          appGroups: {
+            'm': {'spotify'},
+          },
+        ),
+        state: FamilyState(rules: [rule]),
+        groupNames: {'m': 'Musique'},
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RuleEditor(controller: controller, rule: rule),
+      ),
+    );
+    final hint = find.textContaining("l'écoute seule ne commence jamais");
+    await tester.scrollUntilVisible(
+      hint,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(hint, findsOneWidget);
+
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(find.text("L'écoute seule ne commencera pas"), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Mettre 0 min par jour'));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pumpAndSettle();
+
+    final saved = controller.family.state.rules.single;
+    expect(saved.dailyQuota, Duration.zero);
+    expect(saved.listenOnly, const ListenOnlyPolicy());
+  });
+
   testWidgets('0 min a day can be set, for an app open only with extra time', (
     tester,
   ) async {

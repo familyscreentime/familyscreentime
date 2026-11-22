@@ -1,0 +1,13 @@
+﻿Family Screen Time limits and counts children's screen time, following the rules you set in parent mode.
+
+Before installing, here is what the installation changes in Windows:
+
+- The app is installed for every account of this PC, in Program Files. Administrator rights are needed, so a child with a standard account can neither install nor remove it.
+
+- The monitor starts at each sign-in, in every account. In an account not set up for a child (a parent's), it stops at once.
+
+- A Windows firewall rule lets the app receive connections, so that the family's devices find each other on the local network.
+
+Nothing is sent anywhere but to the family's devices you link, and to the relay server you choose if you use one.
+
+Uninstalling (Windows Settings > Apps) removes the app, its start at sign-in and the firewall rule.

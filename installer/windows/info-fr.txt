@@ -1,0 +1,13 @@
+﻿Family Screen Time limite et compte le temps d'écran des enfants, selon les règles que vous fixez en mode parent.
+
+Avant d'installer, voici ce que l'installation change dans Windows :
+
+- L'application est installée pour tous les comptes de ce PC, dans Program Files. Des droits d'administrateur sont nécessaires, si bien qu'un enfant avec un compte standard ne peut ni l'installer ni la désinstaller.
+
+- La surveillance démarre à chaque ouverture de session, dans tous les comptes. Dans un compte qui n'est pas réglé pour un enfant (celui d'un parent), elle s'arrête aussitôt.
+
+- Une règle du pare-feu Windows autorise l'application à recevoir des connexions, pour que les appareils de la famille se trouvent sur le réseau local.
+
+Rien n'est envoyé ailleurs que vers les appareils de la famille que vous reliez, et vers le serveur relais que vous choisissez s'il y en a un.
+
+La désinstallation (Paramètres de Windows > Applications) retire l'application, son démarrage à l'ouverture de session et la règle du pare-feu.

@@ -10,6 +10,11 @@
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
+; The app's own version, as in its executable (0.32.0+64): the same in the
+; installer's details, as code signing requires.
+#ifndef ProductVersion
+  #define ProductVersion AppVersion
+#endif
 #define AppName "Family Screen Time"
 #define AppExe "FamilyScreenTime.exe"
 #define Build "..\..\apps\family_screen_time\build\windows\x64\runner\Release"
@@ -21,6 +26,12 @@ AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher=Family Screen Time
 AppPublisherURL=https://familyscreentime.org
+VersionInfoVersion={#AppVersion}
+VersionInfoProductName={#AppName}
+VersionInfoProductTextVersion={#ProductVersion}
+VersionInfoCompany=Family Screen Time
+VersionInfoDescription={#AppName} Setup
+VersionInfoCopyright=MIT licence, Family Screen Time contributors
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -39,9 +50,10 @@ CloseApplications=force
 RestartApplications=no
 
 [Languages]
-Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
-Name: "nl"; MessagesFile: "compiler:Languages\Dutch.isl"
-Name: "en"; MessagesFile: "compiler:Default.isl"
+; Before installing: what it changes in Windows.
+Name: "fr"; MessagesFile: "compiler:Languages\French.isl"; InfoBeforeFile: "info-fr.txt"
+Name: "nl"; MessagesFile: "compiler:Languages\Dutch.isl"; InfoBeforeFile: "info-nl.txt"
+Name: "en"; MessagesFile: "compiler:Default.isl"; InfoBeforeFile: "info-en.txt"
 
 [CustomMessages]
 fr.Launch=Ouvrir Family Screen Time

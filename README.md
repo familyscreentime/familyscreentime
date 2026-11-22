@@ -13,6 +13,12 @@ family's devices. Commits made by Claude say so in their message.
 Website: https://familyscreentime.org · Repository:
 https://github.com/familyscreentime/familyscreentime
 
+## Code signing policy
+
+The Windows installer is signed through SignPath: free code signing
+provided by SignPath.io, certificate by SignPath Foundation. See
+[CODE_SIGNING.md](CODE_SIGNING.md).
+
 ## Repository contents
 
 | Folder | Role | Status |

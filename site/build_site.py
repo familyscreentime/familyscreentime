@@ -15,9 +15,12 @@ def page(kind, lang, title, body, desc):
     alt = ''.join(f'<link rel="alternate" hreflang="{l}" href="https://familyscreentime.org/{PAGES[kind][l]}">' for l in ('fr','nl','en'))
     home = PAGES['home'][lang]
     privacy = PAGES['privacy'][lang]
-    foot = {'fr': f'<a href="{privacy}">Règles de confidentialité</a> · <a href="{REPO}">Logiciel libre (licence MIT)</a> · {CONTACT}',
-            'nl': f'<a href="{privacy}">Privacybeleid</a> · <a href="{REPO}">Vrije software (MIT-licentie)</a> · {CONTACT}',
-            'en': f'<a href="{privacy}">Privacy policy</a> · <a href="{REPO}">Free software (MIT licence)</a> · {CONTACT}'}[lang]
+    # SignPath Foundation's conditions: a link named "Code signing policy"
+    # on the home and download pages.
+    signing = f'{REPO}/blob/main/CODE_SIGNING.md'
+    foot = {'fr': f'<a href="{privacy}">Règles de confidentialité</a> · <a href="{signing}">Politique de signature du code (Code signing policy)</a> · <a href="{REPO}">Logiciel libre (licence MIT)</a> · {CONTACT}',
+            'nl': f'<a href="{privacy}">Privacybeleid</a> · <a href="{signing}">Beleid voor codeondertekening (Code signing policy)</a> · <a href="{REPO}">Vrije software (MIT-licentie)</a> · {CONTACT}',
+            'en': f'<a href="{privacy}">Privacy policy</a> · <a href="{signing}">Code signing policy</a> · <a href="{REPO}">Free software (MIT licence)</a> · {CONTACT}'}[lang]
     return f'''<!doctype html>
 <html lang="{lang}">
 <head>

@@ -1,0 +1,13 @@
+﻿Family Screen Time beperkt en telt de schermtijd van kinderen, volgens de regels die u in oudermodus instelt.
+
+Voor u installeert, dit verandert de installatie in Windows:
+
+- De app wordt voor alle accounts van deze pc geïnstalleerd, in Program Files. Er zijn beheerdersrechten nodig, zodat een kind met een standaardaccount ze niet kan installeren of verwijderen.
+
+- De bewaking start bij elke aanmelding, in alle accounts. In een account dat niet voor een kind is ingesteld (dat van een ouder), stopt ze meteen.
+
+- Een regel in de Windows-firewall laat de app verbindingen ontvangen, zodat de toestellen van het gezin elkaar op het lokale netwerk vinden.
+
+Er wordt niets verstuurd, behalve naar de toestellen van het gezin die u koppelt, en naar de relayserver die u kiest als u er een gebruikt.
+
+Verwijderen (Windows-instellingen > Apps) haalt de app, haar start bij aanmelding en de firewallregel weg.

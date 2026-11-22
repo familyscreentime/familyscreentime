@@ -2,6 +2,10 @@ name: Windows client
 
 on:
   push:
+    # A release: signed through SignPath (see CODE_SIGNING.md), once the
+    # project is set up there. Path filters do not apply to tags.
+    tags:
+      - 'windows-v*'
     paths:
       - 'apps/family_screen_time/**'
       - 'packages/screentime_engine/**'
@@ -18,7 +22,14 @@ on:
 
 jobs:
   build:
+    # SignPath's conditions: every job leading to a signing request runs on
+    # GitHub-hosted runners.
     runs-on: windows-latest
+    env:
+      # Signed only for a release tag, and once SignPath is configured
+      # (repository variable SIGNPATH_ORGANIZATION_ID, secret
+      # SIGNPATH_API_TOKEN).
+      SIGN: ${{ startsWith(github.ref, 'refs/tags/windows-v') && vars.SIGNPATH_ORGANIZATION_ID != '' }}
     defaults:
       run:
         working-directory: apps/family_screen_time
@@ -43,6 +54,37 @@ jobs:
               ForEach-Object { Write-Output "::error::$($_.Line.Trim())" }
             exit 1
           }
+      # The version as in pubspec.yaml (0.32.0+64), and without the build
+      # number (0.32.0) for the installer.
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $full = (Select-String -Path pubspec.yaml -Pattern '^version: (\S+)').Matches[0].Groups[1].Value
+          "full=$full" >> $env:GITHUB_OUTPUT
+          "app=$($full -replace '\+.*$', '')" >> $env:GITHUB_OUTPUT
+      # The app's own executable, signed before it goes into the installer.
+      - name: Upload the executable to sign
+        id: unsigned-app
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-app-unsigned
+          path: apps/family_screen_time/build/windows/x64/runner/Release/FamilyScreenTime.exe
+      - name: Sign the executable
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: family-screen-time
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: windows-app
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          parameters: |
+            version: "${{ steps.version.outputs.full }}"
+          wait-for-completion: true
+          output-artifact-directory: apps/family_screen_time/build/windows/x64/runner/Release
       - name: Installer
         shell: pwsh
         run: |
@@ -53,13 +95,41 @@ jobs:
           }
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
-          $version = (Select-String -Path pubspec.yaml -Pattern '^version: ([0-9.]+)').Matches[0].Groups[1].Value
-          & $iscc "/DAppVersion=$version" ..\..\installer\windows\FamilyScreenTime.iss
+          & $iscc "/DAppVersion=${{ steps.version.outputs.app }}" "/DProductVersion=${{ steps.version.outputs.full }}" ..\..\installer\windows\FamilyScreenTime.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Upload the installer to sign
+        id: unsigned-installer
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-installer-unsigned
+          path: installer/windows/Output/*.exe
+      - name: Sign the installer
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: family-screen-time
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: windows-installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          parameters: |
+            version: "${{ steps.version.outputs.full }}"
+            appVersion: "${{ steps.version.outputs.app }}"
+          wait-for-completion: true
+          output-artifact-directory: installer/windows/Signed
+      # Signed when it could be, else as built.
+      - name: Installer to publish
+        shell: pwsh
+        run: |
+          $out = if ($env:SIGN -eq 'true') { 'Signed' } else { 'Output' }
+          New-Item -ItemType Directory -Force ..\..\installer\windows\Publish | Out-Null
+          Copy-Item "..\..\installer\windows\$out\*.exe" ..\..\installer\windows\Publish
       - uses: actions/upload-artifact@v6
         with:
           name: windows-installer
-          path: installer/windows/Output/*.exe
+          path: installer/windows/Publish/*.exe
       # The compiled Dart code, to find where a crash happened (see the
       # address in %LOCALAPPDATA%\FamilyScreenTime\logs).
       - uses: actions/upload-artifact@v6

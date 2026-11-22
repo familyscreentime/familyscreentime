@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "windows-app": the app's own executable,
+  before the installer is built. The GitHub artifact is a zip holding
+  FamilyScreenTime.exe only (the Flutter engine and plugins' DLLs are
+  upstream code, not signed by this project).
+  ${version}: the app's version as in pubspec.yaml (0.32.0+64), given by
+  the workflow.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="FamilyScreenTime.exe" product-name="Family Screen Time" product-version="${version}">
+      <authenticode-sign/>
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

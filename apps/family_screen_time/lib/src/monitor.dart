@@ -1294,6 +1294,10 @@ class Monitor {
         {if (_family.appNames[app] != null) 'app': _family.appNames[app]!},
       ),
       'package': app,
+      // Listen only: the music goes on in the background.
+      'keepPlaying':
+          d.reason == Reason.quotaExhausted &&
+          _rule(d.ruleId)?.listenOnly != null,
       'ok': _s.t('ok'),
       'home': _s.t('blockHome'),
       'open': _s.t('blockOpen'),

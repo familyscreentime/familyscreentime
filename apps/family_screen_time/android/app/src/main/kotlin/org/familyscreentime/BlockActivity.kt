@@ -68,7 +68,7 @@ class BlockActivity : Activity() {
         startActivity(
             Intent(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_HOME)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION),
         )
         finish()
     }
@@ -130,10 +130,19 @@ class BlockActivity : Activity() {
 
         private var current: WeakReference<BlockActivity>? = null
 
+        /**
+         * Shown over the blocked app. Not as the child's own move
+         * (FLAG_ACTIVITY_NO_USER_ACTION): a video app would take it as
+         * leaving, and go on in a floating window (picture in picture),
+         * which only the accessibility service can close.
+         */
         fun show(context: Context, title: String, message: String, home: String, open: String) {
             context.startActivity(
                 Intent(context, BlockActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    .addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_NO_USER_ACTION,
+                    )
                     .putExtra(EXTRA_TITLE, title)
                     .putExtra(EXTRA_MESSAGE, message)
                     .putExtra(EXTRA_HOME, home)

@@ -18,6 +18,24 @@ class MainActivity : FlutterFragmentActivity() {
         super.onPause()
     }
 
+    /**
+     * On a child's device, once app detection is set up, the app leaves
+     * no card in the recent apps: swiping it away, or "clear all", makes
+     * some makers (Xiaomi's "SwipeUpClean") stop its processes in a way
+     * after which Android does not start app detection again. The child
+     * still opens it from the home screen.
+     */
+    override fun onStop() {
+        super.onStop()
+        val hide = Health.monitorWanted(this) && Health.accessibilityEnabled(this)
+        try {
+            val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+            for (task in am.appTasks) task.setExcludeFromRecents(hide)
+        } catch (e: Exception) {
+            // The card stays: nothing else changes.
+        }
+    }
+
     companion object {
         /** The interface is on screen: the process must not restart then. */
         @Volatile

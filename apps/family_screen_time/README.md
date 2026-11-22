@@ -335,7 +335,15 @@ Turn off), then uninstall as usual.
 - Apps without a launcher icon show their package name instead of their
   name and icon (Android's package visibility).
 - Without the accessibility service, a blocked app is detected within about
-  3 seconds and the block screen is shown again every 10 seconds.
+  3 seconds and the block screen is shown again every 10 seconds. That
+  screen opens as no move of the child's, so that a video app does not
+  float into a small window (which only the accessibility service can
+  close); what the blocked app still plays is paused (but in listen only).
+- Some makers (Xiaomi's "SwipeUpClean") stop the app's processes when its
+  card is swiped away from the recent apps, after which Android does not
+  start the accessibility service again until the app is updated or the
+  service switched off and on. On a child's device, once the service is
+  on, the app leaves no card in the recent apps.
 - A child who is a device administrator, or who reaches the settings by a
   path the guard does not recognise (manufacturer screens, safe mode,
   a computer with adb), can still stop the monitor. Tamper alerts come

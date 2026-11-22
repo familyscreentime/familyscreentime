@@ -2,8 +2,11 @@ name: Windows client
 
 on:
   push:
-    # A release: signed through SignPath (see CODE_SIGNING.md), once the
-    # project is set up there. Path filters do not apply to tags.
+    # Every branch (naming tags alone would leave them out), and a release:
+    # signed through SignPath (see CODE_SIGNING.md), once the project is set
+    # up there. Path filters do not apply to tags.
+    branches:
+      - '**'
     tags:
       - 'windows-v*'
     paths:

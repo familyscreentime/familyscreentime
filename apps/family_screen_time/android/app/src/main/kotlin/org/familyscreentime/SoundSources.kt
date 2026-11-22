@@ -93,6 +93,9 @@ internal class SoundSources(
         return if (UNKNOWN in started.values) null else false
     }
 
+    /** Whether media sound plays that started while [pkg] was in front. */
+    fun playsFrom(pkg: String): Boolean = Build.VERSION.SDK_INT >= 26 && pkg in started.values
+
     private fun musicApp(pkg: String): Boolean = Build.VERSION.SDK_INT >= 26 && try {
         packages.getApplicationInfo(pkg, 0).category == ApplicationInfo.CATEGORY_AUDIO
     } catch (e: Exception) {

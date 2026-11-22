@@ -543,6 +543,8 @@ void main() {
       final block = calls.lastWhere((c) => c.method == 'block');
       final args = block.arguments as Map<Object?, Object?>;
       expect(args['title'], 'Écoute seule');
+      // The music goes on: not paused with the app.
+      expect(args['keepPlaying'], isTrue);
       expect(
         args['message'] as String,
         startsWith(

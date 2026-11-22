@@ -434,6 +434,21 @@ internal object Enforcer {
                 main.postDelayed({ closePictureInPicture(app) }, delay)
             }
         }
+        // Without the accessibility service, a floating window cannot be
+        // closed: what the blocked app still plays is paused (but music
+        // in "listen only", which goes on in the background).
+        if (accessibility == null && app != null && !data.getBoolean("keepPlaying", false)) {
+            for (delay in PIP_CHECKS_MS) {
+                main.postDelayed({
+                    if (ForegroundAccessibilityService.instance == null &&
+                        lastForeground != app && soundSources.playsFrom(app)
+                    ) {
+                        Log.i(TAG, "Paused what $app still played, closed")
+                        pauseMedia()
+                    }
+                }, delay)
+            }
+        }
         // The device lock says it all: shown now, or as soon as the child
         // unlocks the screen. The block notice before it would show two
         // screens one after the other.

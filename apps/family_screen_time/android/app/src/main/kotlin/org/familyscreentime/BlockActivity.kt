@@ -39,6 +39,17 @@ class BlockActivity : Activity() {
         }
     }
 
+    /**
+     * Shown again (the screen unlocked, say) once the app may open again:
+     * it goes, rather than say "it's over" (the monitor also takes it away
+     * then, when it knows).
+     */
+    override fun onResume() {
+        super.onResume()
+        val until = intent.getLongExtra(EXTRA_UNTIL, 0L)
+        if (until > 0L && System.currentTimeMillis() >= until) finish()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -127,6 +138,7 @@ class BlockActivity : Activity() {
         const val EXTRA_MESSAGE = "message"
         const val EXTRA_HOME = "home"
         const val EXTRA_OPEN = "open"
+        const val EXTRA_UNTIL = "until"
 
         private var current: WeakReference<BlockActivity>? = null
 
@@ -136,7 +148,14 @@ class BlockActivity : Activity() {
          * leaving, and go on in a floating window (picture in picture),
          * which only the accessibility service can close.
          */
-        fun show(context: Context, title: String, message: String, home: String, open: String) {
+        fun show(
+            context: Context,
+            title: String,
+            message: String,
+            home: String,
+            open: String,
+            until: Long = 0L,
+        ) {
             context.startActivity(
                 Intent(context, BlockActivity::class.java)
                     .addFlags(
@@ -146,7 +165,8 @@ class BlockActivity : Activity() {
                     .putExtra(EXTRA_TITLE, title)
                     .putExtra(EXTRA_MESSAGE, message)
                     .putExtra(EXTRA_HOME, home)
-                    .putExtra(EXTRA_OPEN, open),
+                    .putExtra(EXTRA_OPEN, open)
+                    .putExtra(EXTRA_UNTIL, until),
             )
         }
 

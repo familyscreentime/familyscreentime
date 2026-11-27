@@ -207,6 +207,24 @@ void main() {
     expect(args['message'], contains('horaires'));
   });
 
+  test('the block screen goes once the app may open again', () async {
+    await send('foreground', {'package': 'minecraft'});
+    expect(calls.where((c) => c.method == 'block'), hasLength(1));
+    // The block screen in front, or the home screen.
+    await send('foreground', {'package': 'launcher'});
+    expect(calls.where((c) => c.method == 'unblock'), isEmpty);
+    // Its hours begin (here: the rules go).
+    final family = await store.loadFamily();
+    await store.saveFamily(
+      family.copyWith(state: const FamilyState(rules: [])),
+    );
+    await send('reload', null);
+    expect(calls.where((c) => c.method == 'unblock'), hasLength(1));
+    // Said once.
+    await send('reload', null);
+    expect(calls.where((c) => c.method == 'unblock'), hasLength(1));
+  });
+
   test('a blocked app beside the one in front is closed too', () async {
     await send('foreground', {'package': 'youtube'});
     expect(calls.where((c) => c.method == 'block'), isEmpty);

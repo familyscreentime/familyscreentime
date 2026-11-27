@@ -222,8 +222,38 @@ class _PermissionsViewState extends State<PermissionsView>
                   .openPermissionSettings('appDetails'),
             ),
           ),
+        // What the app saw and did, for a report: from parent mode only.
+        if (!onWindows && widget.controller.parentMode)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              icon: const Icon(Icons.bug_report_outlined),
+              label: Text(widget.controller.s.t('diagShare')),
+              onPressed: () => _shareDiagnostics(context),
+            ),
+          ),
       ],
     );
+  }
+
+  Future<void> _shareDiagnostics(BuildContext context) async {
+    final c = widget.controller;
+    final messenger = ScaffoldMessenger.of(context);
+    final path = await c.platform.diagnosticsFile();
+    if (path == null) {
+      messenger.showSnackBar(SnackBar(content: Text(c.s.t('diagNone'))));
+      return;
+    }
+    final shared = await c.platform.shareFile(
+      path,
+      'text/plain',
+      c.s.t('diagSubject'),
+    );
+    if (!shared) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(c.s.t('exportSaved', {'path': path}))),
+      );
+    }
   }
 }
 

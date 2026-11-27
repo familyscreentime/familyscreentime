@@ -20,7 +20,8 @@ import android.view.inputmethod.InputMethodManager
 class ForegroundAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
-        Log.i(TAG, "Accessibility service connected")
+        Diag.init(this)
+        Diag.i("Accessibility service connected")
         instance = this
         Enforcer.get(this).accessibilityChanged()
         if (Health.monitorWanted(this)) MonitorService.start(this)
@@ -153,7 +154,7 @@ class ForegroundAccessibilityService : AccessibilityService() {
             val pkg = root.packageName?.toString() ?: continue
             if (!blocked(pkg)) continue
             found = true
-            Log.i(TAG, "Closing the floating window of $pkg")
+            Diag.i("Closing the floating window of $pkg")
             if (!root.performAction(AccessibilityNodeInfo.ACTION_DISMISS)) {
                 Enforcer.get(this).pauseMedia()
             }
@@ -189,13 +190,13 @@ class ForegroundAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onUnbind(intent: Intent?): Boolean {
-        Log.w(TAG, "Accessibility service unbound by the system")
+        Diag.w("Accessibility service unbound by the system")
         stopped()
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
-        Log.w(TAG, "Accessibility service destroyed")
+        Diag.w("Accessibility service destroyed")
         stopped()
         super.onDestroy()
     }

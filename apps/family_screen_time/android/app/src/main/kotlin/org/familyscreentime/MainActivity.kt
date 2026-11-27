@@ -43,6 +43,7 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        Diag.init(this)
         super.configureFlutterEngine(flutterEngine)
         PlatformBridge(applicationContext, this)
             .attach(flutterEngine.dartExecutor.binaryMessenger)

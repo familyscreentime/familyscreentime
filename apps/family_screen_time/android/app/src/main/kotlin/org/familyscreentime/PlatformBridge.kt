@@ -152,6 +152,8 @@ class PlatformBridge(
                 }
                 result.success(null)
             }
+            // The diagnostic log, with the device's state, in one file to share.
+            "diagnostics" -> result.success(diagnosticsFile())
             "shareFile" -> result.success(
                 shareFile(
                     call.argument<String>("path") ?: "",
@@ -193,7 +195,7 @@ class PlatformBridge(
             }
             true
         } catch (e: Exception) {
-            android.util.Log.w("FamilyScreenTime", "File not shared", e)
+            Diag.w("File not shared", e)
             false
         }
     }
@@ -447,6 +449,37 @@ class PlatformBridge(
         val paused = pausedAt
         if (paused != null) stop(paused) else if (closeOpen) stop(to)
         return out
+    }
+
+    /**
+     * The diagnostic log in one text file, in the exports shared from the
+     * cache: the device and the app first, the accessibility service's
+     * state, why the app's processes last ended, then each process's log.
+     */
+    private fun diagnosticsFile(): String? = try {
+        val dir = java.io.File(context.cacheDir, "exports").apply { mkdirs() }
+        val day = java.text.SimpleDateFormat("yyyy-MM-dd-HHmm", java.util.Locale.ROOT).format(java.util.Date())
+        val file = java.io.File(dir, "family-screen-time-diagnostics-$day.txt")
+        val version = appVersion()
+        val text = StringBuilder()
+            .appendLine("Family Screen Time ${version["version"]} (${version["build"]}), ${context.packageName}")
+            .appendLine("${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+            .appendLine(
+                "Accessibility: ticked ${Health.accessibilityEnabled(context)}, " +
+                    "running ${ForegroundAccessibilityService.instance != null}",
+            )
+            .appendLine()
+            .appendLine("Process ends:")
+        for (line in Health.exitReasons(context, 20)) text.appendLine(line)
+        for (f in Diag.files(context)) {
+            text.appendLine().appendLine("== ${f.name}")
+            text.append(f.readText())
+        }
+        file.writeText(text.toString())
+        file.path
+    } catch (e: Exception) {
+        Diag.w("Diagnostics not written", e)
+        null
     }
 
     /** This app's version: its name (0.28.1) and its number (55). */

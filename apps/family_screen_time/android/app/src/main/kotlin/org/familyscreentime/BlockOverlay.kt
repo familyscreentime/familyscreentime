@@ -130,7 +130,7 @@ class BlockOverlay(private val context: Context) {
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
                 )
             } catch (e: Exception) {
-                android.util.Log.w("FamilyScreenTime", "App not opened", e)
+                Diag.w("App not opened", e)
             }
         }
     }

@@ -1,5 +1,5 @@
 import html, os
-DATE = {'fr': '25 octobre 2026', 'nl': '25 oktober 2026', 'en': '25 October 2026'}
+DATE = {'fr': '27 novembre 2026', 'nl': '27 november 2026', 'en': '27 November 2026'}
 SERVER_ZIP = 'familyscreentime-server.zip'
 CONTACT = 'contact@familyscreentime.org'
 REPO = 'https://github.com/familyscreentime/familyscreentime'
@@ -163,6 +163,9 @@ PRIV = {
 <h2>Export</h2>
 <p>Le parent peut exporter l'utilisation des applis (enfant, appareil, appli, heures), en CSV ou pour le logiciel ActivityWatch. Le fichier est remis au menu de partage d'Android : c'est le parent qui choisit où il va (Drive, e-mail…), et ce qu'il en advient relève alors de l'application choisie.</p>
 
+<h2>Journal de diagnostic</h2>
+<p>Pour comprendre un problème, l'appli tient sur l'appareil un journal de ce qu'elle a vu et fait : écran allumé ou éteint, appli à l'écran, blocages, erreurs. Il est limité à environ 1 Mo par processus, les lignes les plus anciennes partant d'elles-mêmes. Il ne quitte l'appareil que si le parent le partage, en mode parent, par le menu de partage d'Android.</p>
+
 <h2>Le service d'accessibilité</h2>
 <p>L'application utilise le service d'accessibilité d'Android pour savoir quelle appli est à l'écran, pour fermer une appli bloquée et pour afficher les avertissements, le décompte et l'écran de verrouillage par-dessus les autres applis. Quand le parent active la protection contre la désinstallation, elle ferme aussi les pages des réglages qui permettraient de désactiver l'application. Pour les reconnaître, elle lit le contenu de l'écran uniquement sur les pages de sécurité et d'autorisations d'Android, sans rien enregistrer. Elle liste aussi les fenêtres d'applis visibles, en ne lisant que leur nom, pour compter les applis affichées côte à côte et fermer la petite fenêtre vidéo d'une appli bloquée. L'utilisateur est informé et donne son accord avant l'activation de ce service.</p>
 
@@ -218,6 +221,9 @@ PRIV = {
 <h2>Export</h2>
 <p>De ouder kan het appgebruik exporteren (kind, toestel, app, tijdstippen), als CSV of voor de software ActivityWatch. Het bestand gaat naar het deelmenu van Android: de ouder kiest zelf waarheen (Drive, e-mail…), en wat er daarna mee gebeurt, hangt af van de gekozen app.</p>
 
+<h2>Diagnoselogboek</h2>
+<p>Om een probleem te begrijpen, houdt de app op het toestel een logboek bij van wat ze zag en deed: scherm aan of uit, app op het scherm, blokkeringen, fouten. Het is beperkt tot ongeveer 1 MB per proces; de oudste regels verdwijnen vanzelf. Het verlaat het toestel alleen als de ouder het deelt, in oudermodus, via het deelmenu van Android.</p>
+
 <h2>De toegankelijkheidsdienst</h2>
 <p>De app gebruikt de toegankelijkheidsdienst van Android om te weten welke app op het scherm staat, om een geblokkeerde app te sluiten en om waarschuwingen, het aftellen en het vergrendelscherm boven andere apps te tonen. Als de ouder de beveiliging tegen verwijderen inschakelt, sluit ze ook de instellingenpagina's waarmee de app uitgeschakeld kan worden. Om die te herkennen, leest ze de scherminhoud alleen op de beveiligings- en toestemmingspagina's van Android, zonder iets te bewaren. Ze somt ook de zichtbare appvensters op, waarvan ze alleen de naam leest, om apps naast elkaar mee te tellen en het kleine videovenster van een geblokkeerde app te sluiten. De gebruiker wordt ingelicht en geeft toestemming voor deze dienst wordt ingeschakeld.</p>
 
@@ -272,6 +278,9 @@ PRIV = {
 
 <h2>Export</h2>
 <p>The parent can export the use of apps (child, device, app, times), as CSV or for the ActivityWatch software. The file is handed to Android's share menu: the parent chooses where it goes (Drive, email…), and what then becomes of it is up to the app chosen.</p>
+
+<h2>Diagnostic log</h2>
+<p>To understand a problem, the app keeps on the device a log of what it saw and did: screen on or off, the app on screen, blocks, errors. It is limited to about 1 MB per process, the oldest lines going by themselves. It leaves the device only if the parent shares it, in parent mode, through Android's share menu.</p>
 
 <h2>The accessibility service</h2>
 <p>The app uses Android's accessibility service to know which app is on screen, to close a blocked app, and to show warnings, the countdown and the lock screen over other apps. When the parent turns on uninstall protection, it also closes the settings pages that would switch the app off. To recognise them, it reads screen content only on Android's security and permission pages, and stores nothing. It also lists the app windows on screen, reading only their names, to count apps shown side by side and to close the small video window of a blocked app. The user is informed and agrees before this service is turned on.</p>

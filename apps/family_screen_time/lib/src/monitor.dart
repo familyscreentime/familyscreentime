@@ -482,12 +482,33 @@ class Monitor {
   }
 
   Future<Object?> _onCall(MethodCall call) async {
+    try {
+      return await _handle(call);
+    } on Object catch (e, stack) {
+      // In the diagnostic log: a call that fails may leave use uncounted.
+      debugPrint('${call.method} failed: $e\n$stack');
+      rethrow;
+    }
+  }
+
+  /// The diagnostic log's last line about the decision for the app in
+  /// front: a line only when it changes.
+  String? _decisionLogged;
+
+  /// When the monitor last said it is alive, in the diagnostic log.
+  DateTime? _aliveLogged;
+
+  Future<Object?> _handle(MethodCall call) async {
     switch (call.method) {
       case 'foreground':
+        final args = call.arguments as Map<Object?, Object?>;
         // Screen off: no use, whatever window Android reports (an alarm
         // getting ready, say). The app in front comes again at unlocking.
-        if (!_screenOn) return null;
-        final args = call.arguments as Map<Object?, Object?>;
+        if (!_screenOn) {
+          debugPrint('In front, screen off here: ${args['package']}');
+          return null;
+        }
+        debugPrint('In front: ${args['package']}');
         await _switchTo(args['package'] as String?);
       case 'visible':
         final args = call.arguments as Map<Object?, Object?>;
@@ -499,6 +520,7 @@ class Monitor {
       case 'screen':
         final args = call.arguments as Map<Object?, Object?>;
         _screenOn = args['on'] as bool? ?? true;
+        debugPrint(_screenOn ? 'Screen in use' : 'Screen off or locked');
         _relay?.screenOn = _screenOn;
         if (!_screenOn) {
           _visible = {};
@@ -688,6 +710,16 @@ class Monitor {
   Future<void> _tick() async {
     final app = _recordAs;
     final start = _openStart;
+    // Alive, every half hour: a silent log means the monitor stopped.
+    final now = DateTime.now();
+    if (_aliveLogged == null ||
+        now.difference(_aliveLogged!) >= const Duration(minutes: 30)) {
+      _aliveLogged = now;
+      debugPrint(
+        'Alive: screen ${_screenOn ? 'in use' : 'off'}, in front $_foreground, '
+        'recorded as $_recordAs since $_openStart',
+      );
+    }
     if (app != null && start != null) {
       await store.saveOpen(
         OpenSegment(app, start, DateTime.now(), activity: _activity),
@@ -769,6 +801,13 @@ class Monitor {
       appId: app,
       now: now,
     );
+    final logged =
+        '$app: ${d.allowed ? 'allowed' : 'blocked'}, ${d.reason.name}'
+        '${d.ruleId == null ? '' : ', rule ${d.ruleId}'}';
+    if (logged != _decisionLogged) {
+      _decisionLogged = logged;
+      debugPrint(logged);
+    }
     // Finishing in grace: no lock until the app is left.
     await _syncLock(
       engine,

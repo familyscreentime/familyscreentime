@@ -18,7 +18,6 @@ import android.os.Message
 import android.os.Messenger
 import android.os.RemoteException
 import android.os.SystemClock
-import android.util.Log
 import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
@@ -75,7 +74,7 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
                 return
             }
             for (state in lastState.values) toEnforcer(Bundle(state))
-            Log.i(TAG, "Connected to the main process")
+            Diag.i("Connected to the main process")
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -83,7 +82,7 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
             // binding asks for it), and it connects back.
             enforcer = null
             accessibilityRuns = false
-            Log.w(TAG, "Main process gone")
+            Diag.w("Main process gone")
         }
 
         override fun onBindingDied(name: ComponentName?) {
@@ -138,7 +137,11 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
         when (data.getString("cmd")) {
             "foreground" -> data.getString("package")?.let { onForegroundApp(it, fromEnforcer = true) }
             "status" -> {
-                accessibilityRuns = data.getBoolean("accessibility", false)
+                val runs = data.getBoolean("accessibility", false)
+                if (runs != accessibilityRuns) {
+                    Diag.i(if (runs) "Accessibility service running" else "Accessibility service not running")
+                }
+                accessibilityRuns = runs
                 data.getString("foreground")?.let { if (screenOn) onForegroundApp(it, fromEnforcer = true) }
                 data.getStringArrayList("visible")?.let { visible(it) }
                 checkAccessibility()
@@ -245,7 +248,7 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
         val now = SystemClock.elapsedRealtime()
         if (stoppedSince == 0L) stoppedSince = now
         if (stoppedShown || now - stoppedSince < STOPPED_GRACE_MS) return
-        Log.w(TAG, "Accessibility service ticked but stopped")
+        Diag.w("Accessibility service ticked but stopped")
         val message = getString(R.string.stopped_message)
         val n = Shared.builder(this, Shared.WARNING_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_notify_error)
@@ -266,7 +269,8 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(TAG, "Monitor started")
+        Diag.init(this)
+        Diag.i("Monitor started")
         Health.logExitReasons(this)
         instance = this
         Shared.createChannels(this)
@@ -323,7 +327,7 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
     }
 
     override fun onDestroy() {
-        Log.w(TAG, "Monitor stopped")
+        Diag.w("Monitor stopped")
         instance = null
         main.removeCallbacks(poller)
         main.removeCallbacks(appsChanged)
@@ -355,9 +359,15 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
             // Nothing is in use while the screen is off or locked; a
             // broadcast missed is caught up with here.
             if (!screenOn) checkScreen(lookUp = false)
-            if (!screenOn) return@post
+            if (!screenOn) {
+                if (droppedWhileOff != pkg) Diag.i("Screen off or locked: $pkg in front not counted")
+                droppedWhileOff = pkg
+                return@post
+            }
+            droppedWhileOff = null
             if (pkg == lastForeground) return@post
             lastForeground = pkg
+            Diag.i("In front: $pkg (${if (fromEnforcer) "main process" else "usage statistics"})")
             if (!fromEnforcer) toEnforcer(Bundle().apply {
                 putString("cmd", "foreground")
                 putString("package", pkg)
@@ -388,14 +398,18 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
     private fun checkScreen(lookUp: Boolean = true) {
         val inUse = Shared.screenInUse(this)
         if (inUse == screenOn) return
-        Log.w(TAG, "Screen state corrected: ${if (inUse) "in use" else "off or locked"}")
+        Diag.w("Screen state corrected: ${if (inUse) "in use" else "off or locked"}")
         setScreen(inUse, lookUp)
     }
+
+    /** The last app seen in front while the screen was off, said once. */
+    private var droppedWhileOff: String? = null
 
     /** With [lookUp], the app in front is taken from the usage statistics. */
     private fun setScreen(on: Boolean, lookUp: Boolean = true) {
         if (on == screenOn) return
         screenOn = on
+        Diag.i(if (on) "Screen in use" else "Screen off or locked")
         if (!on) lastForeground = null
         channel?.invokeMethod("screen", mapOf("on" to on))
         // Unlocking straight into an app sends no window change: look up
@@ -412,6 +426,11 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
                 Health.setMonitorWanted(this, false)
                 result.success(null)
                 main.post { stopSelf() }
+            }
+            // The monitor's own lines, in the diagnostic log.
+            "log" -> {
+                Diag.i("dart: ${call.arguments}")
+                result.success(null)
             }
             "state" -> result.success(
                 mapOf("foreground" to lastForeground, "screenOn" to screenOn),
@@ -493,7 +512,7 @@ class MonitorService : Service(), MethodChannel.MethodCallHandler {
                     context.startService(intent)
                 }
             } catch (e: IllegalStateException) {
-                Log.w(TAG, "Monitor not started", e)
+                Diag.w("Monitor not started", e)
             }
         }
     }

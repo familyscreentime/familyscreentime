@@ -119,7 +119,7 @@ class DeviceLockOverlay(private val context: Context) {
             message = messageView
             shownApps = apps
         } catch (e: Exception) {
-            android.util.Log.w("FamilyScreenTime", "Device lock not shown", e)
+            Diag.w("Device lock not shown", e)
         }
     }
 
@@ -145,7 +145,7 @@ class DeviceLockOverlay(private val context: Context) {
         try {
             c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: Exception) {
-            android.util.Log.w("FamilyScreenTime", "Not opened: $pkg", e)
+            Diag.w("Not opened: $pkg", e)
         }
     }
 }

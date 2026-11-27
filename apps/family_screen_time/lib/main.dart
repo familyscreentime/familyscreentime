@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'src/app.dart';
@@ -28,6 +29,16 @@ Future<void> monitorMain() async {
   S.windows = Platform.isWindows;
   DartPluginRegistrant.ensureInitialized();
   startLog('monitor');
+  // On Android, the monitor's lines go to the diagnostic log too (see
+  // Diag.kt).
+  if (Platform.isAndroid) {
+    const channel = MethodChannel('org.familyscreentime/monitor');
+    final print = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      print(message, wrapWidth: wrapWidth);
+      if (message != null) channel.invokeMethod<void>('log', message).ignore();
+    };
+  }
   _logErrors();
   final monitor = Monitor(await LocalStore.open());
   await monitor.start();

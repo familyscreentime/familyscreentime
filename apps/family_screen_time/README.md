@@ -328,6 +328,19 @@ after the app itself opened one (permissions screen). To uninstall, turn
 the protection off in parent mode (Permissions › Uninstall protection ›
 Turn off), then uninstall as usual.
 
+## Diagnostic log
+
+Each process (the interface and accessibility service, the monitor) keeps
+on the device a log of what it saw and did: the screen on or off and
+unlocked, the app in front and where it was seen from, the accessibility
+service, decisions, blocks, errors, why its processes last ended, and a
+line every half hour while the monitor runs. At most about 1 MB per
+process (`files/diagnostics/main.log`, `monitor.log`, the older half in
+`.log.1`); also in Android's log under the `FamilyScreenTime` tag. From
+parent mode, Permissions › "Partager le journal de diagnostic" puts it all
+in one text file for Android's share menu. Nothing leaves the device
+otherwise.
+
 ## Known limits of this version
 
 - One child per device, no synchronisation between devices yet.

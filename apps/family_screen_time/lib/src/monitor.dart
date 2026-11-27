@@ -80,6 +80,10 @@ class Monitor {
   Timer? _heartbeat;
   final _warned = <String>{};
   String? _blockedApp;
+
+  /// The app the block screen was last shown for, until it may open again
+  /// (see [_liftStaleBlock]).
+  String? _blockScreenFor;
   DateTime? _blockedAt;
 
   /// Apps on screen, from Android (with the accessibility service): the
@@ -751,6 +755,28 @@ class Monitor {
     }
   }
 
+  /// Takes the block screen away once the app it was shown for may open
+  /// again (its hours began, extra time came…), even with the screen off:
+  /// it would still say "it's over" when the device is unlocked. Shown
+  /// without the accessibility service, it stays until it is left.
+  Future<void> _liftStaleBlock(AppSettings settings, DateTime now) async {
+    final blocked = _blockScreenFor;
+    // In front again: the evaluation of the app in front decides.
+    if (blocked == null || blocked == _foreground) return;
+    final d = RuleEngine(_family.config).evaluate(
+      _family.state.copyWith(usage: _usage),
+      childId: settings.childId!,
+      deviceId: settings.deviceId,
+      appId: blocked,
+      now: now,
+    );
+    if (!d.allowed) return;
+    _blockScreenFor = null;
+    _blockedApp = null;
+    debugPrint('Block screen of $blocked taken away: ${d.reason.name}');
+    await _channel.invokeMethod('unblock', <String, Object?>{});
+  }
+
   Future<void> _evaluateOnce() async {
     _next?.cancel();
     _alsoSoonest = null;
@@ -761,6 +787,7 @@ class Monitor {
       await _countdown(_s.t('monitorSetup'));
       return;
     }
+    await _liftStaleBlock(settings, now);
     final app = _foreground;
     if (!_screenOn || app == null) {
       await _eyeCancel();
@@ -836,6 +863,7 @@ class Monitor {
       return;
     }
     _blockedApp = null;
+    if (_blockScreenFor == app) _blockScreenFor = null;
 
     // An app beside it with no time left (split screen, floating video):
     // closed too.
@@ -1328,6 +1356,7 @@ class Monitor {
       if (_blockedApp == app && !again) return;
       _blockedApp = app;
       _blockedAt = now;
+      _blockScreenFor = app;
     }
     await _channel.invokeMethod('block', {
       'title': title,
@@ -1341,6 +1370,8 @@ class Monitor {
         {if (_family.appNames[app] != null) 'app': _family.appNames[app]!},
       ),
       'package': app,
+      // When it may open again, if known: the block screen goes then.
+      if (d.until != null) 'until': d.until!.millisecondsSinceEpoch,
       // Listen only: the app goes to the background (minimized on
       // Windows) rather than closed, so the music goes on.
       if (d.reason == Reason.quotaExhausted &&

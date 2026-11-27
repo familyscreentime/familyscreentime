@@ -514,7 +514,7 @@ internal object Enforcer {
         // an app that may draw over other apps.
         val starter: Context = accessibility ?: this.app
         try {
-            BlockActivity.show(starter, title, text, home, open)
+            BlockActivity.show(starter, title, text, home, open, Shared.long(data, "until") ?: 0L)
         } catch (e: Exception) {
             warn(title, text)
         }

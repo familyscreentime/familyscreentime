@@ -11,7 +11,6 @@ import android.content.Intent
 import android.os.Build
 import android.os.Process
 import android.provider.Settings
-import android.util.Log
 
 /**
  * Whether the monitor can still see and block apps. Some manufacturers
@@ -107,20 +106,36 @@ object Health {
         return true
     }
 
+    /** Why the app's last processes ended (Android 11+), one line each. */
+    fun exitReasons(context: Context, count: Int): List<String> {
+        if (Build.VERSION.SDK_INT < 30) return emptyList()
+        return try {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val format = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.ROOT)
+            am.getHistoricalProcessExitReasons(context.packageName, 0, count).map { info ->
+                "${format.format(java.util.Date(info.timestamp))} ${info.processName}: " +
+                    "reason ${info.reason}, importance ${info.importance}, " +
+                    "pss ${info.pss / 1024} MB, ${info.description ?: ""}"
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     /** Why the app's last processes ended, for the logs (Android 11+). */
     fun logExitReasons(context: Context) {
         if (Build.VERSION.SDK_INT < 30) return
         try {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
             for (info in am.getHistoricalProcessExitReasons(context.packageName, 0, 5)) {
-                Log.i(
-                    "FamilyScreenTime",
+                Diag.i(
                     "Process ended ${java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.ROOT).format(java.util.Date(info.timestamp))}: " +
-                        "reason ${info.reason}, importance ${info.importance}, ${info.description ?: ""}",
+                        "${info.processName}, reason ${info.reason}, importance ${info.importance}, " +
+                        "pss ${info.pss / 1024} MB, ${info.description ?: ""}",
                 )
             }
         } catch (e: Exception) {
-            Log.w("FamilyScreenTime", "Exit reasons not read", e)
+            Diag.w("Exit reasons not read", e)
         }
     }
 }
@@ -131,6 +146,8 @@ object Health {
  */
 class Watchdog : JobService() {
     override fun onStartJob(params: JobParameters?): Boolean {
+        Diag.init(this)
+        Diag.i("Watchdog")
         // Started, or kept: a running monitor only shows its notification again.
         if (Health.monitorWanted(this)) MonitorService.start(this)
         return false
@@ -153,7 +170,7 @@ class Watchdog : JobService() {
             try {
                 jobs.schedule(job)
             } catch (e: Exception) {
-                Log.w("FamilyScreenTime", "Watchdog not scheduled", e)
+                Diag.w("Watchdog not scheduled", e)
             }
         }
 
@@ -167,7 +184,7 @@ class Watchdog : JobService() {
             try {
                 jobs.schedule(job)
             } catch (e: Exception) {
-                Log.w("FamilyScreenTime", "Restart not scheduled", e)
+                Diag.w("Restart not scheduled", e)
             }
         }
 

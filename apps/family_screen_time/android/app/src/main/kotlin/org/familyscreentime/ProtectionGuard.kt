@@ -159,16 +159,16 @@ object ProtectionGuard {
         if (allowed()) return false
         val root = service.rootInActiveWindow
         if (root == null) {
-            Log.i(TAG, "security page $pkg: no window content")
+            Diag.i("security page $pkg: no window content")
             return false
         }
         return try {
             val found = root.packageName?.toString() == pkg &&
                 root.findAccessibilityNodeInfosByText(appName(service)).isNotEmpty()
-            Log.i(TAG, "security page $pkg (window ${root.packageName}): app named = $found")
+            Diag.i("security page $pkg (window ${root.packageName}): app named = $found")
             found
         } catch (e: Exception) {
-            Log.w(TAG, "security page $pkg: not readable", e)
+            Diag.w("security page $pkg: not readable", e)
             false
         }
     }
@@ -208,7 +208,7 @@ object ProtectionGuard {
         if (pkg == null || at <= lastResumedAt) return false
         lastResumedAt = at
         if (pkg !in securityPackages) return false
-        Log.i(TAG, "in front (usage statistics): $pkg/$cls")
+        Diag.i("in front (usage statistics): $pkg/$cls")
         return cls?.contains("SafetyCenter", ignoreCase = true) == true
     }
 

@@ -14,7 +14,6 @@ import android.os.Message
 import android.os.Messenger
 import android.os.RemoteException
 import android.os.SystemClock
-import android.util.Log
 
 /**
  * The main process's side of the monitor: it knows the app in front (from
@@ -76,6 +75,7 @@ internal object Enforcer {
 
     fun get(context: Context): Enforcer {
         if (started) return this
+        Diag.init(context)
         started = true
         app = context.applicationContext
         overlay = CountdownOverlay(app)
@@ -118,7 +118,7 @@ internal object Enforcer {
         }
         screenOn = Shared.screenInUse(app)
         main.postDelayed(safetyWatcher, SAFETY_POLL_MS)
-        Log.i(TAG, "Enforcer started")
+        Diag.i("Enforcer started")
         return this
     }
 
@@ -134,6 +134,7 @@ internal object Enforcer {
     }
 
     private fun setScreen(on: Boolean) {
+        if (on != screenOn) Diag.i(if (on) "Screen in use" else "Screen off or locked")
         if (!on) {
             screenOn = false
             lastForeground = null
@@ -154,7 +155,7 @@ internal object Enforcer {
     private fun checkScreen(lookUp: Boolean = true) {
         val inUse = Shared.screenInUse(app)
         if (inUse == screenOn) return
-        Log.w(TAG, "Screen state corrected: ${if (inUse) "in use" else "off or locked"}")
+        Diag.w("Screen state corrected: ${if (inUse) "in use" else "off or locked"}")
         if (!inUse) {
             setScreen(false)
         } else {
@@ -177,7 +178,7 @@ internal object Enforcer {
             val call = Calls.phoneCall(app)
             if (call != phoneCall) {
                 phoneCall = call
-                Log.i(TAG, if (call) "Phone call" else "Phone call ended")
+                Diag.i(if (call) "Phone call" else "Phone call ended")
                 if (call) clearForCall()
                 updateDeviceLock()
             }
@@ -293,7 +294,7 @@ internal object Enforcer {
             return
         }
         focusSeen = null
-        Log.w(TAG, "App in front corrected: $lastForeground -> $focus")
+        Diag.w("App in front corrected: $lastForeground -> $focus")
         onForegroundApp(focus)
     }
 
@@ -323,13 +324,13 @@ internal object Enforcer {
     /** The monitor connected, or connected again. */
     fun monitorConnected(messenger: Messenger) {
         monitor = messenger
-        Log.i(TAG, "Monitor connected")
+        Diag.i("Monitor connected")
         sendStatus()
     }
 
     fun monitorGone() {
         monitor = null
-        Log.w(TAG, "Monitor gone")
+        Diag.w("Monitor gone")
     }
 
     val monitorConnected: Boolean get() = monitor != null
@@ -431,7 +432,7 @@ internal object Enforcer {
     private fun restartForAccessibility() {
         if (ForegroundAccessibilityService.instance != null) return
         if (MainActivity.visible || !Health.mayRestartFor(app)) return
-        Log.w(TAG, "Restarting the main process to get the accessibility service back")
+        Diag.w("Restarting the main process to get the accessibility service back")
         Watchdog.soon(app)
         main.postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 500)
     }
@@ -453,6 +454,10 @@ internal object Enforcer {
         if (Calls.isScreen(this.app, app)) return
         banner.hide()
         eyeBreak.hide()
+        Diag.i(
+            "Block $app: ${data.getString("title")}" +
+                if (ForegroundAccessibilityService.instance == null) " (no accessibility)" else "",
+        )
         if (app != null) recentBlocks[app] = SystemClock.elapsedRealtime() to Bundle(data)
         val title = data.getString("title") ?: ""
         val message = data.getString("message") ?: ""
@@ -491,7 +496,7 @@ internal object Enforcer {
                     if (ForegroundAccessibilityService.instance == null &&
                         lastForeground != app && soundSources.playsFrom(app)
                     ) {
-                        Log.i(TAG, "Paused what $app still played, closed")
+                        Diag.i("Paused what $app still played, closed")
                         pauseMedia()
                     }
                 }, delay)
@@ -554,7 +559,7 @@ internal object Enforcer {
             recentBlocks.remove(pkg)
             return
         }
-        Log.i(TAG, "Blocked again while the monitor is away: $pkg")
+        Diag.i("Blocked again while the monitor is away: $pkg")
         block(Bundle(data).apply { putString("package", pkg) })
     }
 
@@ -627,7 +632,7 @@ internal object Enforcer {
         }
         val allowed = { pkg: String -> pkg == app.packageName || pkg in lockExempt }
         if (!soundSources.playsBeside(allowed)) return
-        Log.i(TAG, "Media paused: the device is locked")
+        Diag.i("Media paused: the device is locked")
         // Taken back by the player that started: asked again.
         releaseLockFocus()
         val audio = audio()

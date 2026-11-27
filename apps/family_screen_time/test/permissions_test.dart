@@ -156,4 +156,55 @@ void main() {
     expect(await missingRequiredPermission(c), isTrue);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('the diagnostic log is shared from parent mode only', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final shared = <Object?>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'permissionStatus') return <String, bool>{};
+          if (call.method == 'diagnostics') return '/cache/exports/diag.txt';
+          if (call.method == 'shareFile') {
+            shared.add((call.arguments as Map<Object?, Object?>)['path']);
+            return true;
+          }
+          return null;
+        });
+    final dir = Directory.systemTemp.createTempSync('fst');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final c = AppController(
+      LocalStore(dir),
+      const AppSettings(deviceId: 'd', language: 'fr', childId: 'emma'),
+      const FamilyData(),
+    );
+    Future<void> show() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: PermissionsView(controller: c)),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    await show();
+    expect(find.text('Partager le journal de diagnostic'), findsNothing);
+
+    c.enterParentMode();
+    await tester.pumpWidget(const SizedBox());
+    await show();
+    final button = find.text('Partager le journal de diagnostic');
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(shared, ['/cache/exports/diag.txt']);
+    c.leaveParentMode();
+    await tester.pumpWidget(const SizedBox());
+  });
 }

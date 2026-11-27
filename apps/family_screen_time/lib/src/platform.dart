@@ -275,6 +275,16 @@ class PlatformApi {
 
   /// Offers the file at [path] to the apps that take one (Drive, mail…).
   /// Whether it could be offered.
+  /// The diagnostic log in one file, to share; `null` when it could not be
+  /// written.
+  Future<String?> diagnosticsFile() async {
+    try {
+      return await _channel.invokeMethod<String>('diagnostics');
+    } on Object {
+      return null;
+    }
+  }
+
   Future<bool> shareFile(String path, String mime, String subject) async {
     try {
       return await _channel.invokeMethod<bool>('shareFile', {

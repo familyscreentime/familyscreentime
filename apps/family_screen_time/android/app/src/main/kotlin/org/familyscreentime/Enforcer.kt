@@ -66,12 +66,6 @@ internal object Enforcer {
 
     /** Apps blocked lately, with the notice shown, for while the monitor is away. */
     private val recentBlocks = HashMap<String, Pair<Long, Bundle>>()
-    /** How long the accessibility component stays off in a repair. */
-    private const val REPAIR_OFF_MS = 1_500L
-
-    /** When a repair looks whether the service came back. */
-    private const val REPAIR_CHECK_MS = 8_000L
-
     private const val RECENT_BLOCK_MS = 3 * 60 * 60 * 1000L
 
     private var started = false
@@ -389,57 +383,9 @@ internal object Enforcer {
     private fun restartForAccessibility() {
         if (ForegroundAccessibilityService.instance != null) return
         if (MainActivity.visible || !Health.mayRestartFor(app)) return
-        repairAccessibility { back ->
-            if (back) return@repairAccessibility
-            Log.w(TAG, "Restarting the main process to get the accessibility service back")
-            Watchdog.soon(app)
-            main.postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 500)
-        }
-    }
-
-    /**
-     * Gets back an accessibility service Android marked as crashed: once
-     * its process was stopped by the system (low memory, a maker's
-     * clean-up), Android may not bind it again, even when the process
-     * starts again, until it is switched off and on. The app switches its
-     * component off and on instead, which needs no permission. [done]
-     * says whether the service came back.
-     */
-    fun repairAccessibility(done: (Boolean) -> Unit = {}) {
-        val pm = app.packageManager
-        val service = android.content.ComponentName(app, ForegroundAccessibilityService::class.java)
-        Log.w(TAG, "Accessibility service stopped: its component switched off and on")
-        try {
-            pm.setComponentEnabledSetting(
-                service,
-                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                android.content.pm.PackageManager.DONT_KILL_APP,
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "Component not switched off", e)
-            done(false)
-            return
-        }
-        main.postDelayed({
-            try {
-                pm.setComponentEnabledSetting(
-                    service,
-                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
-                    android.content.pm.PackageManager.DONT_KILL_APP,
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "Component not switched on again", e)
-            }
-            main.postDelayed({
-                val back = ForegroundAccessibilityService.instance != null
-                Log.w(
-                    TAG,
-                    "After the switch: service ${if (back) "back" else "still stopped"}, " +
-                        "ticked: ${Health.accessibilityEnabled(app)}",
-                )
-                done(back)
-            }, REPAIR_CHECK_MS)
-        }, REPAIR_OFF_MS)
+        Log.w(TAG, "Restarting the main process to get the accessibility service back")
+        Watchdog.soon(app)
+        main.postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 500)
     }
 
     // --- What it shows --------------------------------------------------------

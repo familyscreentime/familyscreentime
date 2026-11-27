@@ -105,6 +105,25 @@ class ForegroundAccessibilityService : AccessibilityService() {
         return apps.toList()
     }
 
+    /**
+     * The app whose window has the focus: the one the child uses, whatever
+     * window changes were missed or misread. Null when no app window has
+     * it (notification shade, lock screen…). Only the package name is read.
+     */
+    fun focusedApp(): String? {
+        val list = try {
+            windows
+        } catch (e: Exception) {
+            return null
+        }
+        val apps = list.filter {
+            it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION
+        }
+        val w = apps.firstOrNull { it.isFocused } ?: apps.firstOrNull { it.isActive } ?: return null
+        val pkg = w.root?.packageName?.toString() ?: return null
+        return if (pkg == "com.android.systemui") null else pkg
+    }
+
     /** Whether [pkg]'s window [cls] is an app's screen, not a keyboard, a toast… */
     private fun likelyApp(pkg: String, cls: String): Boolean {
         if (pkg == packageName || pkg == "com.android.systemui") return false
@@ -144,17 +163,27 @@ class ForegroundAccessibilityService : AccessibilityService() {
 
     private var confirmPending = false
 
-    /** Asks the usage statistics for the app in front, once they are written. */
+    /**
+     * Asks the usage statistics for the app in front, once they are
+     * written. Only an app that came there around this window change or
+     * after counts: the one left a few seconds before (whose arrival is
+     * still the last one written, while Android has not yet noted the new
+     * app's) would otherwise take the place of the app just opened.
+     */
     private fun confirmSoon() {
         if (confirmPending) return
         confirmPending = true
+        val since = System.currentTimeMillis() - CONFIRM_SLACK_MS
         main.postDelayed({
-            Enforcer.get(this).confirmForeground()
+            Enforcer.get(this).confirmForeground(since)
         }, 400)
         main.postDelayed({
-            confirmPending = false
-            Enforcer.get(this).confirmForeground()
+            Enforcer.get(this).confirmForeground(since)
         }, 1_500)
+        main.postDelayed({
+            confirmPending = false
+            Enforcer.get(this).confirmForeground(since)
+        }, 4_000)
     }
 
     override fun onInterrupt() {}
@@ -232,6 +261,12 @@ class ForegroundAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "FamilyScreenTime"
+
+        /**
+         * How long before a window change Android may note the arrival of
+         * the app it shows (an activity resumes before its window appears).
+         */
+        private const val CONFIRM_SLACK_MS = 2_000L
 
         @Volatile
         var instance: ForegroundAccessibilityService? = null

@@ -101,12 +101,16 @@ internal object Shared {
         return pm.isInteractive && !keyguard.isKeyguardLocked
     }
 
-    /** The last app that came to the foreground in the last [windowMs]. */
-    fun foregroundFromUsageStats(context: Context, windowMs: Long = 15_000): String? {
+    /**
+     * The last app that came to the foreground in the last [windowMs], or
+     * since [since] (a wall-clock time) when given.
+     */
+    fun foregroundFromUsageStats(context: Context, windowMs: Long = 15_000, since: Long? = null): String? {
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
         val now = System.currentTimeMillis()
+        val from = since ?: (now - windowMs)
         val events = try {
-            usm.queryEvents(now - windowMs, now)
+            usm.queryEvents(from, now)
         } catch (e: Exception) {
             null
         } ?: return null

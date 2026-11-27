@@ -961,6 +961,11 @@ class Monitor {
         await _channel.invokeMethod('warn', {
           'title': _s.t('eyeReminderTitle', {'time': _s.duration(step.length)}),
           'text': _s.t('eyeReminderText'),
+          // Out of date once the break is over: the notification goes.
+          'eyeBreak': true,
+          'until': now
+              .add(step.length + const Duration(minutes: 1))
+              .millisecondsSinceEpoch,
         });
       case EyeStepKind.hide:
         await _channel.invokeMethod('eyeHide');
@@ -1328,6 +1333,7 @@ class Monitor {
             'time': _s.duration(warningTime(remaining)),
           }),
           'text': _s.t('listenWarnText'),
+          'until': now.add(remaining).millisecondsSinceEpoch,
         });
       }
       return;
@@ -1343,6 +1349,8 @@ class Monitor {
         'time': _s.duration(warningTime(remaining)),
       }),
       'text': _s.t(grace ? 'graceWarnText' : 'warnText', {'label': label}),
+      // Out of date once the time announced is over: the notification goes.
+      'until': now.add(remaining).millisecondsSinceEpoch,
     });
 
     void markFrom(Duration t) {

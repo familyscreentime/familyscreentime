@@ -7,7 +7,9 @@ behind the parent code.
 ## What it does
 
 - Detects the app in the foreground (accessibility service, with usage
-  statistics as a fallback) and records usage per day.
+  statistics as a fallback) and records usage per day. Every few seconds,
+  the app in front is checked against the one whose window has the focus,
+  so that a window change missed or misread is corrected within seconds.
 - Evaluates the rules with `screentime_engine` and enforces them: the
   child is sent home and a notice says why ("Time is up", the app that was
   closed), drawn over the home screen so the closing is not taken for a

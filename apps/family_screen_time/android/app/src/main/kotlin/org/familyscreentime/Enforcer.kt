@@ -182,6 +182,7 @@ internal object Enforcer {
                 updateDeviceLock()
             }
             checkScreen()
+            reconcile()
             val accessibility = ForegroundAccessibilityService.instance
             if (screenOn && accessibility != null && ProtectionGuard.safetyCenterInFront(app)) {
                 accessibility.closeProtected()
@@ -250,10 +251,50 @@ internal object Enforcer {
         main.postDelayed({ confirmForeground() }, UNLOCK_CHECK_MS)
     }
 
-    /** The app in front according to the usage statistics, after a window change that named none. */
-    fun confirmForeground() {
+    /**
+     * The app in front according to the usage statistics, after a window
+     * change that named none: the last that came there [since] then, when
+     * given (see [ForegroundAccessibilityService.confirmSoon]).
+     */
+    fun confirmForeground(since: Long? = null) {
         if (!screenOn) return
-        Shared.foregroundFromUsageStats(app)?.let { onForegroundApp(it) }
+        Shared.foregroundFromUsageStats(app, since = since)?.let { onForegroundApp(it) }
+    }
+
+    /** The app whose window had the focus at the last check, not yet taken. */
+    private var focusSeen: String? = null
+    private var reconcileTicks = 0
+
+    /**
+     * Every few seconds, checks the app in front against the one whose
+     * window has the focus. A window change missed or misread (an app
+     * opened in a floating window, an arrival Android noted late…) would
+     * otherwise leave the app left behind in front until the screen goes
+     * off: its time counted for the app really used, and its limit applied
+     * to it. Taken when seen twice in a row, so that a passing window does
+     * not count. The list of the apps on screen is looked at again too.
+     */
+    private fun reconcile() {
+        if (++reconcileTicks < RECONCILE_TICKS) return
+        reconcileTicks = 0
+        val accessibility = ForegroundAccessibilityService.instance
+        if (!screenOn || accessibility == null) {
+            focusSeen = null
+            return
+        }
+        accessibility.visibleSoon()
+        val focus = accessibility.focusedApp()
+        if (focus == null || focus == lastForeground) {
+            focusSeen = null
+            return
+        }
+        if (focus != focusSeen) {
+            focusSeen = focus
+            return
+        }
+        focusSeen = null
+        Log.w(TAG, "App in front corrected: $lastForeground -> $focus")
+        onForegroundApp(focus)
     }
 
     /** The accessibility service started or stopped. */
@@ -327,7 +368,11 @@ internal object Enforcer {
                 BlockActivity.dismiss()
                 blockNotice.hide()
             }
-            "warn" -> warn(data.getString("title") ?: "", data.getString("text") ?: "")
+            "warn" -> {
+                // An eye break's reminder: like the notice, it goes with the break.
+                val eye = data.getBoolean("eyeBreak", false)
+                warn(data.getString("title") ?: "", data.getString("text") ?: "", Shared.long(data, "until"), eye)
+            }
             "overlay" -> overlay.show(
                 Shared.long(data, "endsAt") ?: 0L,
                 data.getString("style") ?: "digits",
@@ -341,7 +386,10 @@ internal object Enforcer {
             )
             "eyeNotice" -> eyeNotice(data)
             "eyeVeil" -> eyeVeil(data)
-            "eyeHide" -> eyeBreak.hide(ended = true)
+            "eyeHide" -> {
+                eyeBreak.hide(ended = true)
+                cancelEyeWarning()
+            }
             // A video in a browser with no time left: paused, and said why.
             "pauseMedia" -> {
                 if (!ProtectionGuard.allowed()) {
@@ -642,16 +690,34 @@ internal object Enforcer {
      * kept, quietly, in the notifications. Without any overlay layer, the
      * notification pops up instead.
      */
-    private fun warn(title: String, text: String) {
+    /**
+     * [until]: when what it says is out of date (the time it announces is
+     * over, the eye break is past); the notification then goes by itself.
+     * [eyeBreak]: it is about an eye break, and goes when the break ends.
+     */
+    private fun warn(title: String, text: String, until: Long? = null, eyeBreak: Boolean = false) {
         val shown = banner.show(title, text)
-        val n = Shared.builder(app, if (shown) Shared.SHOWN_WARNING_CHANNEL else Shared.WARNING_CHANNEL)
+        val builder = Shared.builder(app, if (shown) Shared.SHOWN_WARNING_CHANNEL else Shared.WARNING_CHANNEL)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(Shared.openAppIntent(app))
             .setAutoCancel(true)
-            .build()
-        Shared.notificationManager(app).notify(Shared.WARNING_ID, n)
+        if (until != null && Build.VERSION.SDK_INT >= 26) {
+            builder.setTimeoutAfter(maxOf(1_000L, until - System.currentTimeMillis()))
+        }
+        Shared.notificationManager(app).notify(Shared.WARNING_ID, builder.build())
+        eyeWarning = eyeBreak
+    }
+
+    /** The notification shown last is about an eye break (see [warn]). */
+    private var eyeWarning = false
+
+    /** The eye break is over: its notification, if it is the one shown, goes. */
+    private fun cancelEyeWarning() {
+        if (!eyeWarning) return
+        eyeWarning = false
+        Shared.notificationManager(app).cancel(Shared.WARNING_ID)
     }
 
     /**
@@ -672,15 +738,17 @@ internal object Enforcer {
         }
         val title = data.getString("title") ?: ""
         val text = data.getString("text") ?: ""
+        val endsAt = Shared.long(data, "endsAt") ?: 0L
         val shown = eyeBreak.showNotice(
             title,
             text,
             data.getString("now") ?: "OK",
             data.getString("later"),
-            Shared.long(data, "endsAt") ?: 0L,
+            endsAt,
         )
-        // No overlay layer: a notification, and no veil after it.
-        if (!shown) warn(title, text)
+        // No overlay layer: a notification, and no veil after it. It goes
+        // a minute after the break was due, or with the break.
+        if (!shown) warn(title, text, maxOf(endsAt, System.currentTimeMillis()) + EYE_WARNING_MS, eyeBreak = true)
     }
 
     private fun eyeVeil(data: Bundle) {
@@ -819,6 +887,12 @@ internal object Enforcer {
     private const val PIP_WATCH_MS = 10 * 60 * 1000L
     private const val TAG = "FamilyScreenTime"
     private const val SAFETY_POLL_MS = 1_000L
+
+    /** How long an eye break's notice stays in the notifications after the break was due. */
+    private const val EYE_WARNING_MS = 60_000L
+
+    /** How often (in [SAFETY_POLL_MS]) the app in front is checked, see [reconcile]. */
+    private const val RECONCILE_TICKS = 3
     private const val UNLOCK_CHECK_MS = 500L
 }
 

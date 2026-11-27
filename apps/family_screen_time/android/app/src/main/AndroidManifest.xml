@@ -107,16 +107,6 @@
             android:name=".LeaveParentModeReceiver"
             android:exported="false" />
 
-        <!-- Tests from a computer (adb) only: see RepairReceiver. -->
-        <receiver
-            android:name=".RepairReceiver"
-            android:exported="true"
-            android:permission="android.permission.DUMP">
-            <intent-filter>
-                <action android:name="org.familyscreentime.REPAIR_ACCESSIBILITY" />
-            </intent-filter>
-        </receiver>
-
         <receiver
             android:name=".AdminReceiver"
             android:exported="true"

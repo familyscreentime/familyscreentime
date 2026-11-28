@@ -71,6 +71,11 @@ android {
         }
     }
 
+    // Android's own classes answer with defaults in the JVM tests.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     buildTypes {
         release {
             signingConfig = if (keyProperties.isNotEmpty()) {
@@ -97,4 +102,5 @@ dependencies {
     implementation("androidx.core:core:1.13.1")
     // Fingerprint or face unlocking of parent mode, on a parent's device.
     implementation("androidx.biometric:biometric:1.1.0")
+    testImplementation("junit:junit:4.13.2")
 }

@@ -37,6 +37,9 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build apk --release --split-per-abi
+      # The Kotlin side's own tests (the diagnostic log, for one).
+      - run: ./gradlew :app:testDebugUnitTest
+        working-directory: apps/family_screen_time/android
       - uses: actions/upload-artifact@v6
         with:
           name: apks

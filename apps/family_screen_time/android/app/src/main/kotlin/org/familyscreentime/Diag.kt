@@ -37,12 +37,12 @@ object Diag {
     }
 
     fun i(message: String) {
-        Diag.i(message)
+        Log.i(TAG, message)
         append("I", message)
     }
 
     fun w(message: String, e: Throwable? = null) {
-        Diag.w(message, e)
+        Log.w(TAG, message, e)
         append("W", if (e == null) message else "$message: $e")
     }
 
